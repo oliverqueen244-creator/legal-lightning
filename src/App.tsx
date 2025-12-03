@@ -7,6 +7,7 @@ import WarRoom from "./pages/WarRoom";
 import ControlDeck from "./pages/ControlDeck";
 import Auth from "./pages/Auth";
 import Admin from "./pages/Admin";
+import Documentation from "./pages/Documentation";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -24,6 +25,7 @@ const App = () => (
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/auth" element={<Auth />} />
+          <Route path="/docs" element={<Documentation />} />
           <Route path="/admin" element={<Admin />} />
           <Route path="/war-room/:caseId" element={<WarRoom />} />
           <Route path="/control-deck/:caseId" element={<ControlDeck />} />
