@@ -1,4 +1,4 @@
-import { Scale, Calendar, MapPin, LogOut, User } from 'lucide-react';
+import { Scale, Calendar, MapPin, LogOut, User, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -14,7 +14,7 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
 export function Header() {
-  const { profile, signOut } = useAuth();
+  const { profile, role, isAdmin, signOut } = useAuth();
   const navigate = useNavigate();
 
   const handleSignOut = async () => {
@@ -28,11 +28,11 @@ export function Header() {
   };
 
   return (
-    <header className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-40">
+    <header className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-40" role="banner">
       <div className="container mx-auto px-4 py-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Scale className="h-8 w-8 text-primary" />
+            <Scale className="h-8 w-8 text-primary" aria-hidden="true" />
             <div>
               <h1 className="font-display text-2xl font-bold text-foreground">
                 Vakalat-OS
@@ -46,27 +46,41 @@ export function Header() {
           <div className="flex items-center gap-4">
             <div className="hidden md:flex items-center gap-4 text-sm text-muted-foreground">
               <span className="flex items-center gap-1">
-                <Calendar className="h-4 w-4" />
-                {new Date().toLocaleDateString('en-IN', {
-                  weekday: 'long',
-                  day: 'numeric',
-                  month: 'long',
-                  year: 'numeric',
-                })}
+                <Calendar className="h-4 w-4" aria-hidden="true" />
+                <time dateTime={new Date().toISOString().split('T')[0]}>
+                  {new Date().toLocaleDateString('en-IN', {
+                    weekday: 'long',
+                    day: 'numeric',
+                    month: 'long',
+                    year: 'numeric',
+                  })}
+                </time>
               </span>
               <span className="flex items-center gap-1">
-                <MapPin className="h-4 w-4" />
+                <MapPin className="h-4 w-4" aria-hidden="true" />
                 Jodhpur Bench
               </span>
             </div>
 
+            {isAdmin && (
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => navigate('/admin')}
+                aria-label="Go to admin panel"
+              >
+                <Settings className="h-4 w-4 mr-2" aria-hidden="true" />
+                <span className="hidden sm:inline">Admin</span>
+              </Button>
+            )}
+
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="flex items-center gap-2">
-                  <User className="h-4 w-4" />
+                <Button variant="ghost" className="flex items-center gap-2" aria-label="User menu">
+                  <User className="h-4 w-4" aria-hidden="true" />
                   <span className="hidden sm:inline">{profile?.full_name || 'User'}</span>
-                  <Badge variant={profile?.role === 'SENIOR' ? 'gold' : 'secondary'} className="ml-1">
-                    {profile?.role || 'USER'}
+                  <Badge variant={role === 'SENIOR' || role === 'ADMIN' ? 'gold' : 'secondary'} className="ml-1">
+                    {role || 'USER'}
                   </Badge>
                 </Button>
               </DropdownMenuTrigger>
@@ -74,15 +88,24 @@ export function Header() {
                 <DropdownMenuLabel>My Account</DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem className="flex items-center gap-2">
-                  <User className="h-4 w-4" />
+                  <User className="h-4 w-4" aria-hidden="true" />
                   {profile?.full_name}
                 </DropdownMenuItem>
                 <DropdownMenuItem className="text-muted-foreground text-xs">
-                  Role: {profile?.role}
+                  Role: {role}
                 </DropdownMenuItem>
+                {isAdmin && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => navigate('/admin')}>
+                      <Settings className="h-4 w-4 mr-2" aria-hidden="true" />
+                      Admin Panel
+                    </DropdownMenuItem>
+                  </>
+                )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleSignOut} className="text-destructive">
-                  <LogOut className="h-4 w-4 mr-2" />
+                  <LogOut className="h-4 w-4 mr-2" aria-hidden="true" />
                   Sign Out
                 </DropdownMenuItem>
               </DropdownMenuContent>

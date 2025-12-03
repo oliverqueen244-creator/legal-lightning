@@ -3,10 +3,13 @@ import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import type { Profile } from '@/types/database';
 
+export type AppRole = 'SENIOR' | 'JUNIOR' | 'CLERK' | 'ADMIN';
+
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [role, setRole] = useState<AppRole | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -16,13 +19,15 @@ export function useAuth() {
         setSession(session);
         setUser(session?.user ?? null);
         
-        // Fetch profile with setTimeout to avoid deadlock
+        // Fetch profile and role with setTimeout to avoid deadlock
         if (session?.user) {
           setTimeout(() => {
             fetchProfile(session.user.id);
+            fetchRole(session.user.id);
           }, 0);
         } else {
           setProfile(null);
+          setRole(null);
         }
       }
     );
@@ -34,6 +39,7 @@ export function useAuth() {
       
       if (session?.user) {
         fetchProfile(session.user.id);
+        fetchRole(session.user.id);
       }
       setLoading(false);
     });
@@ -50,6 +56,15 @@ export function useAuth() {
 
     if (!error && data) {
       setProfile(data as Profile);
+    }
+  };
+
+  const fetchRole = async (userId: string) => {
+    const { data, error } = await supabase
+      .rpc('get_user_role', { _user_id: userId });
+
+    if (!error && data) {
+      setRole(data as AppRole);
     }
   };
 
@@ -87,12 +102,14 @@ export function useAuth() {
     user,
     session,
     profile,
+    role,
     loading,
     signIn,
     signUp,
     signOut,
     isAuthenticated: !!session,
-    isSenior: profile?.role === 'SENIOR',
-    isJunior: profile?.role === 'JUNIOR',
+    isSenior: role === 'SENIOR',
+    isJunior: role === 'JUNIOR',
+    isAdmin: role === 'ADMIN',
   };
 }
