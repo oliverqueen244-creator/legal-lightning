@@ -12,7 +12,7 @@ import { LiveBoardSimulator } from '@/components/dashboard/LiveBoardSimulator';
 export default function Dashboard() {
   const { data: docket, isLoading: docketLoading } = useDocket();
   const { data: liveBoards, isLoading: liveBoardLoading } = useLiveBoard();
-  const { profile } = useAuth();
+  const { role } = useAuth();
 
   const supplementaryItems = docket?.filter((item) => item.list_type === 'SUPPLEMENTARY') ?? [];
   const dailyItems = docket?.filter((item) => item.list_type === 'DAILY') ?? [];
@@ -48,7 +48,7 @@ export default function Dashboard() {
                         key={item.id}
                         item={item}
                         liveBoard={getLiveBoardForItem(item)}
-                        userRole={profile?.role}
+                        userRole={role}
                       />
                     ))}
                   </div>
@@ -85,7 +85,7 @@ export default function Dashboard() {
                         key={item.id}
                         item={item}
                         liveBoard={getLiveBoardForItem(item)}
-                        userRole={profile?.role}
+                        userRole={role}
                       />
                     ))}
                   </div>
