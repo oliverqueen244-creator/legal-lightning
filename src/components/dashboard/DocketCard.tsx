@@ -9,9 +9,10 @@ import { cn } from '@/lib/utils';
 interface DocketCardProps {
   item: DocketItem;
   liveBoard?: LiveBoardCache;
+  userRole?: string | null;
 }
 
-export function DocketCard({ item, liveBoard }: DocketCardProps) {
+export function DocketCard({ item, liveBoard, userRole }: DocketCardProps) {
   const navigate = useNavigate();
   
   const currentItem = liveBoard?.current_item ?? 0;
@@ -26,6 +27,15 @@ export function DocketCard({ item, liveBoard }: DocketCardProps) {
     return `Item #${item.item_no}`;
   };
 
+  const handleClick = () => {
+    // Senior goes to War Room, Junior goes to Control Deck
+    if (userRole === 'SENIOR') {
+      navigate(`/war-room/${item.id}`);
+    } else {
+      navigate(`/control-deck/${item.id}`);
+    }
+  };
+
   return (
     <Card
       className={cn(
@@ -35,7 +45,7 @@ export function DocketCard({ item, liveBoard }: DocketCardProps) {
         isSupplementary && !isPanic && !isRunning && 'border-orange-500/50',
         !isPanic && !isRunning && !isSupplementary && 'border-border hover:border-primary/50'
       )}
-      onClick={() => navigate(`/war-room/${item.id}`)}
+      onClick={handleClick}
     >
       <CardContent className="p-4">
         <div className="flex items-start justify-between gap-4">

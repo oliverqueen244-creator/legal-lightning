@@ -1,1 +1,4 @@
 project_id = "pwpnnixoscppfzjogcgj"
+
+[functions.simulate-live-board]
+verify_jwt = false
