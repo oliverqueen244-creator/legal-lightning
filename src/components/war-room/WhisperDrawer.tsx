@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { useAudioRecorder, formatRecordingTime } from '@/hooks/useAudioRecorder';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -13,9 +14,10 @@ import {
   SheetTitle,
   SheetTrigger,
 } from '@/components/ui/sheet';
-import { MessageCircle, Send, X } from 'lucide-react';
+import { MessageCircle, Send, Mic, Square, X, Play, Pause, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
+import { toast } from 'sonner';
 
 interface WhisperMessage {
   id: string;
@@ -31,11 +33,96 @@ interface WhisperDrawerProps {
   docketId: string;
 }
 
+// Audio message prefix to identify voice memos
+const VOICE_MESSAGE_PREFIX = '[VOICE_MEMO]';
+
+function AudioPlayer({ src }: { src: string }) {
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const audioRef = useRef<HTMLAudioElement>(null);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const handleTimeUpdate = () => {
+      setProgress((audio.currentTime / audio.duration) * 100 || 0);
+    };
+
+    const handleEnded = () => {
+      setIsPlaying(false);
+      setProgress(0);
+    };
+
+    audio.addEventListener('timeupdate', handleTimeUpdate);
+    audio.addEventListener('ended', handleEnded);
+
+    return () => {
+      audio.removeEventListener('timeupdate', handleTimeUpdate);
+      audio.removeEventListener('ended', handleEnded);
+    };
+  }, []);
+
+  const togglePlay = () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    if (isPlaying) {
+      audio.pause();
+    } else {
+      audio.play();
+    }
+    setIsPlaying(!isPlaying);
+  };
+
+  return (
+    <div className="flex items-center gap-2 min-w-[120px]">
+      <audio ref={audioRef} src={src} preload="metadata" />
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={togglePlay}
+        className="h-8 w-8 rounded-full bg-primary/20"
+      >
+        {isPlaying ? (
+          <Pause className="h-4 w-4 text-primary" />
+        ) : (
+          <Play className="h-4 w-4 text-primary ml-0.5" />
+        )}
+      </Button>
+      <div className="flex-1 h-1 bg-muted rounded-full overflow-hidden">
+        <div 
+          className="h-full bg-primary transition-all duration-100"
+          style={{ width: `${progress}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
 export function WhisperDrawer({ docketId }: WhisperDrawerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [newMessage, setNewMessage] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
   const queryClient = useQueryClient();
   const { user, profile } = useAuth();
+  const scrollRef = useRef<HTMLDivElement>(null);
+  
+  const {
+    isRecording,
+    recordingTime,
+    startRecording,
+    stopRecording,
+    cancelRecording,
+    error: recordingError,
+  } = useAudioRecorder();
+
+  // Show recording errors
+  useEffect(() => {
+    if (recordingError) {
+      toast.error(recordingError);
+    }
+  }, [recordingError]);
 
   // Fetch messages
   const { data: messages = [] } = useQuery({
@@ -120,6 +207,13 @@ export function WhisperDrawer({ docketId }: WhisperDrawerProps) {
     }
   }, [isOpen, messages, user?.id, docketId, queryClient, unreadCount]);
 
+  // Scroll to bottom on new messages
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages]);
+
   // Send message mutation
   const sendMessage = useMutation({
     mutationFn: async (message: string) => {
@@ -145,6 +239,62 @@ export function WhisperDrawer({ docketId }: WhisperDrawerProps) {
     if (newMessage.trim()) {
       sendMessage.mutate(newMessage.trim());
     }
+  };
+
+  const handleVoiceRecord = async () => {
+    if (isRecording) {
+      // Stop and send
+      setIsUploading(true);
+      try {
+        const audioBlob = await stopRecording();
+        if (!audioBlob) {
+          toast.error('No audio recorded');
+          return;
+        }
+
+        // Upload to Supabase storage
+        const fileName = `voice-${docketId}-${Date.now()}.webm`;
+        const filePath = `whispers/${fileName}`;
+        
+        const { error: uploadError } = await supabase.storage
+          .from('case-documents')
+          .upload(filePath, audioBlob, {
+            contentType: audioBlob.type,
+            upsert: false,
+          });
+
+        if (uploadError) {
+          console.error('Upload error:', uploadError);
+          toast.error('Failed to upload voice memo');
+          return;
+        }
+
+        // Get public URL
+        const { data: urlData } = supabase.storage
+          .from('case-documents')
+          .getPublicUrl(filePath);
+
+        // Send message with voice memo URL
+        await sendMessage.mutateAsync(`${VOICE_MESSAGE_PREFIX}${urlData.publicUrl}`);
+        toast.success('Voice memo sent!');
+        
+      } catch (err) {
+        console.error('Voice send error:', err);
+        toast.error('Failed to send voice memo');
+      } finally {
+        setIsUploading(false);
+      }
+    } else {
+      // Start recording
+      await startRecording();
+    }
+  };
+
+  const parseMessage = (message: string): { isVoice: boolean; content: string } => {
+    if (message.startsWith(VOICE_MESSAGE_PREFIX)) {
+      return { isVoice: true, content: message.slice(VOICE_MESSAGE_PREFIX.length) };
+    }
+    return { isVoice: false, content: message };
   };
 
   return (
@@ -181,7 +331,7 @@ export function WhisperDrawer({ docketId }: WhisperDrawerProps) {
 
         <div className="flex flex-col h-[calc(100vh-80px)]">
           {/* Messages */}
-          <ScrollArea className="flex-1 p-4">
+          <ScrollArea className="flex-1 p-4" ref={scrollRef}>
             <div className="space-y-4">
               {messages.length === 0 ? (
                 <p className="text-center text-muted-foreground py-8">
@@ -190,6 +340,8 @@ export function WhisperDrawer({ docketId }: WhisperDrawerProps) {
               ) : (
                 messages.map((msg) => {
                   const isOwn = msg.sender_id === user?.id;
+                  const { isVoice, content } = parseMessage(msg.message);
+                  
                   return (
                     <div
                       key={msg.id}
@@ -209,7 +361,14 @@ export function WhisperDrawer({ docketId }: WhisperDrawerProps) {
                             : 'glass-card'
                         )}
                       >
-                        {msg.message}
+                        {isVoice ? (
+                          <div className="flex items-center gap-2">
+                            <Mic className="h-4 w-4 shrink-0" />
+                            <AudioPlayer src={content} />
+                          </div>
+                        ) : (
+                          content
+                        )}
                       </div>
                       <span className="text-xs text-muted-foreground">
                         {format(new Date(msg.created_at), 'HH:mm')}
@@ -221,6 +380,29 @@ export function WhisperDrawer({ docketId }: WhisperDrawerProps) {
             </div>
           </ScrollArea>
 
+          {/* Recording indicator */}
+          {isRecording && (
+            <div className="px-4 py-2 bg-destructive/10 border-t border-destructive/20 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="relative flex h-3 w-3">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-3 w-3 bg-destructive"></span>
+                </span>
+                <span className="text-sm font-medium text-destructive">
+                  Recording... {formatRecordingTime(recordingTime)}
+                </span>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={cancelRecording}
+                className="h-8 w-8"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
+
           {/* Input */}
           <form 
             onSubmit={handleSend}
@@ -229,14 +411,39 @@ export function WhisperDrawer({ docketId }: WhisperDrawerProps) {
             <Input
               value={newMessage}
               onChange={(e) => setNewMessage(e.target.value)}
-              placeholder="Type a whisper..."
+              placeholder={isRecording ? 'Recording...' : 'Type a whisper...'}
               className="flex-1 bg-secondary/50 border-border"
               aria-label="Message input"
+              disabled={isRecording || isUploading}
             />
+            
+            {/* Voice Record Button */}
+            <Button 
+              type="button"
+              size="icon"
+              variant={isRecording ? 'destructive' : 'outline'}
+              onClick={handleVoiceRecord}
+              disabled={isUploading}
+              className={cn(
+                'min-h-touch min-w-touch transition-all',
+                isRecording && 'animate-pulse'
+              )}
+              aria-label={isRecording ? 'Stop recording' : 'Start voice memo'}
+            >
+              {isUploading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : isRecording ? (
+                <Square className="h-4 w-4" />
+              ) : (
+                <Mic className="h-4 w-4" />
+              )}
+            </Button>
+            
+            {/* Send Text Button */}
             <Button 
               type="submit" 
               size="icon"
-              disabled={!newMessage.trim() || sendMessage.isPending}
+              disabled={!newMessage.trim() || sendMessage.isPending || isRecording || isUploading}
               className="min-h-touch min-w-touch"
               aria-label="Send message"
             >
