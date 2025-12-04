@@ -1,100 +1,103 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Playfair+Display:wght@400;500;600;700;800&display=swap');
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   :root {
-    /* Vakalat-OS: High Court Authority Theme */
-    --background: 222 47% 11%;
+    /* Golden Gavel: Royal Cyberpunk Theme */
+    --background: 222 47% 9%; /* Deep Midnight #0f172a */
     --foreground: 210 40% 98%;
 
-    --card: 217 33% 17%;
+    --card: 217 33% 12%;
     --card-foreground: 210 40% 98%;
 
-    --popover: 217 33% 17%;
+    --popover: 217 33% 12%;
     --popover-foreground: 210 40% 98%;
 
-    --primary: 48 97% 54%;
-    --primary-foreground: 222 47% 11%;
+    --primary: 43 96% 56%; /* Royal Gold #fbbf24 */
+    --primary-foreground: 222 47% 9%;
 
     --secondary: 215 28% 17%;
     --secondary-foreground: 210 40% 98%;
 
-    --muted: 215 28% 20%;
-    --muted-foreground: 215 20% 65%;
+    --muted: 215 28% 16%;
+    --muted-foreground: 215 20% 65%; /* Muted Slate #94a3b8 */
 
-    --accent: 48 97% 54%;
-    --accent-foreground: 222 47% 11%;
+    --accent: 43 96% 56%;
+    --accent-foreground: 222 47% 9%;
 
     --destructive: 0 84% 32%;
     --destructive-foreground: 210 40% 98%;
 
-    --border: 215 25% 27%;
-    --input: 215 25% 27%;
-    --ring: 48 97% 54%;
+    --border: 215 20% 20%;
+    --input: 215 20% 20%;
+    --ring: 43 96% 56%;
 
-    --radius: 0.5rem;
+    --radius: 0.75rem;
 
     /* Custom Vakalat tokens */
-    --court-slate-900: 222 47% 11%;
-    --court-slate-800: 217 33% 17%;
-    --court-slate-700: 215 25% 27%;
-    --court-gold: 48 97% 54%;
+    --court-slate-900: 222 47% 9%;
+    --court-slate-800: 217 33% 12%;
+    --court-slate-700: 215 20% 20%;
+    --court-gold: 43 96% 56%;
     --court-danger: 0 72% 25%;
     --court-danger-light: 0 84% 60%;
     --court-success: 142 76% 36%;
     --court-warning: 38 92% 50%;
 
+    /* Glassmorphism tokens */
+    --glass: 0 0% 100% / 0.05;
+    --glass-foreground: 210 40% 98%;
+    --glass-border: 0 0% 100% / 0.1;
+
     /* Sidebar */
-    --sidebar-background: 217 33% 17%;
+    --sidebar-background: 217 33% 12%;
     --sidebar-foreground: 210 40% 98%;
-    --sidebar-primary: 48 97% 54%;
-    --sidebar-primary-foreground: 222 47% 11%;
-    --sidebar-accent: 215 28% 22%;
+    --sidebar-primary: 43 96% 56%;
+    --sidebar-primary-foreground: 222 47% 9%;
+    --sidebar-accent: 215 28% 18%;
     --sidebar-accent-foreground: 210 40% 98%;
-    --sidebar-border: 215 25% 27%;
-    --sidebar-ring: 48 97% 54%;
+    --sidebar-border: 215 20% 20%;
+    --sidebar-ring: 43 96% 56%;
   }
 
   .dark {
-    --background: 222 47% 11%;
+    --background: 222 47% 9%;
     --foreground: 210 40% 98%;
 
-    --card: 217 33% 17%;
+    --card: 217 33% 12%;
     --card-foreground: 210 40% 98%;
 
-    --popover: 217 33% 17%;
+    --popover: 217 33% 12%;
     --popover-foreground: 210 40% 98%;
 
-    --primary: 48 97% 54%;
-    --primary-foreground: 222 47% 11%;
+    --primary: 43 96% 56%;
+    --primary-foreground: 222 47% 9%;
 
     --secondary: 215 28% 17%;
     --secondary-foreground: 210 40% 98%;
 
-    --muted: 215 28% 20%;
+    --muted: 215 28% 16%;
     --muted-foreground: 215 20% 65%;
 
-    --accent: 48 97% 54%;
-    --accent-foreground: 222 47% 11%;
+    --accent: 43 96% 56%;
+    --accent-foreground: 222 47% 9%;
 
     --destructive: 0 84% 32%;
     --destructive-foreground: 210 40% 98%;
 
-    --border: 215 25% 27%;
-    --input: 215 25% 27%;
-    --ring: 48 97% 54%;
+    --border: 215 20% 20%;
+    --input: 215 20% 20%;
+    --ring: 43 96% 56%;
 
-    --sidebar-background: 217 33% 17%;
+    --sidebar-background: 217 33% 12%;
     --sidebar-foreground: 210 40% 98%;
-    --sidebar-primary: 48 97% 54%;
-    --sidebar-primary-foreground: 222 47% 11%;
-    --sidebar-accent: 215 28% 22%;
+    --sidebar-primary: 43 96% 56%;
+    --sidebar-primary-foreground: 222 47% 9%;
+    --sidebar-accent: 215 28% 18%;
     --sidebar-accent-foreground: 210 40% 98%;
-    --sidebar-border: 215 25% 27%;
-    --sidebar-ring: 48 97% 54%;
+    --sidebar-border: 215 20% 20%;
+    --sidebar-ring: 43 96% 56%;
   }
 }
 
@@ -108,7 +111,7 @@
   }
 
   h1, h2, h3, h4, h5, h6 {
-    @apply font-display;
+    @apply font-display tracking-wide;
   }
 
   /* Accessibility: Focus visible styles */
@@ -120,9 +123,28 @@
   .sr-only.focus\:not-sr-only:focus {
     @apply not-sr-only absolute z-50;
   }
+
+  /* Touch target compliance - minimum 44px */
+  button, a, [role="button"] {
+    @apply min-h-touch min-w-touch;
+  }
 }
 
 @layer components {
+  /* Glassmorphism card */
+  .glass-card {
+    @apply backdrop-blur-md bg-white/5 border border-white/10 rounded-lg shadow-xl;
+  }
+
+  .glass-card-hover {
+    @apply glass-card transition-all duration-300;
+  }
+
+  .glass-card-hover:hover {
+    @apply bg-white/10 border-white/20 shadow-2xl;
+    box-shadow: 0 0 30px hsl(var(--court-gold) / 0.1);
+  }
+
   /* Panic pulse animation for urgent cases */
   .panic-pulse {
     animation: panic-pulse 1.5s ease-in-out infinite;
@@ -134,14 +156,14 @@
       border-color: hsl(0 84% 60%);
     }
     50% {
-      box-shadow: 0 0 0 8px hsl(0 84% 60% / 0);
+      box-shadow: 0 0 0 12px hsl(0 84% 60% / 0);
       border-color: hsl(0 84% 40%);
     }
   }
 
   /* Gold glow for senior mode */
   .gold-glow {
-    box-shadow: 0 0 20px hsl(48 97% 54% / 0.3);
+    box-shadow: 0 0 30px hsl(43 96% 56% / 0.4);
   }
 
   /* Whisper notification animation */
@@ -183,12 +205,12 @@
 
   /* Court card hover effect */
   .court-card {
-    @apply transition-all duration-300 ease-out;
+    @apply transition-all duration-300 ease-out glass-card;
   }
 
   .court-card:hover {
-    @apply scale-[1.02] shadow-lg;
-    box-shadow: 0 0 30px hsl(48 97% 54% / 0.1);
+    @apply scale-[1.02] bg-white/10;
+    box-shadow: 0 0 40px hsl(43 96% 56% / 0.15);
   }
 
   /* Ticker scrolling */
@@ -204,6 +226,50 @@
       transform: translateX(-50%);
     }
   }
+
+  /* Network status pill */
+  .network-pill {
+    @apply flex items-center gap-2 px-3 py-1.5 rounded-full glass-card text-sm font-medium;
+  }
+
+  .network-online {
+    @apply text-court-success;
+  }
+
+  .network-offline {
+    @apply text-court-warning;
+  }
+
+  /* Giant item number display */
+  .giant-number {
+    @apply font-display text-7xl md:text-8xl lg:text-9xl font-bold text-primary;
+    text-shadow: 0 0 60px hsl(43 96% 56% / 0.5);
+  }
+
+  /* Passover/skipped state */
+  .card-passover {
+    @apply opacity-60 grayscale;
+  }
+
+  .card-passover .card-content {
+    @apply line-through;
+  }
+
+  /* Floating toolbar */
+  .floating-toolbar {
+    @apply fixed bottom-6 left-1/2 -translate-x-1/2 glass-card px-4 py-2 flex items-center gap-2 z-50;
+  }
+
+  /* PDF annotation highlights */
+  .annotation-highlight {
+    @apply bg-yellow-400/40 rounded-sm;
+  }
+
+  .annotation-pen {
+    stroke: hsl(0 84% 60%);
+    stroke-width: 2;
+    fill: none;
+  }
 }
 
 @layer utilities {
@@ -217,17 +283,28 @@
   }
 
   .legal-scroll::-webkit-scrollbar-track {
-    background: hsl(217 33% 17%);
+    background: hsl(217 33% 12%);
     border-radius: 4px;
   }
 
   .legal-scroll::-webkit-scrollbar-thumb {
-    background: hsl(215 25% 35%);
+    background: hsl(215 20% 30%);
     border-radius: 4px;
   }
 
   .legal-scroll::-webkit-scrollbar-thumb:hover {
-    background: hsl(48 97% 54%);
+    background: hsl(43 96% 56%);
+  }
+
+  /* High contrast text utility */
+  .text-high-contrast {
+    @apply text-foreground font-medium;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  }
+
+  /* Touch-friendly spacing */
+  .touch-spacing {
+    @apply p-3 md:p-4;
   }
 
   /* Reduced motion preference */

@@ -131,6 +131,44 @@ export type Database = {
           },
         ]
       }
+      document_annotations: {
+        Row: {
+          annotation_json: Json
+          annotation_type: string | null
+          created_at: string | null
+          document_id: string | null
+          id: string
+          page_number: number
+          user_id: string
+        }
+        Insert: {
+          annotation_json: Json
+          annotation_type?: string | null
+          created_at?: string | null
+          document_id?: string | null
+          id?: string
+          page_number: number
+          user_id: string
+        }
+        Update: {
+          annotation_json?: Json
+          annotation_type?: string | null
+          created_at?: string | null
+          document_id?: string | null
+          id?: string
+          page_number?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "document_annotations_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "case_documents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       live_board_cache: {
         Row: {
           court_location: string
@@ -138,6 +176,7 @@ export type Database = {
           current_item: number | null
           is_supplementary_running: boolean | null
           last_updated: string | null
+          status: string | null
         }
         Insert: {
           court_location: string
@@ -145,6 +184,7 @@ export type Database = {
           current_item?: number | null
           is_supplementary_running?: boolean | null
           last_updated?: string | null
+          status?: string | null
         }
         Update: {
           court_location?: string
@@ -152,6 +192,7 @@ export type Database = {
           current_item?: number | null
           is_supplementary_running?: boolean | null
           last_updated?: string | null
+          status?: string | null
         }
         Relationships: []
       }
