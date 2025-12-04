@@ -3,10 +3,8 @@ import { Document, Page, pdfjs } from 'react-pdf';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, RotateCw, Loader2 } from 'lucide-react';
 import { AnnotationToolbar, AnnotationTool } from './AnnotationToolbar';
-import { useAnnotations, Annotation } from '@/hooks/useAnnotations';
+import { useAnnotations } from '@/hooks/useAnnotations';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import 'react-pdf/dist/esm/Page/AnnotationLayer.css';
-import 'react-pdf/dist/esm/Page/TextLayer.css';
 
 // Set up PDF.js worker
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
@@ -235,8 +233,8 @@ export function SmartPdfViewer({
                   pageNumber={currentPage}
                   scale={scale}
                   className="shadow-2xl"
-                  renderTextLayer={true}
-                  renderAnnotationLayer={true}
+                  renderTextLayer={false}
+                  renderAnnotationLayer={false}
                 />
                 
                 {/* Annotation overlays */}

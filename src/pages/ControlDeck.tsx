@@ -6,7 +6,9 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { ArrowLeft, Scale, Upload, FileText, Clock, CheckCircle } from 'lucide-react';
 import { WhisperInput } from '@/components/control-deck/WhisperInput';
+import { WhisperDrawer } from '@/components/war-room/WhisperDrawer';
 import { AuthGuard } from '@/components/layout/AuthGuard';
+import { NetworkStatusPill } from '@/components/layout/NetworkStatusPill';
 import { useDocketItem } from '@/hooks/useDocket';
 import { useWhisperFeed } from '@/hooks/useWhisper';
 import { useLiveBoardForCourt } from '@/hooks/useLiveBoard';
@@ -72,7 +74,7 @@ export default function ControlDeck() {
       <AuthGuard>
         <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4">
           <p className="text-muted-foreground">Case not found</p>
-          <Button variant="gold" onClick={() => navigate('/')}>
+          <Button variant="gold" onClick={() => navigate('/')} className="min-h-touch">
             Return to Dashboard
           </Button>
         </div>
@@ -83,12 +85,15 @@ export default function ControlDeck() {
   return (
     <AuthGuard>
       <div className="min-h-screen bg-background pb-20">
+        {/* Whisper Chat Drawer */}
+        <WhisperDrawer docketId={caseId!} />
+
         {/* Header */}
         <header
           className={cn(
-            'border-b border-border bg-card/95 backdrop-blur-sm sticky top-0 z-40',
-            isPanic && 'bg-court-danger border-court-danger-light',
-            isRunning && 'bg-court-danger border-court-danger-light'
+            'border-b border-border glass-card rounded-none sticky top-0 z-40',
+            isPanic && 'bg-court-danger/20 border-court-danger-light',
+            isRunning && 'bg-primary/10 border-primary gold-glow'
           )}
         >
           <div className="container mx-auto px-4 py-3">
@@ -98,13 +103,15 @@ export default function ControlDeck() {
                   variant="ghost"
                   size="icon"
                   onClick={() => navigate('/')}
+                  aria-label="Go back to dashboard"
+                  className="min-h-touch min-w-touch"
                 >
                   <ArrowLeft className="h-5 w-5" />
                 </Button>
                 
                 <div>
                   <div className="flex items-center gap-3">
-                    <h1 className="font-display text-xl font-bold text-foreground">
+                    <h1 className="font-display text-xl font-bold text-foreground tracking-wide">
                       {docketItem.case_number}
                     </h1>
                     
@@ -123,9 +130,12 @@ export default function ControlDeck() {
                 </div>
               </div>
               
-              <Badge variant="secondary" className="text-sm">
-                JUNIOR MODE
-              </Badge>
+              <div className="flex items-center gap-3">
+                <NetworkStatusPill />
+                <Badge variant="secondary" className="text-sm">
+                  JUNIOR MODE
+                </Badge>
+              </div>
             </div>
           </div>
         </header>
@@ -134,9 +144,9 @@ export default function ControlDeck() {
         <main className="container mx-auto px-4 py-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Evidence Upload */}
-            <Card>
+            <Card className="glass-card">
               <CardHeader>
-                <CardTitle className="flex items-center gap-2 font-display">
+                <CardTitle className="flex items-center gap-2 font-display tracking-wide">
                   <Upload className="h-5 w-5 text-primary" />
                   Evidence Upload
                 </CardTitle>
@@ -181,6 +191,7 @@ export default function ControlDeck() {
                       <Button
                         variant="court"
                         onClick={() => fileInputRef.current?.click()}
+                        className="min-h-touch"
                       >
                         Select Files
                       </Button>
@@ -191,11 +202,11 @@ export default function ControlDeck() {
             </Card>
 
             {/* Message History */}
-            <Card>
+            <Card className="glass-card">
               <CardHeader>
-                <CardTitle className="flex items-center gap-2 font-display">
+                <CardTitle className="flex items-center gap-2 font-display tracking-wide">
                   <Clock className="h-5 w-5 text-primary" />
-                  Message History
+                  Recent Messages
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -209,7 +220,7 @@ export default function ControlDeck() {
                       {whispers.map((msg) => (
                         <div
                           key={msg.id}
-                          className="p-3 rounded-lg bg-secondary/50 border border-border"
+                          className="p-3 rounded-lg glass-card"
                         >
                           <p className="text-sm text-foreground">{msg.message}</p>
                           <p className="text-xs text-muted-foreground mt-1">
