@@ -7,6 +7,7 @@ import { ArgumentsPanel } from '@/components/war-room/ArgumentsPanel';
 import { SmartPdfViewer } from '@/components/war-room/SmartPdfViewer';
 import { DocumentSelector } from '@/components/war-room/DocumentSelector';
 import { WhisperNotification } from '@/components/war-room/WhisperNotification';
+import { WhisperDrawer } from '@/components/war-room/WhisperDrawer';
 import { AuthGuard } from '@/components/layout/AuthGuard';
 import { NetworkStatusPill } from '@/components/layout/NetworkStatusPill';
 import { useDocketItem } from '@/hooks/useDocket';
@@ -88,8 +89,11 @@ export default function WarRoom() {
           Skip to main content
         </a>
 
-        {/* Whisper Listener */}
+        {/* Whisper Listener for toast notifications */}
         <WhisperNotification docketId={caseId!} />
+        
+        {/* Whisper Chat Drawer */}
+        <WhisperDrawer docketId={caseId!} />
 
         {/* Header */}
         <header
