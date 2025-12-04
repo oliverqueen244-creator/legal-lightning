@@ -1,8 +1,9 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useAudioRecorder, formatRecordingTime } from '@/hooks/useAudioRecorder';
+import { useNotificationSound } from '@/hooks/useNotificationSound';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -14,7 +15,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from '@/components/ui/sheet';
-import { MessageCircle, Send, Mic, Square, X, Play, Pause, Loader2 } from 'lucide-react';
+import { MessageCircle, Send, Mic, Square, X, Play, Pause, Loader2, Volume2, VolumeX } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
@@ -104,9 +105,15 @@ export function WhisperDrawer({ docketId }: WhisperDrawerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [newMessage, setNewMessage] = useState('');
   const [isUploading, setIsUploading] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(true);
   const queryClient = useQueryClient();
   const { user, profile } = useAuth();
   const scrollRef = useRef<HTMLDivElement>(null);
+  const holdTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const isHoldingRef = useRef(false);
+  const prevMessageCountRef = useRef(0);
+  
+  const { playNotification, setEnabled } = useNotificationSound();
   
   const {
     isRecording,
@@ -117,12 +124,61 @@ export function WhisperDrawer({ docketId }: WhisperDrawerProps) {
     error: recordingError,
   } = useAudioRecorder();
 
+  // Sync sound enabled state
+  useEffect(() => {
+    setEnabled(soundEnabled);
+  }, [soundEnabled, setEnabled]);
+
   // Show recording errors
   useEffect(() => {
     if (recordingError) {
       toast.error(recordingError);
     }
   }, [recordingError]);
+
+  // Hold-to-record handlers
+  const handlePointerDown = useCallback((e: React.PointerEvent) => {
+    if (isUploading || isRecording) return;
+    e.preventDefault();
+    isHoldingRef.current = true;
+    
+    // Start recording after 200ms hold
+    holdTimerRef.current = setTimeout(async () => {
+      if (isHoldingRef.current) {
+        await startRecording();
+        // Vibrate on mobile if supported
+        if ('vibrate' in navigator) {
+          navigator.vibrate(50);
+        }
+      }
+    }, 200);
+  }, [isUploading, isRecording, startRecording]);
+
+  const handlePointerUp = useCallback(async () => {
+    isHoldingRef.current = false;
+    
+    if (holdTimerRef.current) {
+      clearTimeout(holdTimerRef.current);
+      holdTimerRef.current = null;
+    }
+    
+    if (isRecording && recordingTime >= 1) {
+      // Stop and send if recorded at least 1 second
+      await handleVoiceRecordComplete();
+    } else if (isRecording) {
+      // Cancel if too short
+      cancelRecording();
+      toast.info('Hold longer to record');
+    }
+  }, [isRecording, recordingTime, cancelRecording]);
+
+  const handlePointerLeave = useCallback(() => {
+    if (holdTimerRef.current) {
+      clearTimeout(holdTimerRef.current);
+      holdTimerRef.current = null;
+    }
+    isHoldingRef.current = false;
+  }, []);
 
   // Fetch messages
   const { data: messages = [] } = useQuery({
@@ -163,7 +219,7 @@ export function WhisperDrawer({ docketId }: WhisperDrawerProps) {
   // Count unread messages
   const unreadCount = messages.filter(m => !m.is_read && m.sender_id !== user?.id).length;
 
-  // Subscribe to realtime updates
+  // Subscribe to realtime updates with notification sound
   useEffect(() => {
     if (!docketId) return;
 
@@ -172,12 +228,17 @@ export function WhisperDrawer({ docketId }: WhisperDrawerProps) {
       .on(
         'postgres_changes',
         {
-          event: '*',
+          event: 'INSERT',
           schema: 'public',
           table: 'live_courtroom_feed',
           filter: `docket_id=eq.${docketId}`,
         },
-        () => {
+        (payload) => {
+          // Play notification sound for messages from others
+          const newMsg = payload.new as any;
+          if (newMsg.sender_id !== user?.id) {
+            playNotification('message');
+          }
           queryClient.invalidateQueries({ queryKey: ['whispers', docketId] });
         }
       )
@@ -186,7 +247,7 @@ export function WhisperDrawer({ docketId }: WhisperDrawerProps) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [docketId, queryClient]);
+  }, [docketId, queryClient, user?.id, playNotification]);
 
   // Mark messages as read when drawer opens
   useEffect(() => {
@@ -241,51 +302,57 @@ export function WhisperDrawer({ docketId }: WhisperDrawerProps) {
     }
   };
 
+  const handleVoiceRecordComplete = async () => {
+    setIsUploading(true);
+    try {
+      const audioBlob = await stopRecording();
+      if (!audioBlob) {
+        toast.error('No audio recorded');
+        return;
+      }
+
+      // Upload to Supabase storage
+      const fileName = `voice-${docketId}-${Date.now()}.webm`;
+      const filePath = `whispers/${fileName}`;
+      
+      const { error: uploadError } = await supabase.storage
+        .from('case-documents')
+        .upload(filePath, audioBlob, {
+          contentType: audioBlob.type,
+          upsert: false,
+        });
+
+      if (uploadError) {
+        console.error('Upload error:', uploadError);
+        toast.error('Failed to upload voice memo');
+        return;
+      }
+
+      // Get public URL
+      const { data: urlData } = supabase.storage
+        .from('case-documents')
+        .getPublicUrl(filePath);
+
+      // Send message with voice memo URL
+      await sendMessage.mutateAsync(`${VOICE_MESSAGE_PREFIX}${urlData.publicUrl}`);
+      toast.success('Voice memo sent!');
+      
+      // Vibrate on success
+      if ('vibrate' in navigator) {
+        navigator.vibrate([50, 50, 50]);
+      }
+    } catch (err) {
+      console.error('Voice send error:', err);
+      toast.error('Failed to send voice memo');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
   const handleVoiceRecord = async () => {
     if (isRecording) {
-      // Stop and send
-      setIsUploading(true);
-      try {
-        const audioBlob = await stopRecording();
-        if (!audioBlob) {
-          toast.error('No audio recorded');
-          return;
-        }
-
-        // Upload to Supabase storage
-        const fileName = `voice-${docketId}-${Date.now()}.webm`;
-        const filePath = `whispers/${fileName}`;
-        
-        const { error: uploadError } = await supabase.storage
-          .from('case-documents')
-          .upload(filePath, audioBlob, {
-            contentType: audioBlob.type,
-            upsert: false,
-          });
-
-        if (uploadError) {
-          console.error('Upload error:', uploadError);
-          toast.error('Failed to upload voice memo');
-          return;
-        }
-
-        // Get public URL
-        const { data: urlData } = supabase.storage
-          .from('case-documents')
-          .getPublicUrl(filePath);
-
-        // Send message with voice memo URL
-        await sendMessage.mutateAsync(`${VOICE_MESSAGE_PREFIX}${urlData.publicUrl}`);
-        toast.success('Voice memo sent!');
-        
-      } catch (err) {
-        console.error('Voice send error:', err);
-        toast.error('Failed to send voice memo');
-      } finally {
-        setIsUploading(false);
-      }
+      await handleVoiceRecordComplete();
     } else {
-      // Start recording
       await startRecording();
     }
   };
@@ -321,12 +388,32 @@ export function WhisperDrawer({ docketId }: WhisperDrawerProps) {
       <SheetContent 
         side="right" 
         className="w-full sm:w-[400px] p-0 glass-card border-l border-border"
+        aria-describedby="whisper-chat-description"
       >
         <SheetHeader className="p-4 border-b border-border">
-          <SheetTitle className="font-display text-xl tracking-wide flex items-center gap-2">
-            <MessageCircle className="h-5 w-5 text-primary" />
-            Whisper Chat
+          <SheetTitle className="font-display text-xl tracking-wide flex items-center justify-between">
+            <span className="flex items-center gap-2">
+              <MessageCircle className="h-5 w-5 text-primary" aria-hidden="true" />
+              Whisper Chat
+            </span>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setSoundEnabled(!soundEnabled)}
+              className="h-8 w-8"
+              aria-label={soundEnabled ? 'Mute notifications' : 'Unmute notifications'}
+              aria-pressed={soundEnabled}
+            >
+              {soundEnabled ? (
+                <Volume2 className="h-4 w-4" aria-hidden="true" />
+              ) : (
+                <VolumeX className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+              )}
+            </Button>
           </SheetTitle>
+          <p id="whisper-chat-description" className="sr-only">
+            Real-time messaging for court communications. Hold the microphone button to record voice messages.
+          </p>
         </SheetHeader>
 
         <div className="flex flex-col h-[calc(100vh-80px)]">
@@ -417,25 +504,31 @@ export function WhisperDrawer({ docketId }: WhisperDrawerProps) {
               disabled={isRecording || isUploading}
             />
             
-            {/* Voice Record Button */}
+            {/* Voice Record Button - Hold to record on touch devices, click on desktop */}
             <Button 
               type="button"
               size="icon"
               variant={isRecording ? 'destructive' : 'outline'}
               onClick={handleVoiceRecord}
+              onPointerDown={handlePointerDown}
+              onPointerUp={handlePointerUp}
+              onPointerLeave={handlePointerLeave}
+              onPointerCancel={handlePointerLeave}
               disabled={isUploading}
               className={cn(
-                'min-h-touch min-w-touch transition-all',
-                isRecording && 'animate-pulse'
+                'min-h-touch min-w-touch transition-all touch-none select-none',
+                isRecording && 'animate-pulse scale-110'
               )}
-              aria-label={isRecording ? 'Stop recording' : 'Start voice memo'}
+              aria-label={isRecording ? 'Release to send voice memo' : 'Hold to record voice memo, or tap to toggle recording'}
+              role="button"
+              aria-pressed={isRecording}
             >
               {isUploading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
               ) : isRecording ? (
-                <Square className="h-4 w-4" />
+                <Square className="h-4 w-4" aria-hidden="true" />
               ) : (
-                <Mic className="h-4 w-4" />
+                <Mic className="h-4 w-4" aria-hidden="true" />
               )}
             </Button>
             

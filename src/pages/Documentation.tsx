@@ -159,8 +159,14 @@ export default function Documentation() {
                 <p className="text-muted-foreground">
                   Real-time messaging between juniors in the control deck and seniors in the 
                   courtroom. Messages appear as toast notifications without disrupting the 
-                  hearing flow.
+                  hearing flow. Features include:
                 </p>
+                <ul className="list-disc list-inside text-muted-foreground mt-2 space-y-1 ml-4">
+                  <li><strong>Voice Memos:</strong> Record and send audio messages with hold-to-record gesture on mobile</li>
+                  <li><strong>Notification Sounds:</strong> Audio alerts for incoming messages (can be muted)</li>
+                  <li><strong>Unread Counter:</strong> Badge shows number of unread messages</li>
+                  <li><strong>Message History:</strong> Scrollable chat with timestamps and sender names</li>
+                </ul>
               </div>
 
               <div>
@@ -244,6 +250,22 @@ export default function Documentation() {
                     provides excellent readability.
                   </p>
                 </div>
+
+                <div className="p-4 rounded-lg bg-card border border-border">
+                  <h4 className="font-semibold text-foreground mb-2">Touch Targets</h4>
+                  <p className="text-sm text-muted-foreground">
+                    All interactive elements have minimum 44×44px touch targets for 
+                    easy mobile interaction per WCAG guidelines.
+                  </p>
+                </div>
+
+                <div className="p-4 rounded-lg bg-card border border-border">
+                  <h4 className="font-semibold text-foreground mb-2">Audio Controls</h4>
+                  <p className="text-sm text-muted-foreground">
+                    Notification sounds can be muted. Voice memos include visual 
+                    progress indicators. Haptic feedback on supported devices.
+                  </p>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -307,9 +329,11 @@ export default function Documentation() {
                 <h3 className="font-semibold text-foreground mb-2">Sending a Whisper</h3>
                 <ol className="list-decimal list-inside text-muted-foreground space-y-1">
                   <li>Open Control Deck for the active case</li>
-                  <li>Type your message in the whisper input</li>
-                  <li>Click send or press Enter</li>
-                  <li>Senior receives instant notification in War Room</li>
+                  <li>Click the chat bubble (bottom-right) to open Whisper Chat</li>
+                  <li>Type your message and click send, or press Enter</li>
+                  <li>For voice memos: Hold the microphone button to record, release to send</li>
+                  <li>Senior receives instant notification with sound alert in War Room</li>
+                  <li>Use the speaker icon to mute/unmute notification sounds</li>
                 </ol>
               </div>
 
