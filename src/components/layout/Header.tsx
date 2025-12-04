@@ -12,6 +12,7 @@ import {
 import { useAuth } from '@/hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
+import { NetworkStatusPill } from './NetworkStatusPill';
 
 export function Header() {
   const { profile, role, isAdmin, signOut } = useAuth();
@@ -28,13 +29,13 @@ export function Header() {
   };
 
   return (
-    <header className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-40" role="banner">
+    <header className="border-b border-border glass-card rounded-none sticky top-0 z-40" role="banner">
       <div className="container mx-auto px-4 py-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Scale className="h-8 w-8 text-primary" aria-hidden="true" />
             <div>
-              <h1 className="font-display text-2xl font-bold text-foreground">
+              <h1 className="font-display text-2xl font-bold text-foreground tracking-wide">
                 Vakalat-OS
               </h1>
               <p className="text-sm text-muted-foreground">
@@ -44,6 +45,9 @@ export function Header() {
           </div>
           
           <div className="flex items-center gap-4">
+            {/* Network Status Pill */}
+            <NetworkStatusPill />
+
             <div className="hidden md:flex items-center gap-4 text-sm text-muted-foreground">
               <span className="flex items-center gap-1">
                 <Calendar className="h-4 w-4" aria-hidden="true" />
@@ -68,6 +72,7 @@ export function Header() {
                 size="sm" 
                 onClick={() => navigate('/admin')}
                 aria-label="Go to admin panel"
+                className="min-h-touch"
               >
                 <Settings className="h-4 w-4 mr-2" aria-hidden="true" />
                 <span className="hidden sm:inline">Admin</span>
@@ -76,7 +81,7 @@ export function Header() {
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="flex items-center gap-2" aria-label="User menu">
+                <Button variant="ghost" className="flex items-center gap-2 min-h-touch" aria-label="User menu">
                   <User className="h-4 w-4" aria-hidden="true" />
                   <span className="hidden sm:inline">{profile?.full_name || 'User'}</span>
                   <Badge variant={role === 'SENIOR' || role === 'ADMIN' ? 'gold' : 'secondary'} className="ml-1">
@@ -84,10 +89,10 @@ export function Header() {
                   </Badge>
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuContent align="end" className="w-56 glass-card">
                 <DropdownMenuLabel>My Account</DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem className="flex items-center gap-2">
+                <DropdownMenuItem className="flex items-center gap-2 min-h-touch">
                   <User className="h-4 w-4" aria-hidden="true" />
                   {profile?.full_name}
                 </DropdownMenuItem>
@@ -97,14 +102,14 @@ export function Header() {
                 {isAdmin && (
                   <>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={() => navigate('/admin')}>
+                    <DropdownMenuItem onClick={() => navigate('/admin')} className="min-h-touch">
                       <Settings className="h-4 w-4 mr-2" aria-hidden="true" />
                       Admin Panel
                     </DropdownMenuItem>
                   </>
                 )}
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleSignOut} className="text-destructive">
+                <DropdownMenuItem onClick={handleSignOut} className="text-destructive min-h-touch">
                   <LogOut className="h-4 w-4 mr-2" aria-hidden="true" />
                   Sign Out
                 </DropdownMenuItem>

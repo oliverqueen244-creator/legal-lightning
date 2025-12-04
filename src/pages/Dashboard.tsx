@@ -1,5 +1,6 @@
 import { DocketCard } from '@/components/dashboard/DocketCard';
 import { LiveTicker } from '@/components/dashboard/LiveTicker';
+import { LiveCourtWidget } from '@/components/dashboard/LiveCourtWidget';
 import { Header } from '@/components/layout/Header';
 import { AuthGuard } from '@/components/layout/AuthGuard';
 import { useDocket } from '@/hooks/useDocket';
@@ -23,6 +24,10 @@ export default function Dashboard() {
     );
   };
 
+  // Get first case's live board for the widget
+  const firstCase = dailyItems[0] || supplementaryItems[0];
+  const primaryLiveBoard = firstCase ? getLiveBoardForItem(firstCase) : liveBoards?.[0];
+
   return (
     <AuthGuard>
       <div className="min-h-screen bg-background">
@@ -37,8 +42,8 @@ export default function Dashboard() {
               {supplementaryItems.length > 0 && (
                 <section>
                   <div className="flex items-center gap-2 mb-4">
-                    <div className="h-3 w-3 rounded-full bg-orange-500 animate-pulse" />
-                    <h2 className="font-display text-xl font-semibold text-orange-400">
+                    <div className="h-3 w-3 rounded-full bg-court-warning animate-pulse" />
+                    <h2 className="font-display text-xl font-semibold text-court-warning tracking-wide">
                       Supplementary List
                     </h2>
                   </div>
@@ -59,7 +64,7 @@ export default function Dashboard() {
               <section>
                 <div className="flex items-center gap-2 mb-4">
                   <div className="h-3 w-3 rounded-full bg-primary" />
-                  <h2 className="font-display text-xl font-semibold text-foreground">
+                  <h2 className="font-display text-xl font-semibold text-foreground tracking-wide">
                     My Cause List
                   </h2>
                   <span className="text-muted-foreground text-sm">
@@ -74,7 +79,7 @@ export default function Dashboard() {
                     ))}
                   </div>
                 ) : dailyItems.length === 0 ? (
-                  <div className="text-center py-12 text-muted-foreground">
+                  <div className="text-center py-12 text-muted-foreground glass-card rounded-lg">
                     <Scale className="h-12 w-12 mx-auto mb-4 opacity-50" />
                     <p>No cases on today's list</p>
                   </div>
@@ -93,9 +98,23 @@ export default function Dashboard() {
               </section>
             </div>
 
-            {/* Right: Live Ticker & Simulator */}
+            {/* Right: Live Court Widget & Ticker */}
             <div className="lg:col-span-1 space-y-6">
               <div className="sticky top-24 space-y-6">
+                {/* Live Court Widget - Giant Status Display */}
+                {liveBoardLoading ? (
+                  <Skeleton className="h-80 w-full rounded-lg" />
+                ) : primaryLiveBoard ? (
+                  <LiveCourtWidget
+                    courtRoom={primaryLiveBoard.court_no}
+                    currentItem={primaryLiveBoard.current_item}
+                    myItemNumber={firstCase?.item_no}
+                    status={(primaryLiveBoard as any).status || 'hearing'}
+                    courtLocation={primaryLiveBoard.court_location}
+                  />
+                ) : null}
+
+                {/* Live Ticker */}
                 {liveBoardLoading ? (
                   <Skeleton className="h-64 w-full rounded-lg" />
                 ) : (

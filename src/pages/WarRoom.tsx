@@ -4,10 +4,11 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ArrowLeft, Scale, AlertTriangle } from 'lucide-react';
 import { ArgumentsPanel } from '@/components/war-room/ArgumentsPanel';
-import { PdfViewer } from '@/components/war-room/PdfViewer';
+import { SmartPdfViewer } from '@/components/war-room/SmartPdfViewer';
 import { DocumentSelector } from '@/components/war-room/DocumentSelector';
 import { WhisperNotification } from '@/components/war-room/WhisperNotification';
 import { AuthGuard } from '@/components/layout/AuthGuard';
+import { NetworkStatusPill } from '@/components/layout/NetworkStatusPill';
 import { useDocketItem } from '@/hooks/useDocket';
 import { useArguments } from '@/hooks/useArguments';
 import { useCaseDocuments } from '@/hooks/useCaseDocuments';
@@ -23,6 +24,7 @@ export default function WarRoom() {
   const navigate = useNavigate();
   const [selectedArg, setSelectedArg] = useState<CaseArgument | null>(null);
   const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
+  const [fontSize, setFontSize] = useState<'normal' | 'large' | 'xlarge'>('normal');
 
   const { data: docketItem, isLoading: docketLoading } = useDocketItem(caseId!);
   const { data: args } = useArguments(caseId!);
@@ -67,7 +69,7 @@ export default function WarRoom() {
       <AuthGuard>
         <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4">
           <p className="text-muted-foreground">Case not found</p>
-          <Button variant="gold" onClick={() => navigate('/')}>
+          <Button variant="gold" onClick={() => navigate('/')} className="min-h-touch">
             Return to Dashboard
           </Button>
         </div>
@@ -92,9 +94,9 @@ export default function WarRoom() {
         {/* Header */}
         <header
           className={cn(
-            'border-b border-border bg-card/95 backdrop-blur-sm sticky top-0 z-40 transition-colors',
-            isPanic && 'bg-court-danger border-court-danger-light',
-            isRunning && 'bg-court-danger border-court-danger-light gold-glow'
+            'border-b border-border glass-card rounded-none sticky top-0 z-40 transition-colors',
+            isPanic && 'bg-court-danger/20 border-court-danger-light',
+            isRunning && 'bg-primary/10 border-primary gold-glow'
           )}
           role="banner"
         >
@@ -106,13 +108,14 @@ export default function WarRoom() {
                   size="icon"
                   onClick={() => navigate('/')}
                   aria-label="Go back to dashboard"
+                  className="min-h-touch min-w-touch"
                 >
                   <ArrowLeft className="h-5 w-5" />
                 </Button>
                 
                 <div>
                   <div className="flex items-center gap-3">
-                    <h1 className="font-display text-xl font-bold text-foreground">
+                    <h1 className="font-display text-xl font-bold text-foreground tracking-wide">
                       {docketItem.case_number}
                     </h1>
                     
@@ -134,7 +137,8 @@ export default function WarRoom() {
                 </div>
               </div>
               
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-3">
+                <NetworkStatusPill />
                 <Badge variant="gold" className="text-sm">
                   SENIOR MODE
                 </Badge>
@@ -160,14 +164,17 @@ export default function WarRoom() {
               arguments={args ?? []}
               selectedArg={selectedArg}
               onSelectArg={handleSelectArg}
+              fontSize={fontSize}
+              onFontSizeChange={setFontSize}
             />
           </div>
 
-          {/* Right Panel: PDF Viewer (70%) */}
+          {/* Right Panel: Smart PDF Viewer (70%) */}
           <div className="w-[70%]">
-            <PdfViewer
+            <SmartPdfViewer
               pdfUrl={pdfUrl}
               targetPage={selectedArg?.linked_page_number ?? 1}
+              documentId={selectedDocId || undefined}
             />
           </div>
         </main>
