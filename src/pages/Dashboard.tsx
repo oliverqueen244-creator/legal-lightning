@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { format } from 'date-fns';
 import { DocketCard } from '@/components/dashboard/DocketCard';
 import { LiveTicker } from '@/components/dashboard/LiveTicker';
 import { LiveCourtWidget } from '@/components/dashboard/LiveCourtWidget';
@@ -6,6 +7,7 @@ import { CaseTimeEstimator } from '@/components/dashboard/CaseTimeEstimator';
 import { LawyerSearchPanel } from '@/components/dashboard/LawyerSearchPanel';
 import { ScraperStatusWidget } from '@/components/dashboard/ScraperStatusWidget';
 import { CourtMetadataWidget } from '@/components/dashboard/CourtMetadataWidget';
+import { DateSelector } from '@/components/dashboard/DateSelector';
 import { Header } from '@/components/layout/Header';
 import { AuthGuard } from '@/components/layout/AuthGuard';
 import { useDocket } from '@/hooks/useDocket';
@@ -18,10 +20,14 @@ import { Scale, AlertCircle, Search } from 'lucide-react';
 import { LiveBoardSimulator } from '@/components/dashboard/LiveBoardSimulator';
 
 export default function Dashboard() {
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const { data: docket, isLoading: docketLoading, refetch } = useDocket();
   const { data: liveBoards, isLoading: liveBoardLoading } = useLiveBoard();
   const { role, profile } = useAuth();
   const [activeTab, setActiveTab] = useState('daily');
+  
+  // Format date for API calls
+  const formattedDate = format(selectedDate, 'yyyy-MM-dd');
 
   // Get user's selected benches (could be "JAIPUR", "JODHPUR", or "JAIPUR,JODHPUR")
   const userBenches = profile?.bench?.split(',').map(b => b.trim().toUpperCase()) ?? [];
@@ -71,11 +77,18 @@ export default function Dashboard() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Left: Cause List with Tabs */}
             <div className="lg:col-span-2 space-y-4">
-              {/* Scraper Status Widget with Manual Refresh */}
-              <ScraperStatusWidget 
-                bench={profile?.bench || undefined} 
-                onRefreshComplete={refetch}
-              />
+            {/* Date Selector + Scraper Status */}
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                <DateSelector 
+                  selectedDate={selectedDate}
+                  onDateChange={setSelectedDate}
+                />
+                <ScraperStatusWidget 
+                  bench={profile?.bench || undefined} 
+                  selectedDate={formattedDate}
+                  onRefreshComplete={refetch}
+                />
+              </div>
               
               <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
                 <TabsList className="grid w-full grid-cols-3 mb-4">

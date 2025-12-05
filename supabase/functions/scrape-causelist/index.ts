@@ -522,9 +522,94 @@ function extractPdfLinksFromHtml(html: string, baseUrl: string): string[] {
   return links;
 }
 
+// Configuration for rate limiting and retries
+const MAX_PDFS_PER_RUN = 3; // Reduced to avoid rate limiting
+const DELAY_BETWEEN_PDFS = 5000; // 5 seconds between PDFs
+const MAX_RETRIES = 2;
+const RETRY_DELAY_BASE = 10000; // 10 seconds base
+
+// Sleep helper
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// Verify PDF URL is accessible and returns actual PDF content
+async function verifyPdfUrl(pdfUrl: string): Promise<{ valid: boolean; contentType: string; size: number }> {
+  try {
+    console.log(`[scrape-causelist] Verifying PDF URL: ${pdfUrl}`);
+    
+    const response = await fetch(pdfUrl, { 
+      method: 'HEAD',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      },
+    });
+    
+    const contentType = response.headers.get('content-type') || '';
+    const contentLength = parseInt(response.headers.get('content-length') || '0', 10);
+    
+    // More flexible validation - the PHP endpoint may not return HEAD properly
+    const isValid = response.ok || 
+      contentType.includes('pdf') || 
+      contentType.includes('octet-stream') ||
+      pdfUrl.toLowerCase().includes('.pdf');
+    
+    console.log(`[scrape-causelist] PDF verification: status=${response.status}, type=${contentType}, size=${contentLength}, valid=${isValid}`);
+    
+    return { valid: isValid, contentType, size: contentLength };
+  } catch (err) {
+    console.log(`[scrape-causelist] PDF verification failed (will try anyway): ${err}`);
+    // Return true anyway - the PHP endpoint might work with GET but not HEAD
+    return { valid: true, contentType: '', size: 0 };
+  }
+}
+
+// Extract text-like content from PDF response (best effort)
+async function fetchPdfDirectly(pdfUrl: string): Promise<string> {
+  try {
+    console.log(`[scrape-causelist] Trying direct PDF fetch: ${pdfUrl}`);
+    
+    const response = await fetch(pdfUrl, {
+      method: 'GET',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'application/pdf,text/html,*/*',
+      },
+    });
+    
+    if (!response.ok) {
+      console.log(`[scrape-causelist] Direct fetch failed: ${response.status} ${response.statusText}`);
+      return '';
+    }
+    
+    const contentType = response.headers.get('content-type') || '';
+    console.log(`[scrape-causelist] Direct fetch response type: ${contentType}`);
+    
+    // If it's HTML, try to parse it
+    if (contentType.includes('html')) {
+      const html = await response.text();
+      console.log(`[scrape-causelist] Got HTML response (${html.length} chars), extracting text...`);
+      // Extract any table content from HTML
+      const tableContent = html.match(/<table[\s\S]*?<\/table>/gi);
+      if (tableContent) {
+        return tableContent.join('\n').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+      }
+      return html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').substring(0, 5000);
+    }
+    
+    // For actual PDF binary, we can't parse it directly - need Firecrawl
+    console.log(`[scrape-causelist] Got binary PDF, will use Firecrawl for parsing`);
+    return '';
+    
+  } catch (err) {
+    console.log(`[scrape-causelist] Direct PDF fetch error: ${err}`);
+    return '';
+  }
+}
+
 // Scrape PDF content using Firecrawl
 async function scrapePdfWithFirecrawl(pdfUrl: string, firecrawlApiKey: string): Promise<string> {
-  console.log(`[scrape-causelist] Scraping PDF: ${pdfUrl}`);
+  console.log(`[scrape-causelist] Scraping PDF with Firecrawl: ${pdfUrl}`);
   
   const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
     method: 'POST',
@@ -542,29 +627,110 @@ async function scrapePdfWithFirecrawl(pdfUrl: string, firecrawlApiKey: string): 
   if (!response.ok) {
     const errorText = await response.text();
     console.error(`[scrape-causelist] Firecrawl PDF error: ${errorText}`);
+    
+    // Check if rate limited
+    if (response.status === 429 || errorText.includes('Rate limit')) {
+      throw new Error(`Rate limited - retry after delay`);
+    }
     throw new Error(`Failed to scrape PDF: ${response.statusText}`);
   }
 
   const data = await response.json();
   const markdown = data.data?.markdown || '';
-  console.log(`[scrape-causelist] PDF scraped, got ${markdown.length} chars`);
+  console.log(`[scrape-causelist] Firecrawl PDF scraped, got ${markdown.length} chars`);
   return markdown;
 }
 
+// Scrape PDF with retry logic and exponential backoff
+async function scrapePdfWithRetry(pdfUrl: string, firecrawlApiKey: string): Promise<string> {
+  // First try direct fetch (no API limits)
+  const directResult = await fetchPdfDirectly(pdfUrl);
+  if (directResult.length > 100) {
+    console.log(`[scrape-causelist] ✅ Direct fetch successful (${directResult.length} chars)`);
+    return directResult;
+  }
+  
+  // Fall back to Firecrawl with retries
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    try {
+      console.log(`[scrape-causelist] Firecrawl attempt ${attempt + 1}/${MAX_RETRIES}: ${pdfUrl}`);
+      
+      const result = await scrapePdfWithFirecrawl(pdfUrl, firecrawlApiKey);
+      
+      if (result.length > 100) {
+        console.log(`[scrape-causelist] ✅ Firecrawl successful on attempt ${attempt + 1}`);
+        return result;
+      }
+      
+      console.log(`[scrape-causelist] ⚠️ Content too short (${result.length} chars), retrying...`);
+      
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+      console.log(`[scrape-causelist] ❌ Attempt ${attempt + 1} failed: ${errorMsg}`);
+      
+      // If rate limited, wait longer
+      if (errorMsg.includes('Rate limit')) {
+        console.log(`[scrape-causelist] Rate limited, waiting 30 seconds...`);
+        await sleep(30000);
+      }
+    }
+    
+    // Wait before retry with exponential backoff
+    if (attempt < MAX_RETRIES - 1) {
+      const delay = RETRY_DELAY_BASE * Math.pow(2, attempt);
+      console.log(`[scrape-causelist] Waiting ${delay}ms before retry...`);
+      await sleep(delay);
+    }
+  }
+  
+  console.log(`[scrape-causelist] ❌ All PDF scrape attempts failed`);
+  return '';
+}
+
 // Extract court number from PDF URL or filename
+// URL patterns: 
+// - download_pdf.php?path=.../05122025_1639_1001.pdf (format: DDMMYYYY_HHMM_COURTNO)
+// - court1.pdf, court_1.pdf, etc.
 function extractCourtNoFromUrl(pdfUrl: string): string {
+  // Try to extract filename from URL
+  const filename = pdfUrl.split('/').pop() || pdfUrl;
+  console.log(`[scrape-causelist] Extracting court no from: ${filename}`);
+  
   const patterns = [
+    // Pattern: DDMMYYYY_HHMM_COURTNO.pdf (e.g., 05122025_1639_1001.pdf -> court 1)
+    /_(\d{4})\.pdf$/i,  // Last 4 digits before .pdf
+    /(\d{8})_(\d{4})_(\d+)\.pdf$/i,  // Full pattern
+    // Standard patterns
     /court[_\-\s]?no?[_\-\s]?(\d+)/i,
     /court[_\-\s]?(\d+)/i,
+    // Fallback: any number before .pdf
     /(\d+)\.pdf$/i,
   ];
+  
+  // Special handling for the DDMMYYYY_HHMM_COURTNO format
+  const specialMatch = filename.match(/\d{8}_\d{4}_(\d+)\.pdf$/i);
+  if (specialMatch) {
+    // The last number might be something like 1001 - extract just the meaningful part
+    const courtCode = specialMatch[1];
+    // If it's like 1001, 2011, etc., the first digit(s) might be the court number
+    if (courtCode.length >= 4) {
+      const courtNo = courtCode.substring(0, courtCode.length - 3) || '1';
+      console.log(`[scrape-causelist] Extracted court no from special format: ${courtNo}`);
+      return courtNo;
+    }
+    return courtCode;
+  }
   
   for (const pattern of patterns) {
     const match = pdfUrl.match(pattern);
     if (match) {
-      return match[1];
+      const courtNo = match[match.length - 1]; // Get last capture group
+      console.log(`[scrape-causelist] Extracted court no: ${courtNo} using pattern ${pattern}`);
+      return courtNo;
     }
   }
+  
+  console.log(`[scrape-causelist] Could not extract court no, defaulting to 1`);
   return '1';
 }
 
@@ -1022,32 +1188,54 @@ serve(async (req) => {
       }
     }
     
-    // PHASE 3: Scrape and parse PDFs
+    // PHASE 3: Scrape and parse PDFs with rate limiting
     if (pdfLinks.length > 0) {
-      console.log(`[scrape-causelist] PHASE 3: Scraping ${pdfLinks.length} PDFs...`);
+      const pdfsToProcess = Math.min(pdfLinks.length, MAX_PDFS_PER_RUN);
+      console.log(`[scrape-causelist] PHASE 3: Scraping ${pdfsToProcess}/${pdfLinks.length} PDFs (rate limited)...`);
       
-      for (const pdfUrl of pdfLinks) {
+      for (let i = 0; i < pdfsToProcess; i++) {
+        const pdfUrl = pdfLinks[i];
+        
+        // Add delay between PDF requests to avoid rate limiting
+        if (i > 0) {
+          console.log(`[scrape-causelist] Waiting ${DELAY_BETWEEN_PDFS}ms before next PDF...`);
+          await sleep(DELAY_BETWEEN_PDFS);
+        }
+        
         try {
+          // First verify the PDF URL is accessible
+          const verification = await verifyPdfUrl(pdfUrl);
+          
+          if (!verification.valid) {
+            console.log(`[scrape-causelist] ⚠️ PDF URL not valid or not accessible: ${pdfUrl}`);
+            pdfResults.push({ url: pdfUrl, entries: 0, error: `Invalid PDF (${verification.contentType})` });
+            continue;
+          }
+          
           const pdfCourtNo = extractCourtNoFromUrl(pdfUrl);
-          const pdfContent = await scrapePdfWithFirecrawl(pdfUrl, firecrawlApiKey);
+          const pdfContent = await scrapePdfWithRetry(pdfUrl, firecrawlApiKey);
           
           if (pdfContent.length < 100) {
-            pdfResults.push({ url: pdfUrl, entries: 0, error: 'Empty content' });
+            pdfResults.push({ url: pdfUrl, entries: 0, error: `Empty content after ${MAX_RETRIES} retries` });
             continue;
           }
           
           const detectedListType = detectListType(pdfUrl, pdfContent);
           const entries = parseCauseListPdf(pdfContent, bench, pdfCourtNo, targetDate, detectedListType);
           
-          console.log(`[scrape-causelist] Parsed ${entries.length} entries from ${pdfUrl}`);
+          console.log(`[scrape-causelist] ✅ Parsed ${entries.length} entries from ${pdfUrl}`);
           pdfResults.push({ url: pdfUrl, entries: entries.length });
           
           allEntries = allEntries.concat(entries);
         } catch (err) {
           const errorMsg = err instanceof Error ? err.message : 'Unknown error';
-          console.error(`[scrape-causelist] Failed to process PDF ${pdfUrl}: ${errorMsg}`);
+          console.error(`[scrape-causelist] ❌ Failed to process PDF ${pdfUrl}: ${errorMsg}`);
           pdfResults.push({ url: pdfUrl, entries: 0, error: errorMsg });
         }
+      }
+      
+      if (pdfLinks.length > MAX_PDFS_PER_RUN) {
+        console.log(`[scrape-causelist] ⚠️ Skipped ${pdfLinks.length - MAX_PDFS_PER_RUN} PDFs due to rate limiting`);
       }
     }
     
