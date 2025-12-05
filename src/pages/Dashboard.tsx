@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { DocketCard } from '@/components/dashboard/DocketCard';
 import { LiveTicker } from '@/components/dashboard/LiveTicker';
 import { LiveCourtWidget } from '@/components/dashboard/LiveCourtWidget';
@@ -7,13 +8,16 @@ import { useDocket } from '@/hooks/useDocket';
 import { useLiveBoard } from '@/hooks/useLiveBoard';
 import { useAuth } from '@/hooks/useAuth';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Scale } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Scale, AlertCircle } from 'lucide-react';
 import { LiveBoardSimulator } from '@/components/dashboard/LiveBoardSimulator';
 
 export default function Dashboard() {
-  const { data: docket, isLoading: docketLoading } = useDocket();
+  const { data: docket, isLoading: docketLoading, refetch } = useDocket();
   const { data: liveBoards, isLoading: liveBoardLoading } = useLiveBoard();
   const { role } = useAuth();
+  const [activeTab, setActiveTab] = useState('daily');
 
   const supplementaryItems = docket?.filter((item) => item.list_type === 'SUPPLEMENTARY') ?? [];
   const dailyItems = docket?.filter((item) => item.list_type === 'DAILY') ?? [];
@@ -24,9 +28,15 @@ export default function Dashboard() {
     );
   };
 
-  // Get first case's live board for the widget
-  const firstCase = dailyItems[0] || supplementaryItems[0];
+  // Get first case's live board for the widget based on active tab
+  const activeItems = activeTab === 'supplementary' ? supplementaryItems : dailyItems;
+  const firstCase = activeItems[0] || (activeTab === 'supplementary' ? dailyItems[0] : supplementaryItems[0]);
   const primaryLiveBoard = firstCase ? getLiveBoardForItem(firstCase) : liveBoards?.[0];
+
+  // Handle Force Active callback to refetch data
+  const handleForceActive = () => {
+    refetch();
+  };
 
   return (
     <AuthGuard>
@@ -36,66 +46,107 @@ export default function Dashboard() {
         {/* Main Content */}
         <main className="container mx-auto px-4 py-6">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Left: Cause List */}
+            {/* Left: Cause List with Tabs */}
             <div className="lg:col-span-2 space-y-6">
-              {/* Supplementary List */}
-              {supplementaryItems.length > 0 && (
-                <section>
-                  <div className="flex items-center gap-2 mb-4">
+              <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+                <TabsList className="grid w-full grid-cols-2 mb-4">
+                  <TabsTrigger value="daily" className="flex items-center gap-2">
+                    <div className="h-2 w-2 rounded-full bg-primary" />
+                    Daily List
+                    <Badge variant="secondary" className="ml-1">
+                      {dailyItems.length}
+                    </Badge>
+                  </TabsTrigger>
+                  <TabsTrigger value="supplementary" className="flex items-center gap-2">
+                    <div className="h-2 w-2 rounded-full bg-court-warning animate-pulse" />
+                    Supplementary
+                    {supplementaryItems.length > 0 && (
+                      <Badge variant="danger" className="ml-1 flex items-center gap-1">
+                        <AlertCircle className="h-3 w-3" />
+                        {supplementaryItems.length}
+                      </Badge>
+                    )}
+                  </TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="daily" className="space-y-3 mt-0">
+                  <div className="flex items-center gap-2 mb-2">
+                    <h2 className="font-display text-lg font-semibold text-foreground tracking-wide">
+                      My Daily Cause List
+                    </h2>
+                    <span className="text-muted-foreground text-sm">
+                      ({dailyItems.length} matters)
+                    </span>
+                  </div>
+                  
+                  {docketLoading ? (
+                    <div className="space-y-3">
+                      {[1, 2, 3].map((i) => (
+                        <Skeleton key={i} className="h-28 w-full rounded-lg" />
+                      ))}
+                    </div>
+                  ) : dailyItems.length === 0 ? (
+                    <div className="text-center py-12 text-muted-foreground glass-card rounded-lg">
+                      <Scale className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                      <p>No cases on today's daily list</p>
+                      <p className="text-xs mt-2">Check the Supplementary tab for urgent additions</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {dailyItems.map((item) => (
+                        <DocketCard
+                          key={item.id}
+                          item={item}
+                          liveBoard={getLiveBoardForItem(item)}
+                          userRole={role}
+                          onForceActive={handleForceActive}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </TabsContent>
+
+                <TabsContent value="supplementary" className="space-y-3 mt-0">
+                  <div className="flex items-center gap-2 mb-2">
                     <div className="h-3 w-3 rounded-full bg-court-warning animate-pulse" />
-                    <h2 className="font-display text-xl font-semibold text-court-warning tracking-wide">
+                    <h2 className="font-display text-lg font-semibold text-court-warning tracking-wide">
                       Supplementary List
                     </h2>
+                    <Badge variant="supplementary" className="ml-2">
+                      🔴 URGENT
+                    </Badge>
                   </div>
-                  <div className="space-y-3">
-                    {supplementaryItems.map((item) => (
-                      <DocketCard
-                        key={item.id}
-                        item={item}
-                        liveBoard={getLiveBoardForItem(item)}
-                        userRole={role}
-                      />
-                    ))}
-                  </div>
-                </section>
-              )}
-
-              {/* Daily List */}
-              <section>
-                <div className="flex items-center gap-2 mb-4">
-                  <div className="h-3 w-3 rounded-full bg-primary" />
-                  <h2 className="font-display text-xl font-semibold text-foreground tracking-wide">
-                    My Cause List
-                  </h2>
-                  <span className="text-muted-foreground text-sm">
-                    ({dailyItems.length} matters)
-                  </span>
-                </div>
-                
-                {docketLoading ? (
-                  <div className="space-y-3">
-                    {[1, 2, 3].map((i) => (
-                      <Skeleton key={i} className="h-28 w-full rounded-lg" />
-                    ))}
-                  </div>
-                ) : dailyItems.length === 0 ? (
-                  <div className="text-center py-12 text-muted-foreground glass-card rounded-lg">
-                    <Scale className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                    <p>No cases on today's list</p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {dailyItems.map((item) => (
-                      <DocketCard
-                        key={item.id}
-                        item={item}
-                        liveBoard={getLiveBoardForItem(item)}
-                        userRole={role}
-                      />
-                    ))}
-                  </div>
-                )}
-              </section>
+                  <p className="text-xs text-muted-foreground mb-4">
+                    ⚡ Supplementary lists move faster! Panic alerts trigger at 10 items away.
+                  </p>
+                  
+                  {docketLoading ? (
+                    <div className="space-y-3">
+                      {[1, 2].map((i) => (
+                        <Skeleton key={i} className="h-28 w-full rounded-lg" />
+                      ))}
+                    </div>
+                  ) : supplementaryItems.length === 0 ? (
+                    <div className="text-center py-12 text-muted-foreground glass-card rounded-lg">
+                      <Scale className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                      <p>No supplementary cases today</p>
+                      <p className="text-xs mt-2">Supplementary lists are published around 9:30 AM</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {supplementaryItems.map((item) => (
+                        <DocketCard
+                          key={item.id}
+                          item={item}
+                          liveBoard={getLiveBoardForItem(item)}
+                          userRole={role}
+                          onForceActive={handleForceActive}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </TabsContent>
+              </Tabs>
             </div>
 
             {/* Right: Live Court Widget & Ticker */}
@@ -112,6 +163,7 @@ export default function Dashboard() {
                     status={primaryLiveBoard.status || 'hearing'}
                     courtLocation={primaryLiveBoard.court_location}
                     liveBoard={primaryLiveBoard}
+                    isSupplementary={activeTab === 'supplementary' || firstCase?.list_type === 'SUPPLEMENTARY'}
                   />
                 ) : null}
 

@@ -24,7 +24,7 @@ export default function Onboarding() {
   const [profileData, setProfileData] = useState({
     full_name: '',
     bar_registration_number: '',
-    bench: '' as 'JAIPUR' | 'JODHPUR' | '',
+    bench: '' as 'JAIPUR' | 'JODHPUR' | 'BOTH' | '',
   });
 
   useEffect(() => {
@@ -48,12 +48,15 @@ export default function Onboarding() {
   const handleProfileUpdate = async () => {
     if (!user?.id) return;
 
+    // For database, we store 'JAIPUR' or 'JODHPUR' - if BOTH, we'll use JAIPUR as primary
+    const benchForDb = profileData.bench === 'BOTH' ? 'JAIPUR' : profileData.bench;
+
     const { error } = await supabase
       .from('profiles')
       .update({
         full_name: profileData.full_name,
         bar_registration_number: profileData.bar_registration_number,
-        bench: profileData.bench || null,
+        bench: benchForDb || null,
       })
       .eq('id', user.id);
 
@@ -179,7 +182,7 @@ export default function Onboarding() {
               <AliasManager defaultName={profileData.full_name} />
             )}
             {currentStep === 3 && (
-              <CourtScan bench={profileData.bench as 'JAIPUR' | 'JODHPUR'} />
+              <CourtScan bench={profileData.bench as 'JAIPUR' | 'JODHPUR' | 'BOTH'} />
             )}
           </CardContent>
         </Card>
