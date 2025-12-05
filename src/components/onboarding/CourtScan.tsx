@@ -6,12 +6,12 @@ import { Badge } from '@/components/ui/badge';
 import { useAliases } from '@/hooks/useAliases';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
-import { Search, Loader2, CheckCircle2, Scale, MapPin, Calendar } from 'lucide-react';
+import { Search, Loader2, CheckCircle2, Scale, MapPin, Calendar, AlertTriangle, Upload, MessageSquare } from 'lucide-react';
 import { toast } from 'sonner';
 import type { MatchedCase } from '@/types/database';
 
 interface CourtScanProps {
-  bench: 'JAIPUR' | 'JODHPUR';
+  bench: 'JAIPUR' | 'JODHPUR' | 'BOTH';
 }
 
 export default function CourtScan({ bench }: CourtScanProps) {
@@ -22,6 +22,11 @@ export default function CourtScan({ bench }: CourtScanProps) {
   const [selectedCases, setSelectedCases] = useState<Set<string>>(new Set());
   const [isConfirming, setIsConfirming] = useState(false);
   const [scanComplete, setScanComplete] = useState(false);
+
+  const getBenchDisplay = () => {
+    if (bench === 'BOTH') return 'Jaipur & Jodhpur';
+    return bench;
+  };
 
   const handleScan = async () => {
     if (aliases.length === 0) {
@@ -34,11 +39,10 @@ export default function CourtScan({ bench }: CourtScanProps) {
     setScanComplete(false);
 
     try {
-      // Get alias names
       const aliasNames = aliases.map((a) => a.alias_name);
 
-      // Query docket for matching cases
-      const { data, error } = await supabase
+      // Build location filter based on bench selection
+      let query = supabase
         .from('daily_court_docket')
         .select('*')
         .or(
@@ -50,9 +54,15 @@ export default function CourtScan({ bench }: CourtScanProps) {
         .order('date', { ascending: false })
         .limit(50);
 
+      // Filter by bench if not BOTH
+      if (bench !== 'BOTH') {
+        query = query.eq('court_location', bench);
+      }
+
+      const { data, error } = await query;
+
       if (error) throw error;
 
-      // Transform to MatchedCase format
       const matched: MatchedCase[] = (data || []).map((item) => {
         const matchedAlias = aliasNames.find(
           (name) =>
@@ -76,7 +86,6 @@ export default function CourtScan({ bench }: CourtScanProps) {
       });
 
       setScannedCases(matched);
-      // Auto-select all cases
       setSelectedCases(new Set(matched.map((c) => c.id)));
       setScanComplete(true);
 
@@ -120,6 +129,33 @@ export default function CourtScan({ bench }: CourtScanProps) {
     }
   };
 
+  const handleReportIssue = () => {
+    const subject = encodeURIComponent('Vakalat-OS: Case Matching Issue');
+    const body = encodeURIComponent(`
+Hi Vakalat-OS Support,
+
+I was unable to find my cases during the court scan.
+
+My Details:
+- Name Variations: ${aliases.map(a => a.alias_name).join(', ')}
+- Bench: ${getBenchDisplay()}
+- Date: ${new Date().toLocaleDateString('en-IN')}
+
+Please help me manually link my cases.
+
+Thank you.
+    `.trim());
+    
+    window.open(`mailto:support@vakalat.com?subject=${subject}&body=${body}`, '_blank');
+    toast.info('Opening email client to report issue');
+  };
+
+  const handleManualUpload = () => {
+    toast.info('Manual upload feature coming soon', {
+      description: 'For now, please contact support to manually add your cases.',
+    });
+  };
+
   const toggleCase = (caseId: string) => {
     const newSelected = new Set(selectedCases);
     if (newSelected.has(caseId)) {
@@ -147,7 +183,7 @@ export default function CourtScan({ bench }: CourtScanProps) {
         <div className="space-y-2">
           <h3 className="font-semibold">Sync with High Court Records</h3>
           <p className="text-sm text-muted-foreground">
-            We'll search the {bench} Bench records for cases matching your name variations.
+            We'll search the <strong>{getBenchDisplay()}</strong> Bench records for cases matching your name variations.
           </p>
         </div>
 
@@ -209,11 +245,14 @@ export default function CourtScan({ bench }: CourtScanProps) {
                       <Badge variant="outline" className="text-xs">
                         {caseItem.matched_as}
                       </Badge>
+                      <Badge variant="secondary" className="text-xs">
+                        {caseItem.court_location}
+                      </Badge>
                     </div>
                     <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
                       <span className="flex items-center gap-1">
                         <MapPin className="w-3 h-3" />
-                        {caseItem.court_room_no}
+                        Court {caseItem.court_room_no}
                       </span>
                       <span className="flex items-center gap-1">
                         <Scale className="w-3 h-3" />
@@ -253,11 +292,54 @@ export default function CourtScan({ bench }: CourtScanProps) {
         </div>
       )}
 
+      {/* No Cases Found State with Actions */}
       {scanComplete && scannedCases.length === 0 && (
-        <div className="text-center py-6 text-muted-foreground">
-          <CheckCircle2 className="w-12 h-12 mx-auto text-primary/50 mb-2" />
-          <p>No unlinked cases found matching your aliases.</p>
-          <p className="text-xs mt-1">You can always rescan from the dashboard later.</p>
+        <div className="space-y-4">
+          <div className="text-center py-6 glass-card rounded-lg">
+            <AlertTriangle className="w-12 h-12 mx-auto text-court-warning mb-3" />
+            <p className="font-medium text-foreground">No cases found</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              We couldn't find any unlinked cases matching your name variations.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-xs text-muted-foreground text-center">
+              This could happen if:
+            </p>
+            <ul className="text-xs text-muted-foreground list-disc list-inside space-y-1">
+              <li>Your cases are already linked to your profile</li>
+              <li>No cases are listed for today yet</li>
+              <li>Your name variation spelling differs from court records</li>
+            </ul>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Button
+              variant="outline"
+              onClick={handleReportIssue}
+              className="flex items-center gap-2"
+            >
+              <MessageSquare className="w-4 h-4" />
+              Report Issue
+            </Button>
+            <Button
+              variant="outline"
+              onClick={handleManualUpload}
+              className="flex items-center gap-2"
+            >
+              <Upload className="w-4 h-4" />
+              Manual Upload
+            </Button>
+          </div>
+
+          <Button
+            variant="ghost"
+            onClick={() => setScanComplete(false)}
+            className="w-full text-sm"
+          >
+            Try scanning again with different aliases
+          </Button>
         </div>
       )}
     </div>

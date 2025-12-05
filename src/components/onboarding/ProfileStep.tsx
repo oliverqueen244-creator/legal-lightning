@@ -1,18 +1,47 @@
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Checkbox } from '@/components/ui/checkbox';
 import { MapPin } from 'lucide-react';
 
 interface ProfileStepProps {
   data: {
     full_name: string;
     bar_registration_number: string;
-    bench: 'JAIPUR' | 'JODHPUR' | '';
+    bench: 'JAIPUR' | 'JODHPUR' | 'BOTH' | '';
   };
   onChange: (data: ProfileStepProps['data']) => void;
 }
 
 export default function ProfileStep({ data, onChange }: ProfileStepProps) {
+  const handleBenchChange = (bench: 'JAIPUR' | 'JODHPUR', checked: boolean) => {
+    const currentBench = data.bench;
+    
+    if (checked) {
+      // Adding a bench
+      if (currentBench === '' || currentBench === bench) {
+        onChange({ ...data, bench });
+      } else if (currentBench === 'BOTH') {
+        // Already both selected
+        return;
+      } else {
+        // Other bench was selected, now both are selected
+        onChange({ ...data, bench: 'BOTH' });
+      }
+    } else {
+      // Removing a bench
+      if (currentBench === 'BOTH') {
+        // Remove this bench, keep the other
+        onChange({ ...data, bench: bench === 'JAIPUR' ? 'JODHPUR' : 'JAIPUR' });
+      } else if (currentBench === bench) {
+        // Removing the only selected bench
+        onChange({ ...data, bench: '' });
+      }
+    }
+  };
+
+  const isJaipurSelected = data.bench === 'JAIPUR' || data.bench === 'BOTH';
+  const isJodhpurSelected = data.bench === 'JODHPUR' || data.bench === 'BOTH';
+
   return (
     <div className="space-y-6">
       <div className="space-y-2">
@@ -39,21 +68,25 @@ export default function ProfileStep({ data, onChange }: ProfileStepProps) {
       </div>
 
       <div className="space-y-3">
-        <Label>Select Your Bench *</Label>
-        <RadioGroup
-          value={data.bench}
-          onValueChange={(value) => onChange({ ...data, bench: value as 'JAIPUR' | 'JODHPUR' })}
-          className="grid grid-cols-2 gap-4"
-        >
+        <Label>Select Your Bench(es) *</Label>
+        <p className="text-xs text-muted-foreground">
+          You can select both benches if you practice at multiple locations
+        </p>
+        
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Label
             htmlFor="jaipur"
             className={`flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all ${
-              data.bench === 'JAIPUR'
+              isJaipurSelected
                 ? 'border-primary bg-primary/10'
                 : 'border-border hover:border-primary/50'
             }`}
           >
-            <RadioGroupItem value="JAIPUR" id="jaipur" />
+            <Checkbox
+              id="jaipur"
+              checked={isJaipurSelected}
+              onCheckedChange={(checked) => handleBenchChange('JAIPUR', checked as boolean)}
+            />
             <div className="flex items-center gap-2">
               <MapPin className="w-4 h-4 text-primary" />
               <div>
@@ -66,12 +99,16 @@ export default function ProfileStep({ data, onChange }: ProfileStepProps) {
           <Label
             htmlFor="jodhpur"
             className={`flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all ${
-              data.bench === 'JODHPUR'
+              isJodhpurSelected
                 ? 'border-primary bg-primary/10'
                 : 'border-border hover:border-primary/50'
             }`}
           >
-            <RadioGroupItem value="JODHPUR" id="jodhpur" />
+            <Checkbox
+              id="jodhpur"
+              checked={isJodhpurSelected}
+              onCheckedChange={(checked) => handleBenchChange('JODHPUR', checked as boolean)}
+            />
             <div className="flex items-center gap-2">
               <MapPin className="w-4 h-4 text-primary" />
               <div>
@@ -80,7 +117,14 @@ export default function ProfileStep({ data, onChange }: ProfileStepProps) {
               </div>
             </div>
           </Label>
-        </RadioGroup>
+        </div>
+
+        {data.bench === 'BOTH' && (
+          <p className="text-xs text-primary flex items-center gap-1">
+            <MapPin className="w-3 h-3" />
+            Cases from both benches will be synced to your dashboard
+          </p>
+        )}
       </div>
     </div>
   );
