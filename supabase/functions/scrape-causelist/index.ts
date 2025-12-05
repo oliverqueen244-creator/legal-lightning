@@ -42,12 +42,10 @@ interface ScraperLog {
 // Smart date logic: If current IST time < 6 PM, target today, else target tomorrow
 function getSmartTargetDate(): string {
   const now = new Date();
-  // Convert to IST (UTC + 5:30)
   const istOffset = 5.5 * 60 * 60 * 1000;
   const istTime = new Date(now.getTime() + istOffset);
   const istHour = istTime.getUTCHours();
   
-  // If after 6 PM IST (18:00), target tomorrow
   if (istHour >= 18) {
     const tomorrow = new Date(istTime);
     tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
@@ -57,29 +55,176 @@ function getSmartTargetDate(): string {
   return istTime.toISOString().split('T')[0];
 }
 
-// Parse cause list text to extract case entries
-function parseCauseListText(text: string, courtLocation: string, courtNo: string, date: string, listType: string): CauseListEntry[] {
-  const entries: CauseListEntry[] = [];
+// Extract PDF links from HTML response
+function extractPdfLinksFromHtml(html: string, baseUrl: string): string[] {
+  const pdfPattern = /href=["']([^"']*\.pdf[^"']*)["']/gi;
+  const links: string[] = [];
+  let match;
   
-  const lines = text.split('\n').filter(line => line.trim());
+  while ((match = pdfPattern.exec(html)) !== null) {
+    let url = match[1];
+    // Handle relative URLs
+    if (!url.startsWith('http')) {
+      try {
+        url = new URL(url, baseUrl).toString();
+      } catch {
+        continue;
+      }
+    }
+    // Avoid duplicates
+    if (!links.includes(url)) {
+      links.push(url);
+    }
+  }
+  
+  console.log(`[scrape-causelist] Extracted ${links.length} PDF links from HTML`);
+  return links;
+}
+
+// Scrape PDF content using Firecrawl
+async function scrapePdfWithFirecrawl(pdfUrl: string, firecrawlApiKey: string): Promise<string> {
+  console.log(`[scrape-causelist] Scraping PDF: ${pdfUrl}`);
+  
+  const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${firecrawlApiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      url: pdfUrl,
+      formats: ['markdown'],
+      timeout: 60000,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error(`[scrape-causelist] Firecrawl PDF error: ${errorText}`);
+    throw new Error(`Failed to scrape PDF: ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  const markdown = data.data?.markdown || '';
+  console.log(`[scrape-causelist] PDF scraped, got ${markdown.length} chars`);
+  return markdown;
+}
+
+// Extract court number from PDF URL or filename
+function extractCourtNoFromUrl(pdfUrl: string): string {
+  // Patterns: court1.pdf, Court-2.pdf, court_3.pdf, CourtNo1.pdf, etc.
+  const patterns = [
+    /court[_\-\s]?no?[_\-\s]?(\d+)/i,
+    /court[_\-\s]?(\d+)/i,
+    /(\d+)\.pdf$/i,
+  ];
+  
+  for (const pattern of patterns) {
+    const match = pdfUrl.match(pattern);
+    if (match) {
+      return match[1];
+    }
+  }
+  return '1';
+}
+
+// Detect list type from URL or content
+function detectListType(pdfUrl: string, content: string): string {
+  const urlLower = pdfUrl.toLowerCase();
+  const contentLower = content.toLowerCase().substring(0, 500);
+  
+  if (urlLower.includes('supp') || urlLower.includes('/s/') || contentLower.includes('supplementary')) {
+    return 'SUPPLEMENTARY';
+  }
+  return 'DAILY';
+}
+
+// Enhanced PDF text parser for Rajasthan High Court cause lists
+function parseCauseListPdf(
+  pdfText: string, 
+  courtLocation: string, 
+  courtNo: string, 
+  date: string, 
+  listType: string
+): CauseListEntry[] {
+  const entries: CauseListEntry[] = [];
+  const lines = pdfText.split('\n');
+  
+  console.log(`[scrape-causelist] Parsing PDF with ${lines.length} lines`);
+  
+  // Common patterns in Rajasthan HC cause lists
+  // Format variations:
+  // 1. | S.No | Case Number | Petitioner vs Respondent | Adv for Pet | Adv for Resp |
+  // 2. 1. S.B.CWP/1234/2025 - John Doe vs State - Mr. Sharma / AAG
+  // 3. Numbered entries with case details on same or multiple lines
+  
+  // Pattern 1: Table format with pipes
+  const tableRowPattern = /\|\s*(\d+)\s*\|\s*([^|]+)\s*\|\s*([^|]*)\s*\|\s*([^|]*)\s*\|\s*([^|]*)\s*\|/;
+  
+  // Pattern 2: Numbered list with case number
+  const numberedPattern = /^\s*(\d+)[\.\)]\s+([A-Z][A-Z\s./\-]*(?:\/\d{4}|\d{4}\/\d+))/i;
+  
+  // Pattern 3: Case number detection
+  const caseNumberPattern = /([SDB]\.?[AB]?\.?(?:CWP|CIVIL|CRIMINAL|WP|SA|CA|MA|RA|SB|DB|REV|CMA)[\/\s]*(?:No\.?)?\s*\d+[\/\-]\d{4})/gi;
+  
+  // Pattern 4: Party names (Petitioner vs Respondent)
+  const partyPattern = /([A-Za-z\s.&,]+)\s+(?:Vs\.?|vs\.?|V\/s\.?|versus|V\.)\s+([A-Za-z\s.&,]+)/i;
+  
+  // Pattern 5: Advocate names
+  const advocatePatterns = [
+    /(?:Adv\.?|Advocate|Counsel)[:\s]*([A-Za-z\s.]+)/gi,
+    /(?:Mr\.?|Ms\.?|Shri|Smt\.?)\s+([A-Za-z\s.]+?)(?:\s+(?:Adv|Advocate|for|$))/gi,
+  ];
   
   let currentEntry: Partial<CauseListEntry> | null = null;
-  const itemNoPattern = /^\s*(\d+)\s*[.\)]/;
-  const casePattern = /([A-Z][A-Z\s.]+(?:No\.?|NUMBER)?[\s]*[\d\/]+)/i;
-  const advocatePattern = /(?:Adv\.?|Advocate|Mr\.?|Ms\.?|Shri|Smt\.?)\s*([A-Za-z\s.]+)/gi;
-  const partyPattern = /([A-Za-z\s.]+)\s+(?:Vs\.?|vs\.?|V\/s\.?|versus)\s+([A-Za-z\s.]+)/i;
+  let itemCounter = 0;
   
-  for (const line of lines) {
-    const itemMatch = line.match(itemNoPattern);
-    if (itemMatch) {
-      if (currentEntry && currentEntry.item_no && currentEntry.case_number) {
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    
+    // Skip header lines
+    if (line.toLowerCase().includes('s.no') || 
+        line.toLowerCase().includes('serial') ||
+        line.toLowerCase().includes('case number') ||
+        line.toLowerCase().includes('advocate')) {
+      continue;
+    }
+    
+    // Try table row pattern
+    const tableMatch = line.match(tableRowPattern);
+    if (tableMatch) {
+      const [, itemNo, caseNum, parties, petAdv, respAdv] = tableMatch;
+      const partyMatch = parties.match(partyPattern);
+      
+      entries.push({
+        item_no: parseInt(itemNo),
+        case_number: caseNum.trim(),
+        petitioner: partyMatch ? partyMatch[1].trim() : null,
+        respondent: partyMatch ? partyMatch[2].trim() : null,
+        petitioner_lawyer: petAdv?.trim() || null,
+        respondent_lawyer: respAdv?.trim() || null,
+        court_room_no: courtNo,
+        court_location: courtLocation,
+        list_type: listType,
+        date: date,
+        status: 'pending',
+      });
+      continue;
+    }
+    
+    // Try numbered pattern
+    const numberedMatch = line.match(numberedPattern);
+    if (numberedMatch) {
+      // Save previous entry if exists
+      if (currentEntry && currentEntry.case_number) {
         entries.push({
-          item_no: currentEntry.item_no,
-          case_number: currentEntry.case_number || 'Unknown',
-          petitioner_lawyer: currentEntry.petitioner_lawyer || null,
-          respondent_lawyer: currentEntry.respondent_lawyer || null,
+          item_no: currentEntry.item_no || ++itemCounter,
+          case_number: currentEntry.case_number,
           petitioner: currentEntry.petitioner || null,
           respondent: currentEntry.respondent || null,
+          petitioner_lawyer: currentEntry.petitioner_lawyer || null,
+          respondent_lawyer: currentEntry.respondent_lawyer || null,
           court_room_no: courtNo,
           court_location: courtLocation,
           list_type: listType,
@@ -89,60 +234,103 @@ function parseCauseListText(text: string, courtLocation: string, courtNo: string
       }
       
       currentEntry = {
-        item_no: parseInt(itemMatch[1]),
-        court_room_no: courtNo,
-        court_location: courtLocation,
-        date: date,
-        list_type: listType,
-        status: 'pending',
+        item_no: parseInt(numberedMatch[1]),
+        case_number: numberedMatch[2].trim(),
       };
-    }
-    
-    // Try to extract case number
-    if (currentEntry && !currentEntry.case_number) {
-      const caseMatch = line.match(casePattern);
-      if (caseMatch) {
-        currentEntry.case_number = caseMatch[1].trim();
-      }
-    }
-    
-    // Try to extract party names (Petitioner vs Respondent)
-    if (currentEntry) {
+      
+      // Check if party names are on same line
       const partyMatch = line.match(partyPattern);
-      if (partyMatch && !currentEntry.petitioner) {
+      if (partyMatch) {
         currentEntry.petitioner = partyMatch[1].trim();
         currentEntry.respondent = partyMatch[2].trim();
       }
-    }
-    
-    // Try to extract advocate names
-    if (currentEntry) {
-      const advocates: string[] = [];
-      let match;
-      while ((match = advocatePattern.exec(line)) !== null) {
-        advocates.push(match[1].trim());
+      
+      // Check for advocates on same line
+      for (const pattern of advocatePatterns) {
+        pattern.lastIndex = 0;
+        const advMatches = [...line.matchAll(pattern)];
+        if (advMatches.length > 0 && !currentEntry.petitioner_lawyer) {
+          currentEntry.petitioner_lawyer = advMatches[0][1].trim();
+        }
+        if (advMatches.length > 1 && !currentEntry.respondent_lawyer) {
+          currentEntry.respondent_lawyer = advMatches[1][1].trim();
+        }
       }
       
-      if (advocates.length > 0) {
-        if (!currentEntry.petitioner_lawyer) {
-          currentEntry.petitioner_lawyer = advocates[0];
+      continue;
+    }
+    
+    // If we have a current entry, try to extract more info from this line
+    if (currentEntry) {
+      // Try to find case number if not set
+      if (!currentEntry.case_number) {
+        const caseMatch = line.match(caseNumberPattern);
+        if (caseMatch) {
+          currentEntry.case_number = caseMatch[0].trim();
         }
-        if (advocates.length > 1 && !currentEntry.respondent_lawyer) {
-          currentEntry.respondent_lawyer = advocates[1];
+      }
+      
+      // Try to find party names
+      if (!currentEntry.petitioner) {
+        const partyMatch = line.match(partyPattern);
+        if (partyMatch) {
+          currentEntry.petitioner = partyMatch[1].trim();
+          currentEntry.respondent = partyMatch[2].trim();
         }
+      }
+      
+      // Try to find advocate names
+      for (const pattern of advocatePatterns) {
+        pattern.lastIndex = 0;
+        const advMatches = [...line.matchAll(pattern)];
+        if (advMatches.length > 0 && !currentEntry.petitioner_lawyer) {
+          currentEntry.petitioner_lawyer = advMatches[0][1].trim();
+        }
+        if (advMatches.length > 1 && !currentEntry.respondent_lawyer) {
+          currentEntry.respondent_lawyer = advMatches[1][1].trim();
+        }
+      }
+    }
+    
+    // Try to detect a new entry by case number alone
+    if (!currentEntry || !currentEntry.case_number) {
+      caseNumberPattern.lastIndex = 0;
+      const caseMatches = [...line.matchAll(caseNumberPattern)];
+      if (caseMatches.length > 0) {
+        // Save previous
+        if (currentEntry && currentEntry.case_number) {
+          entries.push({
+            item_no: currentEntry.item_no || ++itemCounter,
+            case_number: currentEntry.case_number,
+            petitioner: currentEntry.petitioner || null,
+            respondent: currentEntry.respondent || null,
+            petitioner_lawyer: currentEntry.petitioner_lawyer || null,
+            respondent_lawyer: currentEntry.respondent_lawyer || null,
+            court_room_no: courtNo,
+            court_location: courtLocation,
+            list_type: listType,
+            date: date,
+            status: 'pending',
+          });
+        }
+        
+        currentEntry = {
+          item_no: ++itemCounter,
+          case_number: caseMatches[0][0].trim(),
+        };
       }
     }
   }
   
   // Don't forget the last entry
-  if (currentEntry && currentEntry.item_no && currentEntry.case_number) {
+  if (currentEntry && currentEntry.case_number) {
     entries.push({
-      item_no: currentEntry.item_no,
-      case_number: currentEntry.case_number || 'Unknown',
-      petitioner_lawyer: currentEntry.petitioner_lawyer || null,
-      respondent_lawyer: currentEntry.respondent_lawyer || null,
+      item_no: currentEntry.item_no || ++itemCounter,
+      case_number: currentEntry.case_number,
       petitioner: currentEntry.petitioner || null,
       respondent: currentEntry.respondent || null,
+      petitioner_lawyer: currentEntry.petitioner_lawyer || null,
+      respondent_lawyer: currentEntry.respondent_lawyer || null,
       court_room_no: courtNo,
       court_location: courtLocation,
       list_type: listType,
@@ -151,54 +339,8 @@ function parseCauseListText(text: string, courtLocation: string, courtNo: string
     });
   }
   
+  console.log(`[scrape-causelist] Parsed ${entries.length} entries from PDF`);
   return entries;
-}
-
-// Parse structured HTML/markdown from Firecrawl
-function parseFirecrawlMarkdown(markdown: string, courtLocation: string, courtNo: string, date: string, listType: string): CauseListEntry[] {
-  const entries: CauseListEntry[] = [];
-  
-  // Look for table-like structures in markdown
-  const tableRowPattern = /\|\s*(\d+)\s*\|\s*([^|]+)\s*\|\s*([^|]*)\s*\|\s*([^|]*)\s*\|/g;
-  let match;
-  
-  while ((match = tableRowPattern.exec(markdown)) !== null) {
-    const itemNo = parseInt(match[1]);
-    const caseNumber = match[2].trim();
-    const petitionerLawyer = match[3].trim() || null;
-    const respondentLawyer = match[4].trim() || null;
-    
-    if (itemNo && caseNumber && caseNumber !== 'Case Number') {
-      entries.push({
-        item_no: itemNo,
-        case_number: caseNumber,
-        petitioner_lawyer: petitionerLawyer,
-        respondent_lawyer: respondentLawyer,
-        petitioner: null,
-        respondent: null,
-        court_room_no: courtNo,
-        court_location: courtLocation,
-        list_type: listType,
-        date: date,
-        status: 'pending',
-      });
-    }
-  }
-  
-  // If no table found, try line-by-line parsing
-  if (entries.length === 0) {
-    return parseCauseListText(markdown, courtLocation, courtNo, date, listType);
-  }
-  
-  return entries;
-}
-
-// Extract judge names from main page content
-function extractJudgeNames(markdown: string, courtNo: string): string | null {
-  // Look for patterns like "Court 1 - Hon'ble Justice XYZ"
-  const judgePattern = new RegExp(`Court\\s*(?:No\\.?)?\\s*${courtNo}[\\s\\-:]+(?:Hon'?ble\\s+)?(?:Justice\\s+)?([A-Za-z\\s.]+)`, 'i');
-  const match = markdown.match(judgePattern);
-  return match ? match[1].trim() : null;
 }
 
 // Log scraper run to database
@@ -211,25 +353,128 @@ async function logScraperRun(supabase: any, log: ScraperLog): Promise<void> {
   }
 }
 
-// Update court metadata with judge names
-async function updateCourtMetadata(supabase: any, bench: string, courtNo: string, judgeNames: string | null): Promise<void> {
-  if (!judgeNames) return;
+// Submit form to court website and get PDF links
+async function submitFormAndGetPdfLinks(
+  baseUrl: string, 
+  targetDate: string,
+  firecrawlApiKey: string
+): Promise<string[]> {
+  const [year, month, day] = targetDate.split('-');
+  
+  console.log(`[scrape-causelist] Submitting form for date: ${day}/${month}/${year}`);
+  
+  // Method 1: Try direct POST with form data
+  try {
+    const formData = new URLSearchParams({
+      day: day,
+      month: month,
+      year: year,
+    });
+    
+    const postResponse = await fetch(baseUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      },
+      body: formData.toString(),
+    });
+    
+    if (postResponse.ok) {
+      const html = await postResponse.text();
+      const pdfLinks = extractPdfLinksFromHtml(html, baseUrl);
+      if (pdfLinks.length > 0) {
+        console.log(`[scrape-causelist] Got ${pdfLinks.length} PDF links from POST`);
+        return pdfLinks;
+      }
+    }
+  } catch (err) {
+    console.log(`[scrape-causelist] Direct POST failed: ${err}`);
+  }
+  
+  // Method 2: Use Firecrawl with actions to fill and submit form
+  console.log(`[scrape-causelist] Trying Firecrawl with form actions...`);
   
   try {
-    await supabase
-      .from('court_metadata')
-      .upsert({
-        bench,
-        court_no: courtNo,
-        judge_names: judgeNames,
-        last_updated: new Date().toISOString(),
-      }, {
-        onConflict: 'bench,court_no',
-      });
-    console.log(`[scrape-causelist] Updated judge names for ${bench} Court ${courtNo}`);
+    const firecrawlResponse = await fetch('https://api.firecrawl.dev/v1/scrape', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${firecrawlApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        url: baseUrl,
+        formats: ['markdown', 'links', 'html'],
+        waitFor: 5000,
+        actions: [
+          { type: 'select', selector: 'select[name="day"], #day', value: day },
+          { type: 'select', selector: 'select[name="month"], #month', value: month },
+          { type: 'select', selector: 'select[name="year"], #year', value: year },
+          { type: 'click', selector: 'input[type="submit"], button[type="submit"], .submit-btn' },
+          { type: 'wait', milliseconds: 5000 },
+        ],
+      }),
+    });
+    
+    if (firecrawlResponse.ok) {
+      const data = await firecrawlResponse.json();
+      const html = data.data?.html || '';
+      const links = data.data?.links || [];
+      
+      // Extract PDF links from both HTML and links array
+      let pdfLinks = extractPdfLinksFromHtml(html, baseUrl);
+      
+      // Also check the links array
+      const linksPdfs = links.filter((link: string) => 
+        link.toLowerCase().endsWith('.pdf')
+      );
+      
+      pdfLinks = [...new Set([...pdfLinks, ...linksPdfs])];
+      
+      console.log(`[scrape-causelist] Got ${pdfLinks.length} PDF links from Firecrawl actions`);
+      return pdfLinks;
+    }
   } catch (err) {
-    console.error('[scrape-causelist] Failed to update court metadata:', err);
+    console.log(`[scrape-causelist] Firecrawl actions failed: ${err}`);
   }
+  
+  // Method 3: Fallback - just scrape the page for any PDF links
+  console.log(`[scrape-causelist] Fallback: scraping page for any PDF links...`);
+  
+  try {
+    const firecrawlResponse = await fetch('https://api.firecrawl.dev/v1/scrape', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${firecrawlApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        url: baseUrl,
+        formats: ['links', 'html'],
+        waitFor: 3000,
+      }),
+    });
+    
+    if (firecrawlResponse.ok) {
+      const data = await firecrawlResponse.json();
+      const html = data.data?.html || '';
+      const links = data.data?.links || [];
+      
+      let pdfLinks = extractPdfLinksFromHtml(html, baseUrl);
+      const linksPdfs = links.filter((link: string) => 
+        link.toLowerCase().endsWith('.pdf')
+      );
+      
+      pdfLinks = [...new Set([...pdfLinks, ...linksPdfs])];
+      
+      console.log(`[scrape-causelist] Fallback got ${pdfLinks.length} PDF links`);
+      return pdfLinks;
+    }
+  } catch (err) {
+    console.log(`[scrape-causelist] Fallback scrape failed: ${err}`);
+  }
+  
+  return [];
 }
 
 serve(async (req) => {
@@ -252,12 +497,13 @@ serve(async (req) => {
       list_type = 'DAILY' 
     } = await req.json() as ScrapeRequest;
     
-    // Smart date: Use provided date or determine based on IST time
     const targetDate = date || getSmartTargetDate();
     
-    console.log(`[scrape-causelist] Action: ${action}, Bench: ${bench}, Date: ${targetDate}, Court: ${court_no}, List: ${list_type}`);
+    console.log(`[scrape-causelist] ========================================`);
+    console.log(`[scrape-causelist] Action: ${action}, Bench: ${bench}`);
+    console.log(`[scrape-causelist] Date: ${targetDate}, Court: ${court_no}, List: ${list_type}`);
+    console.log(`[scrape-causelist] ========================================`);
     
-    // Determine the cause list URL based on bench
     const baseUrls: Record<string, string> = {
       'JAIPUR': 'https://hcraj.nic.in/quick-causelist-jp/',
       'JODHPUR': 'https://hcraj.nic.in/quick-causelist-jdp/',
@@ -281,7 +527,6 @@ serve(async (req) => {
       );
     }
 
-    // Check if Firecrawl is configured
     if (!firecrawlApiKey) {
       await logScraperRun(supabase, {
         bench,
@@ -295,161 +540,148 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ 
           success: false, 
-          error: 'Firecrawl API key not configured. Please connect Firecrawl in workspace settings.',
+          error: 'Firecrawl API key not configured.',
           needs_firecrawl: true
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
       );
     }
 
-    // Use Firecrawl to scrape the cause list page
-    console.log(`[scrape-causelist] Fetching ${targetUrl} with Firecrawl...`);
+    // STEP 1: Submit form to get PDF links
+    console.log(`[scrape-causelist] STEP 1: Getting PDF links from ${targetUrl}`);
+    const pdfLinks = await submitFormAndGetPdfLinks(targetUrl, targetDate, firecrawlApiKey);
     
-    const firecrawlResponse = await fetch('https://api.firecrawl.dev/v1/scrape', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${firecrawlApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        url: targetUrl,
-        formats: ['markdown', 'links'],
-        onlyMainContent: true,
-        waitFor: 3000,
-      }),
-    });
-
-    if (!firecrawlResponse.ok) {
-      const errorText = await firecrawlResponse.text();
-      console.error(`[scrape-causelist] Firecrawl error: ${errorText}`);
+    console.log(`[scrape-causelist] Found ${pdfLinks.length} PDF links:`);
+    pdfLinks.forEach((link, i) => console.log(`  ${i + 1}. ${link}`));
+    
+    // STEP 2: Scrape and parse each PDF
+    let allEntries: CauseListEntry[] = [];
+    const pdfResults: { url: string; entries: number; error?: string }[] = [];
+    
+    if (pdfLinks.length > 0) {
+      console.log(`[scrape-causelist] STEP 2: Scraping ${pdfLinks.length} PDFs...`);
       
-      await logScraperRun(supabase, {
-        bench,
-        status: 'failed',
-        cases_found: 0,
-        error_message: `Firecrawl scrape failed: ${errorText}`,
-        list_type,
-        court_no,
-      });
-      
-      return new Response(
-        JSON.stringify({ success: false, error: `Firecrawl scrape failed: ${errorText}` }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
-      );
-    }
-
-    const firecrawlData = await firecrawlResponse.json();
-    console.log(`[scrape-causelist] Firecrawl response received, parsing...`);
-    
-    const markdown = firecrawlData.data?.markdown || '';
-    const links = firecrawlData.data?.links || [];
-    
-    // Extract judge names from main page
-    const judgeNames = extractJudgeNames(markdown, court_no);
-    if (judgeNames) {
-      await updateCourtMetadata(supabase, bench, court_no, judgeNames);
-    }
-    
-    // Find PDF links - look for Daily (D) and Supplementary (S) links
-    const pdfLinks = links.filter((link: string) => 
-      link.toLowerCase().includes('.pdf') || 
-      link.toLowerCase().includes('causelist') ||
-      link.toLowerCase().includes('court')
-    );
-    
-    // Filter links based on list_type
-    const dailyLinks = links.filter((link: string) => 
-      link.toLowerCase().includes('/d/') || link.toLowerCase().includes('daily')
-    );
-    const supplementaryLinks = links.filter((link: string) => 
-      link.toLowerCase().includes('/s/') || link.toLowerCase().includes('supplementary')
-    );
-    
-    console.log(`[scrape-causelist] Found ${pdfLinks.length} PDF links, ${dailyLinks.length} daily, ${supplementaryLinks.length} supplementary`);
-    
-    // Parse the markdown content for case entries
-    const entries = parseFirecrawlMarkdown(markdown, bench, court_no, targetDate, list_type);
-    
-    console.log(`[scrape-causelist] Parsed ${entries.length} entries from page content`);
-    
-    // WARNING: Zero cases found - possible layout change
-    if (entries.length === 0 && action !== 'preview') {
-      await logScraperRun(supabase, {
-        bench,
-        status: 'warning',
-        cases_found: 0,
-        error_message: 'WARNING: POSSIBLE LAYOUT CHANGE - No structured entries found',
-        list_type,
-        court_no,
-      });
+      for (const pdfUrl of pdfLinks) {
+        try {
+          // Extract court number from URL
+          const pdfCourtNo = extractCourtNoFromUrl(pdfUrl);
+          
+          // Scrape PDF content
+          const pdfContent = await scrapePdfWithFirecrawl(pdfUrl, firecrawlApiKey);
+          
+          if (pdfContent.length < 100) {
+            console.log(`[scrape-causelist] PDF ${pdfUrl} has very little content, skipping`);
+            pdfResults.push({ url: pdfUrl, entries: 0, error: 'Empty or minimal content' });
+            continue;
+          }
+          
+          // Detect list type from URL/content
+          const detectedListType = detectListType(pdfUrl, pdfContent);
+          
+          // Parse the PDF content
+          const entries = parseCauseListPdf(
+            pdfContent, 
+            bench, 
+            pdfCourtNo, 
+            targetDate, 
+            detectedListType
+          );
+          
+          console.log(`[scrape-causelist] Parsed ${entries.length} entries from ${pdfUrl}`);
+          pdfResults.push({ url: pdfUrl, entries: entries.length });
+          
+          allEntries = allEntries.concat(entries);
+          
+        } catch (err) {
+          const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+          console.error(`[scrape-causelist] Failed to process PDF ${pdfUrl}: ${errorMsg}`);
+          pdfResults.push({ url: pdfUrl, entries: 0, error: errorMsg });
+        }
+      }
     }
     
-    // If preview mode, just return the parsed data
+    console.log(`[scrape-causelist] Total entries parsed: ${allEntries.length}`);
+    
+    // If preview mode, return the parsed data without inserting
     if (action === 'preview') {
       return new Response(
         JSON.stringify({ 
           success: true, 
-          entries,
+          entries: allEntries,
           pdf_links: pdfLinks,
-          daily_links: dailyLinks,
-          supplementary_links: supplementaryLinks,
-          judge_names: judgeNames,
+          pdf_results: pdfResults,
           target_date: targetDate,
-          raw_content_preview: markdown.substring(0, 2000),
-          message: `Found ${entries.length} case entries and ${pdfLinks.length} PDF links`
+          message: `Found ${pdfLinks.length} PDFs with ${allEntries.length} total case entries`
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
     
-    // Insert entries into database
-    if (entries.length > 0) {
+    // STEP 3: Insert entries into database
+    if (allEntries.length > 0) {
+      console.log(`[scrape-causelist] STEP 3: Inserting ${allEntries.length} entries into database...`);
+      
       let inserted = 0;
       let updated = 0;
+      let errors = 0;
       
-      for (const entry of entries) {
-        // Check if entry exists
-        const { data: existing } = await supabase
-          .from('daily_court_docket')
-          .select('id')
-          .eq('case_number', entry.case_number)
-          .eq('date', entry.date)
-          .eq('court_room_no', entry.court_room_no)
-          .eq('list_type', entry.list_type)
-          .single();
-        
-        if (existing) {
-          // Update existing
-          await supabase
+      for (const entry of allEntries) {
+        try {
+          // Check if entry exists
+          const { data: existing } = await supabase
             .from('daily_court_docket')
-            .update({
-              petitioner_lawyer: entry.petitioner_lawyer,
-              respondent_lawyer: entry.respondent_lawyer,
-              petitioner: entry.petitioner,
-              respondent: entry.respondent,
-              item_no: entry.item_no,
-            })
-            .eq('id', existing.id);
-          updated++;
-        } else {
-          // Insert new
-          const { error: insertError } = await supabase
-            .from('daily_court_docket')
-            .insert(entry);
+            .select('id')
+            .eq('case_number', entry.case_number)
+            .eq('date', entry.date)
+            .eq('court_room_no', entry.court_room_no)
+            .eq('list_type', entry.list_type)
+            .single();
           
-          if (!insertError) {
-            inserted++;
+          if (existing) {
+            // Update existing
+            const { error: updateError } = await supabase
+              .from('daily_court_docket')
+              .update({
+                petitioner_lawyer: entry.petitioner_lawyer,
+                respondent_lawyer: entry.respondent_lawyer,
+                petitioner: entry.petitioner,
+                respondent: entry.respondent,
+                item_no: entry.item_no,
+              })
+              .eq('id', existing.id);
+            
+            if (updateError) {
+              console.error(`[scrape-causelist] Update error: ${updateError.message}`);
+              errors++;
+            } else {
+              updated++;
+            }
           } else {
-            console.error(`[scrape-causelist] Failed to insert: ${insertError.message}`);
+            // Insert new
+            const { error: insertError } = await supabase
+              .from('daily_court_docket')
+              .insert(entry);
+            
+            if (insertError) {
+              console.error(`[scrape-causelist] Insert error: ${insertError.message}`);
+              errors++;
+            } else {
+              inserted++;
+            }
           }
+        } catch (err) {
+          console.error(`[scrape-causelist] DB operation error:`, err);
+          errors++;
         }
       }
       
+      console.log(`[scrape-causelist] Database results: ${inserted} inserted, ${updated} updated, ${errors} errors`);
+      
       await logScraperRun(supabase, {
         bench,
-        status: 'success',
-        cases_found: entries.length,
-        error_message: null,
+        status: errors > 0 ? 'partial' : 'success',
+        cases_found: allEntries.length,
+        error_message: errors > 0 ? `${errors} database errors` : null,
         list_type,
         court_no,
       });
@@ -457,35 +689,49 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ 
           success: true, 
-          message: `Processed ${entries.length} entries: ${inserted} inserted, ${updated} updated`,
-          entries_count: entries.length,
+          message: `Processed ${allEntries.length} entries: ${inserted} inserted, ${updated} updated, ${errors} errors`,
+          entries_count: allEntries.length,
           inserted,
           updated,
+          errors,
           pdf_links: pdfLinks,
+          pdf_results: pdfResults,
           target_date: targetDate,
-          judge_names: judgeNames,
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
     
-    // No entries found, return PDF links for manual download
+    // No entries found
+    console.log(`[scrape-causelist] No entries found`);
+    
+    await logScraperRun(supabase, {
+      bench,
+      status: 'warning',
+      cases_found: 0,
+      error_message: pdfLinks.length > 0 
+        ? 'PDFs found but could not parse entries - possible format change'
+        : 'No PDF links found - form submission may have failed',
+      list_type,
+      court_no,
+    });
+    
     return new Response(
       JSON.stringify({ 
-        success: true, 
-        message: 'No structured entries found. The cause list may be in PDF format.',
+        success: false, 
+        message: pdfLinks.length > 0 
+          ? 'Found PDFs but could not extract case entries. The PDF format may have changed.'
+          : 'No PDF links found. The website form submission may have failed.',
         entries_count: 0,
         pdf_links: pdfLinks,
-        daily_links: dailyLinks,
-        supplementary_links: supplementaryLinks,
+        pdf_results: pdfResults,
         target_date: targetDate,
-        suggestion: 'Try downloading the PDF links and uploading manually, or specify a direct PDF URL.'
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
   } catch (error: unknown) {
-    console.error('[scrape-causelist] Error:', error);
+    console.error('[scrape-causelist] Unhandled error:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     
     await logScraperRun(supabase, {
