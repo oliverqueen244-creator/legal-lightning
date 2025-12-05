@@ -7,11 +7,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Scale, Mail, Lock, User, AlertCircle, FileText } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
+import { useScrapeOnLogin } from '@/hooks/useScrapeOnLogin';
 import { toast } from 'sonner';
 
 export default function Auth() {
   const navigate = useNavigate();
-  const { signIn, signUp, isAuthenticated, profile, loading } = useAuth();
+  const { signIn, signUp, isAuthenticated, profile, loading, user } = useAuth();
+  
+  // Trigger scraper when user logs in
+  useScrapeOnLogin(user?.id);
   
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
