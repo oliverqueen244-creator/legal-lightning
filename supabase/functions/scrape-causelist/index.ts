@@ -271,27 +271,62 @@ async function tryDirectPdfUrl(
 ): Promise<string | null> {
   const dateParts = targetDate.split('-');
   const year = dateParts[0];
-  const month = dateParts[1];
-  const day = dateParts[2];
+  const month = dateParts[1].padStart(2, '0');
+  const day = dateParts[2].padStart(2, '0');
+  const shortYear = year.substring(2);
   
-  // Known URL patterns for Rajasthan HC
+  // Known URL patterns for Rajasthan HC - try multiple variations
   const benchCode = bench === 'JAIPUR' ? 'jp' : 'jdp';
+  const listPrefix = listType === 'SUPPLEMENTARY' ? 's' : 'd';
+  
+  // Generate many URL patterns to try
   const patterns = [
+    // Pattern with YYYYMMDD folder
     `https://hcraj.nic.in/quick-causelist-${benchCode}/pdfs/${year}${month}${day}/court${courtNo}.pdf`,
+    `https://hcraj.nic.in/quick-causelist-${benchCode}/pdfs/${year}${month}${day}/${courtNo}.pdf`,
+    // Pattern with DDMMYYYY
     `https://hcraj.nic.in/quick-causelist-${benchCode}/pdf/${day}${month}${year}/court${courtNo}.pdf`,
+    `https://hcraj.nic.in/quick-causelist-${benchCode}/pdfs/${day}${month}${year}/court${courtNo}.pdf`,
+    // Pattern with underscore date
     `https://hcraj.nic.in/quick-causelist-${benchCode}/court${courtNo}_${day}${month}${year}.pdf`,
+    `https://hcraj.nic.in/quick-causelist-${benchCode}/court${courtNo}_${day}_${month}_${year}.pdf`,
+    // Pattern with daily/supplementary prefix
+    `https://hcraj.nic.in/quick-causelist-${benchCode}/pdfs/${listPrefix}${courtNo}_${day}${month}${year}.pdf`,
+    `https://hcraj.nic.in/quick-causelist-${benchCode}/${listPrefix}/court${courtNo}_${day}${month}${year}.pdf`,
+    // Pattern with dash separator
+    `https://hcraj.nic.in/quick-causelist-${benchCode}/pdfs/${year}-${month}-${day}/court${courtNo}.pdf`,
+    `https://hcraj.nic.in/quick-causelist-${benchCode}/pdfs/${day}-${month}-${year}/court${courtNo}.pdf`,
+    // Pattern with short year
+    `https://hcraj.nic.in/quick-causelist-${benchCode}/pdfs/${day}${month}${shortYear}/court${courtNo}.pdf`,
+    // Pattern without folder
+    `https://hcraj.nic.in/quick-causelist-${benchCode}/court${courtNo}.pdf`,
+    `https://hcraj.nic.in/quick-causelist-${benchCode}/causelist_court${courtNo}.pdf`,
+    // PHP generated pattern (common in Indian govt sites)
+    `https://hcraj.nic.in/quick-causelist-${benchCode}/download.php?court=${courtNo}&date=${day}${month}${year}`,
+    `https://hcraj.nic.in/quick-causelist-${benchCode}/getpdf.php?court=${courtNo}&day=${day}&month=${month}&year=${year}`,
   ];
   
-  for (const pdfUrl of patterns) {
+  // Try each pattern (limit to first 5 for speed, log all attempted)
+  for (let i = 0; i < Math.min(patterns.length, 8); i++) {
+    const pdfUrl = patterns[i];
     try {
-      console.log(`[scrape-causelist] Trying direct URL: ${pdfUrl}`);
-      const response = await fetch(pdfUrl, { method: 'HEAD' });
-      if (response.ok && response.headers.get('content-type')?.includes('pdf')) {
-        console.log(`[scrape-causelist] Direct URL works: ${pdfUrl}`);
+      console.log(`[scrape-causelist] Trying direct URL ${i + 1}/${patterns.length}: ${pdfUrl}`);
+      const response = await fetch(pdfUrl, { 
+        method: 'HEAD',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        },
+      });
+      
+      const contentType = response.headers.get('content-type') || '';
+      console.log(`[scrape-causelist] Response ${response.status}, content-type: ${contentType}`);
+      
+      if (response.ok && (contentType.includes('pdf') || contentType.includes('octet-stream'))) {
+        console.log(`[scrape-causelist] ✅ Direct URL works: ${pdfUrl}`);
         return pdfUrl;
       }
-    } catch {
-      // URL doesn't work, try next
+    } catch (err) {
+      console.log(`[scrape-causelist] URL ${i + 1} failed: ${err}`);
     }
   }
   
@@ -350,13 +385,74 @@ async function scrapeEcourts(
   return entries;
 }
 
-// Extract PDF links from HTML response
+// Decode base64 PDF path and construct full URL
+function decodeBase64PdfPath(base64Path: string, baseUrl: string): string | null {
+  try {
+    // Decode the base64 string
+    const decoded = atob(base64Path);
+    console.log(`[scrape-causelist] Decoded PDF path: ${decoded}`);
+    
+    // The decoded path looks like: /home/court/rhcjodh240618/causelist_report/2025/05122025_2011_1001.pdf
+    // We need to construct the actual URL - the server likely has an endpoint for this
+    
+    // Extract just the filename and construct URL
+    const filename = decoded.split('/').pop() || '';
+    
+    // Try multiple URL construction patterns
+    const baseHost = new URL(baseUrl).origin;
+    const benchCode = baseUrl.includes('jdp') ? 'jdp' : 'jp';
+    
+    // Pattern 1: Direct path from decoded (relative to website root)
+    // The path might map to: https://hcraj.nic.in/causelist_report/2025/filename.pdf
+    const pathParts = decoded.split('/');
+    const yearFolder = pathParts.find(p => /^\d{4}$/.test(p)) || '2025';
+    
+    // Multiple URL patterns to try
+    const possibleUrls = [
+      `${baseHost}/quick-causelist-${benchCode}/download_pdf.php?path=${encodeURIComponent(decoded)}`,
+      `${baseHost}/quick-causelist-${benchCode}/viewpdf.php?path=${encodeURIComponent(base64Path)}`,
+      `${baseHost}/causelist_report/${yearFolder}/${filename}`,
+      `${baseHost}/quick-causelist-${benchCode}/causelist_report/${yearFolder}/${filename}`,
+      `${baseHost}/quick-causelist-${benchCode}/pdfs/${yearFolder}/${filename}`,
+      `${baseHost}${decoded}`, // Direct path
+    ];
+    
+    console.log(`[scrape-causelist] Possible PDF URLs for ${filename}: ${possibleUrls.slice(0, 3).join(', ')}`);
+    
+    // Return the first pattern - we'll verify later
+    return possibleUrls[0];
+  } catch (err) {
+    console.log(`[scrape-causelist] Failed to decode base64: ${err}`);
+    return null;
+  }
+}
+
+// Extract PDF links from HTML response with enhanced detection
 function extractPdfLinksFromHtml(html: string, baseUrl: string): string[] {
-  const pdfPattern = /href=["']([^"']*\.pdf[^"']*)["']/gi;
   const links: string[] = [];
-  let match;
   
-  while ((match = pdfPattern.exec(html)) !== null) {
+  // Log a sample of the HTML for debugging
+  const tableStart = html.indexOf('<table');
+  if (tableStart >= 0) {
+    console.log(`[scrape-causelist] HTML sample (table area): ${html.substring(tableStart, tableStart + 2000)}`);
+  }
+  
+  // Pattern 1: Extract base64-encoded PDF paths from data-pdfpath attributes
+  const pdfPathPattern = /data-pdfpath=["']([^"']+)["']/gi;
+  let match;
+  while ((match = pdfPathPattern.exec(html)) !== null) {
+    const base64Path = match[1];
+    console.log(`[scrape-causelist] Found data-pdfpath: ${base64Path.substring(0, 50)}...`);
+    
+    const decodedUrl = decodeBase64PdfPath(base64Path, baseUrl);
+    if (decodedUrl && !links.includes(decodedUrl)) {
+      links.push(decodedUrl);
+    }
+  }
+  
+  // Pattern 2: Direct href links to PDFs
+  const hrefPattern = /href=["']([^"']*\.pdf[^"']*)["']/gi;
+  while ((match = hrefPattern.exec(html)) !== null) {
     let url = match[1];
     if (!url.startsWith('http')) {
       try {
@@ -368,6 +464,58 @@ function extractPdfLinksFromHtml(html: string, baseUrl: string): string[] {
     if (!links.includes(url)) {
       links.push(url);
     }
+  }
+  
+  // Pattern 3: onclick handlers with PDF URLs
+  const onclickPatterns = [
+    /onclick=["'][^"']*(?:window\.open|location\.href|open)\s*\(\s*["']([^"']*\.pdf[^"']*)["']/gi,
+  ];
+  
+  for (const pattern of onclickPatterns) {
+    pattern.lastIndex = 0;
+    while ((match = pattern.exec(html)) !== null) {
+      let url = match[1];
+      if (!url.startsWith('http')) {
+        try {
+          url = new URL(url, baseUrl).toString();
+        } catch {
+          continue;
+        }
+      }
+      if (!links.includes(url)) {
+        console.log(`[scrape-causelist] Found PDF in onclick: ${url}`);
+        links.push(url);
+      }
+    }
+  }
+  
+  // Pattern 3: JavaScript variables containing PDF paths
+  const jsVarPattern = /["']([^"']*(?:pdfs?|causelist|court)[^"']*\.pdf)["']/gi;
+  while ((match = jsVarPattern.exec(html)) !== null) {
+    let url = match[1];
+    if (!url.startsWith('http')) {
+      try {
+        url = new URL(url, baseUrl).toString();
+      } catch {
+        continue;
+      }
+    }
+    if (!links.includes(url)) {
+      console.log(`[scrape-causelist] Found PDF in JS: ${url}`);
+      links.push(url);
+    }
+  }
+  
+  // Pattern 4: Look for table row data that might contain PDF references
+  const trPattern = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
+  let trMatch;
+  let rowCount = 0;
+  while ((trMatch = trPattern.exec(html)) !== null && rowCount < 3) {
+    const rowContent = trMatch[1];
+    if (rowContent.includes('onclick') || rowContent.includes('data-')) {
+      console.log(`[scrape-causelist] Table row ${rowCount}: ${rowContent.substring(0, 300)}`);
+    }
+    rowCount++;
   }
   
   console.log(`[scrape-causelist] Extracted ${links.length} PDF links from HTML`);
