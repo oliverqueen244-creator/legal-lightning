@@ -361,42 +361,49 @@ export default function Documentation() {
             </CardHeader>
             <CardContent className="space-y-6">
               <p className="text-muted-foreground">
-                Vakalat-OS is an open-source project. You can download the complete source code 
-                to customize, deploy on your own infrastructure, or contribute to development.
+                Vakalat-OS source code can be accessed through Lovable's GitHub integration. 
+                Follow the steps below to download and customize the complete portal.
               </p>
               
+              <div className="p-4 rounded-lg bg-primary/10 border border-primary/20">
+                <h4 className="font-semibold text-foreground mb-3 flex items-center gap-2">
+                  <Download className="h-5 w-5 text-primary" aria-hidden="true" />
+                  How to Download
+                </h4>
+                <ol className="list-decimal list-inside text-muted-foreground space-y-2">
+                  <li>In Lovable editor, click <strong className="text-foreground">GitHub → Connect to GitHub</strong></li>
+                  <li>Authorize the Lovable GitHub App on your GitHub account</li>
+                  <li>Click <strong className="text-foreground">Create Repository</strong> to push code to your GitHub</li>
+                  <li>Download ZIP from your GitHub repo or clone it locally</li>
+                </ol>
+              </div>
+
               <div className="grid gap-4 md:grid-cols-2">
-                <a 
-                  href="https://github.com/lovable-dev/vakalat-os/archive/refs/heads/main.zip"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-3 p-4 rounded-lg bg-primary/10 border border-primary/20 hover:bg-primary/20 transition-colors group"
-                >
-                  <Download className="h-8 w-8 text-primary" aria-hidden="true" />
+                <div className="flex items-center gap-3 p-4 rounded-lg bg-card border border-border">
+                  <Github className="h-8 w-8 text-foreground" aria-hidden="true" />
                   <div>
-                    <h4 className="font-semibold text-foreground group-hover:text-primary transition-colors">
-                      Download ZIP
+                    <h4 className="font-semibold text-foreground">
+                      GitHub Integration
                     </h4>
                     <p className="text-sm text-muted-foreground">
-                      Get the complete source code as a ZIP file
+                      Full bidirectional sync with GitHub
                     </p>
                   </div>
-                  <ExternalLink className="h-4 w-4 text-muted-foreground ml-auto" aria-hidden="true" />
-                </a>
+                </div>
 
                 <a 
-                  href="https://github.com/lovable-dev/vakalat-os"
+                  href="https://docs.lovable.dev/integrations/git-and-github"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center gap-3 p-4 rounded-lg bg-card border border-border hover:border-primary/50 transition-colors group"
                 >
-                  <Github className="h-8 w-8 text-foreground" aria-hidden="true" />
+                  <FileText className="h-8 w-8 text-foreground" aria-hidden="true" />
                   <div>
                     <h4 className="font-semibold text-foreground group-hover:text-primary transition-colors">
-                      View on GitHub
+                      GitHub Docs
                     </h4>
                     <p className="text-sm text-muted-foreground">
-                      Browse code, fork, and contribute
+                      Learn more about GitHub integration
                     </p>
                   </div>
                   <ExternalLink className="h-4 w-4 text-muted-foreground ml-auto" aria-hidden="true" />
@@ -404,11 +411,11 @@ export default function Documentation() {
               </div>
 
               <div className="p-4 rounded-lg bg-muted/30 border border-border">
-                <h4 className="font-semibold text-foreground mb-2">Quick Start</h4>
+                <h4 className="font-semibold text-foreground mb-2">After Cloning - Quick Start</h4>
                 <div className="space-y-2 text-sm text-muted-foreground font-mono">
                   <p className="flex items-center gap-2">
                     <span className="text-primary">$</span>
-                    git clone https://github.com/lovable-dev/vakalat-os.git
+                    git clone &lt;your-github-repo-url&gt;
                   </p>
                   <p className="flex items-center gap-2">
                     <span className="text-primary">$</span>
