@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Gavel, Clock, Coffee, SkipForward, Ban } from 'lucide-react';
-import type { BoardStatus } from '@/types/database';
+import type { BoardStatus, LiveBoardCache } from '@/types/database';
+import { SyncStatusBadge, SyncTimestamp } from './SyncStatusBadge';
+import { useCourtSyncHealth } from '@/hooks/useSyncHealth';
 
 interface LiveCourtWidgetProps {
   courtRoom: string;
@@ -9,6 +11,7 @@ interface LiveCourtWidgetProps {
   myItemNumber?: number;
   status?: BoardStatus;
   courtLocation?: string;
+  liveBoard?: LiveBoardCache;
 }
 
 export function LiveCourtWidget({
@@ -17,9 +20,12 @@ export function LiveCourtWidget({
   myItemNumber,
   status = 'hearing',
   courtLocation = 'Jodhpur Bench',
+  liveBoard,
 }: LiveCourtWidgetProps) {
   const [displayedItem, setDisplayedItem] = useState(currentItem);
   const [isAnimating, setIsAnimating] = useState(false);
+  
+  const syncHealth = useCourtSyncHealth(courtLocation, courtRoom, liveBoard);
 
   // Animate number changes
   useEffect(() => {
@@ -96,8 +102,15 @@ export function LiveCourtWidget({
         />
       )}
 
+      {/* Stale Data Warning Banner */}
+      {syncHealth.status === 'stale' && (
+        <div className="absolute top-0 left-0 right-0 bg-destructive/90 text-destructive-foreground text-xs text-center py-1 px-2 z-20">
+          ⚠️ Data may be outdated ({syncHealth.staleSeconds}s since last sync)
+        </div>
+      )}
+
       {/* Header */}
-      <div className="flex items-center justify-between mb-6 relative z-10">
+      <div className={`flex items-center justify-between mb-6 relative z-10 ${syncHealth.status === 'stale' ? 'mt-4' : ''}`}>
         <div className="flex items-center gap-3">
           <StatusIcon className="h-6 w-6 text-primary" aria-hidden="true" />
           <div>
@@ -108,17 +121,30 @@ export function LiveCourtWidget({
           </div>
         </div>
         
-        <Badge 
-          variant={status === 'hearing' ? 'default' : 'secondary'}
-          className={`
-            text-xs font-semibold px-3 py-1
-            ${status === 'passover' ? 'bg-muted text-muted-foreground' : ''}
-            ${status === 'lunch' ? 'bg-court-warning/20 text-court-warning' : ''}
-            ${status === 'adjourned' ? 'bg-muted/50 text-muted-foreground' : ''}
-          `}
-        >
-          {statusConfig.label}
-        </Badge>
+        <div className="flex flex-col items-end gap-1">
+          <div className="flex items-center gap-2">
+            <SyncStatusBadge 
+              status={syncHealth.status} 
+              staleSeconds={syncHealth.staleSeconds}
+              size="sm"
+              showLabel={true}
+            />
+            <Badge 
+              variant={status === 'hearing' ? 'default' : 'secondary'}
+              className={`
+                text-xs font-semibold px-3 py-1
+                ${status === 'passover' ? 'bg-muted text-muted-foreground' : ''}
+                ${status === 'lunch' ? 'bg-court-warning/20 text-court-warning' : ''}
+                ${status === 'adjourned' ? 'bg-muted/50 text-muted-foreground' : ''}
+              `}
+            >
+              {statusConfig.label}
+            </Badge>
+          </div>
+          {liveBoard && (
+            <SyncTimestamp lastUpdated={liveBoard.last_updated} />
+          )}
+        </div>
       </div>
 
       {/* Giant Item Number */}

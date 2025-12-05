@@ -111,6 +111,7 @@ export default function Dashboard() {
                     myItemNumber={firstCase?.item_no}
                     status={primaryLiveBoard.status || 'hearing'}
                     courtLocation={primaryLiveBoard.court_location}
+                    liveBoard={primaryLiveBoard}
                   />
                 ) : null}
 

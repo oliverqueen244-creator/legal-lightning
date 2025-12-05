@@ -2,3 +2,12 @@ project_id = "pwpnnixoscppfzjogcgj"
 
 [functions.simulate-live-board]
 verify_jwt = false
+
+[functions.auto-match-aliases]
+verify_jwt = false
+
+[functions.sync-live-board]
+verify_jwt = false
+
+[functions.data-validation]
+verify_jwt = false

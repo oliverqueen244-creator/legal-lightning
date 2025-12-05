@@ -131,6 +131,36 @@ export type Database = {
           },
         ]
       }
+      data_validation_logs: {
+        Row: {
+          court_location: string | null
+          court_no: string | null
+          created_at: string | null
+          details: Json | null
+          id: string
+          status: string
+          validation_type: string
+        }
+        Insert: {
+          court_location?: string | null
+          court_no?: string | null
+          created_at?: string | null
+          details?: Json | null
+          id?: string
+          status: string
+          validation_type: string
+        }
+        Update: {
+          court_location?: string | null
+          court_no?: string | null
+          created_at?: string | null
+          details?: Json | null
+          id?: string
+          status?: string
+          validation_type?: string
+        }
+        Relationships: []
+      }
       document_annotations: {
         Row: {
           annotation_json: Json
@@ -208,6 +238,7 @@ export type Database = {
           current_item: number | null
           is_supplementary_running: boolean | null
           last_updated: string | null
+          source_timestamp: string | null
           status: string | null
         }
         Insert: {
@@ -216,6 +247,7 @@ export type Database = {
           current_item?: number | null
           is_supplementary_running?: boolean | null
           last_updated?: string | null
+          source_timestamp?: string | null
           status?: string | null
         }
         Update: {
@@ -224,6 +256,7 @@ export type Database = {
           current_item?: number | null
           is_supplementary_running?: boolean | null
           last_updated?: string | null
+          source_timestamp?: string | null
           status?: string | null
         }
         Relationships: []
@@ -303,6 +336,39 @@ export type Database = {
           onboarding_completed?: boolean | null
           role?: string | null
           whatsapp_number?: string | null
+        }
+        Relationships: []
+      }
+      sync_status: {
+        Row: {
+          created_at: string | null
+          error_message: string | null
+          id: string
+          last_source_timestamp: string | null
+          last_sync_at: string
+          source_name: string
+          status: string | null
+          sync_latency_ms: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          error_message?: string | null
+          id?: string
+          last_source_timestamp?: string | null
+          last_sync_at?: string
+          source_name: string
+          status?: string | null
+          sync_latency_ms?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          error_message?: string | null
+          id?: string
+          last_source_timestamp?: string | null
+          last_sync_at?: string
+          source_name?: string
+          status?: string | null
+          sync_latency_ms?: number | null
         }
         Relationships: []
       }

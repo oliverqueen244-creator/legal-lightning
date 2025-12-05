@@ -2,12 +2,14 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Scale, Calendar, FileText, Settings } from 'lucide-react';
+import { ArrowLeft, Scale, Calendar, FileText, Settings, Activity, FileCheck } from 'lucide-react';
 import { AuthGuard } from '@/components/layout/AuthGuard';
 import { useAuth } from '@/hooks/useAuth';
 import { DocketManager } from '@/components/admin/DocketManager';
 import { ArgumentsManager } from '@/components/admin/ArgumentsManager';
 import { CourtConfig } from '@/components/admin/CourtConfig';
+import { SyncMonitorPanel } from '@/components/admin/SyncMonitorPanel';
+import { DataValidationPanel } from '@/components/admin/DataValidationPanel';
 
 export default function Admin() {
   const navigate = useNavigate();
@@ -72,7 +74,7 @@ export default function Admin() {
         {/* Main Content */}
         <main className="flex-1 container mx-auto px-4 py-6">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-            <TabsList className="grid w-full max-w-md grid-cols-3">
+            <TabsList className="grid w-full max-w-2xl grid-cols-5">
               <TabsTrigger value="docket" className="flex items-center gap-2">
                 <Calendar className="h-4 w-4" />
                 <span className="hidden sm:inline">Docket</span>
@@ -84,6 +86,14 @@ export default function Admin() {
               <TabsTrigger value="courts" className="flex items-center gap-2">
                 <Settings className="h-4 w-4" />
                 <span className="hidden sm:inline">Courts</span>
+              </TabsTrigger>
+              <TabsTrigger value="sync" className="flex items-center gap-2">
+                <Activity className="h-4 w-4" />
+                <span className="hidden sm:inline">Sync</span>
+              </TabsTrigger>
+              <TabsTrigger value="validation" className="flex items-center gap-2">
+                <FileCheck className="h-4 w-4" />
+                <span className="hidden sm:inline">Validate</span>
               </TabsTrigger>
             </TabsList>
 
@@ -97,6 +107,14 @@ export default function Admin() {
 
             <TabsContent value="courts" className="space-y-4">
               <CourtConfig />
+            </TabsContent>
+
+            <TabsContent value="sync" className="space-y-4">
+              <SyncMonitorPanel />
+            </TabsContent>
+
+            <TabsContent value="validation" className="space-y-4">
+              <DataValidationPanel />
             </TabsContent>
           </Tabs>
         </main>
