@@ -195,11 +195,11 @@ async function scrapeWithSingleSession(
       waitFor: 5000,
       timeout: 90000,
       actions: [
-        { type: 'wait', milliseconds: 3000 },
+        { type: 'wait', milliseconds: 4000 }, // Wait for page to fully load
         { type: 'executeJavascript', script: solveAndSubmitScript },
-        { type: 'wait', milliseconds: 5000 }, // Wait for API call to complete
+        { type: 'wait', milliseconds: 8000 }, // Wait for API call and form fill to complete
         { type: 'click', selector: '#btnViewCauseList' },
-        { type: 'wait', milliseconds: 8000 }, // Wait for results to load
+        { type: 'wait', milliseconds: 10000 }, // Wait for results to load
       ],
     }),
   });
