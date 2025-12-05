@@ -353,12 +353,118 @@ async function logScraperRun(supabase: any, log: ScraperLog): Promise<void> {
   }
 }
 
-// Submit form to court website and get PDF links
+// Result type for scrape with HTML fallback
+interface ScrapeResult {
+  pdfLinks: string[];
+  htmlContent?: string;
+  markdownContent?: string;
+}
+
+// Parse HTML table content directly (fallback when no PDFs)
+function parseHtmlTableContent(
+  html: string,
+  markdown: string,
+  courtLocation: string,
+  date: string,
+  listType: string
+): CauseListEntry[] {
+  const entries: CauseListEntry[] = [];
+  
+  console.log(`[scrape-causelist] Parsing HTML table content...`);
+  
+  // Use markdown for easier parsing - look for table patterns
+  // Markdown tables look like: | Col1 | Col2 | Col3 |
+  const lines = markdown.split('\n');
+  
+  let currentCourtNo = '1';
+  let itemCounter = 0;
+  
+  // Look for court number headers like "Court No. 1" or "Court-1"
+  const courtNoPattern = /court[^\d]*(\d+)/i;
+  
+  // Case number patterns
+  const casePatterns = [
+    /([SDB]\.?[AB]?\.?\s*(?:Civil|Crl|Criminal)?\.?\s*(?:CWP|Writ|WP|SA|CA|MA|RA|REV|CMA|Misc|Appeal)[\s./]*(?:No\.?)?\s*\d+[\/\-]\d{4})/gi,
+    /(\d+[\/\-]\d{4})/g, // Simple case number pattern
+  ];
+  
+  // Party pattern
+  const partyPattern = /([A-Za-z\s.&,]+?)\s+(?:Vs\.?|vs\.?|V\/s\.?|versus|V\.|-vs-)\s+([A-Za-z\s.&,]+)/i;
+  
+  for (const line of lines) {
+    const trimmedLine = line.trim();
+    if (!trimmedLine) continue;
+    
+    // Check for court number in line
+    const courtMatch = trimmedLine.match(courtNoPattern);
+    if (courtMatch) {
+      currentCourtNo = courtMatch[1];
+      console.log(`[scrape-causelist] Found court: ${currentCourtNo}`);
+    }
+    
+    // Skip header rows
+    if (trimmedLine.toLowerCase().includes('s.no') || 
+        trimmedLine.toLowerCase().includes('case no') ||
+        trimmedLine.includes('---') ||
+        trimmedLine.startsWith('|') && trimmedLine.toLowerCase().includes('petitioner')) {
+      continue;
+    }
+    
+    // Try to extract case number from line
+    for (const pattern of casePatterns) {
+      pattern.lastIndex = 0;
+      const match = pattern.exec(trimmedLine);
+      if (match) {
+        const caseNumber = match[1];
+        
+        // Extract item number from beginning of line
+        const itemMatch = trimmedLine.match(/^\|?\s*(\d+)\s*\|/);
+        const itemNo = itemMatch ? parseInt(itemMatch[1]) : ++itemCounter;
+        
+        // Try to find party names
+        const partyMatch = trimmedLine.match(partyPattern);
+        
+        // Look for advocate names
+        let petLawyer: string | null = null;
+        let respLawyer: string | null = null;
+        
+        // Split by pipes if it's a table row
+        const parts = trimmedLine.split('|').map(p => p.trim()).filter(p => p);
+        if (parts.length >= 4) {
+          // Typical table: | No | Case | Parties | Adv Pet | Adv Resp |
+          petLawyer = parts[3] || null;
+          respLawyer = parts[4] || null;
+        }
+        
+        entries.push({
+          item_no: itemNo,
+          case_number: caseNumber.trim(),
+          petitioner: partyMatch ? partyMatch[1].trim().substring(0, 100) : null,
+          respondent: partyMatch ? partyMatch[2].trim().substring(0, 100) : null,
+          petitioner_lawyer: petLawyer?.substring(0, 100) || null,
+          respondent_lawyer: respLawyer?.substring(0, 100) || null,
+          court_room_no: currentCourtNo,
+          court_location: courtLocation,
+          list_type: listType,
+          date: date,
+          status: 'pending',
+        });
+        
+        break; // Found case in this line, move to next
+      }
+    }
+  }
+  
+  console.log(`[scrape-causelist] Parsed ${entries.length} entries from HTML table`);
+  return entries;
+}
+
+// Submit form to court website and get PDF links (or HTML content as fallback)
 async function submitFormAndGetPdfLinks(
   baseUrl: string, 
   targetDate: string,
   firecrawlApiKey: string
-): Promise<string[]> {
+): Promise<ScrapeResult> {
   // Parse date parts as integers to remove zero-padding
   // "2025-12-05" -> day="5", month="12", year="2025"
   const dateParts = targetDate.split('-');
@@ -370,6 +476,9 @@ async function submitFormAndGetPdfLinks(
   console.log(`[scrape-causelist] Form submission for date: ${day}/${month}/${year}`);
   console.log(`[scrape-causelist] Target URL: ${baseUrl}`);
   console.log(`[scrape-causelist] ==========================================`);
+  
+  let lastHtmlContent = '';
+  let lastMarkdownContent = '';
   
   // Method 1: Try direct POST with form data
   try {
@@ -396,6 +505,7 @@ async function submitFormAndGetPdfLinks(
     
     if (postResponse.ok) {
       const html = await postResponse.text();
+      lastHtmlContent = html;
       console.log(`[scrape-causelist] POST HTML length: ${html.length} chars`);
       
       // Log a snippet of the response to debug
@@ -405,7 +515,7 @@ async function submitFormAndGetPdfLinks(
       const pdfLinks = extractPdfLinksFromHtml(html, baseUrl);
       if (pdfLinks.length > 0) {
         console.log(`[scrape-causelist] ✅ Got ${pdfLinks.length} PDF links from POST`);
-        return pdfLinks;
+        return { pdfLinks, htmlContent: html };
       } else {
         console.log(`[scrape-causelist] No PDF links found in POST response`);
       }
@@ -414,19 +524,24 @@ async function submitFormAndGetPdfLinks(
     console.log(`[scrape-causelist] ❌ Direct POST failed: ${err}`);
   }
   
-  // Method 2: Use Firecrawl with actions to fill and submit form
-  console.log(`[scrape-causelist] Method 2: Firecrawl with form actions...`);
+  // Method 2: Use Firecrawl with executeJavascript to fill and submit form
+  console.log(`[scrape-causelist] Method 2: Firecrawl with executeJavascript...`);
   
   try {
+    // Use executeJavascript to set form values (select action not supported)
+    const setFormScript = `
+      document.getElementById('day').value = '${day}';
+      document.getElementById('month').value = '${month}';
+      document.getElementById('year').value = '${year}';
+      document.querySelector('button[type="submit"]').click();
+    `;
+    
     const actions = [
-      { type: 'select', selector: '#day', value: day },
-      { type: 'select', selector: '#month', value: month },
-      { type: 'select', selector: '#year', value: year },
-      { type: 'click', selector: 'button[type="submit"]' },
-      { type: 'wait', milliseconds: 8000 }, // Increased wait for PDF generation
+      { type: 'executeJavascript', script: setFormScript },
+      { type: 'wait', milliseconds: 10000 }, // Wait for PDF generation
     ];
     
-    console.log(`[scrape-causelist] Firecrawl actions:`, JSON.stringify(actions));
+    console.log(`[scrape-causelist] Firecrawl JS script: Setting day=${day}, month=${month}, year=${year}`);
     
     const firecrawlResponse = await fetch('https://api.firecrawl.dev/v1/scrape', {
       method: 'POST',
@@ -447,7 +562,11 @@ async function submitFormAndGetPdfLinks(
     if (firecrawlResponse.ok) {
       const data = await firecrawlResponse.json();
       const html = data.data?.html || '';
+      const markdown = data.data?.markdown || '';
       const links = data.data?.links || [];
+      
+      lastHtmlContent = html;
+      lastMarkdownContent = markdown;
       
       console.log(`[scrape-causelist] Firecrawl HTML length: ${html.length} chars`);
       console.log(`[scrape-causelist] Firecrawl links count: ${links.length}`);
@@ -465,13 +584,13 @@ async function submitFormAndGetPdfLinks(
       pdfLinks = [...new Set([...pdfLinks, ...linksPdfs])];
       
       if (pdfLinks.length > 0) {
-        console.log(`[scrape-causelist] ✅ Got ${pdfLinks.length} PDF links from Firecrawl actions`);
-        return pdfLinks;
+        console.log(`[scrape-causelist] ✅ Got ${pdfLinks.length} PDF links from Firecrawl`);
+        return { pdfLinks, htmlContent: html, markdownContent: markdown };
       } else {
         console.log(`[scrape-causelist] No PDF links found in Firecrawl response`);
         // Log HTML snippet for debugging
-        const snippet = html.substring(0, 300);
-        console.log(`[scrape-causelist] HTML snippet: ${snippet.replace(/\n/g, ' ').substring(0, 200)}...`);
+        const snippet = html.substring(0, 500);
+        console.log(`[scrape-causelist] HTML snippet: ${snippet.replace(/\n/g, ' ').substring(0, 300)}...`);
       }
     } else {
       const errorText = await firecrawlResponse.text();
@@ -504,7 +623,7 @@ async function submitFormAndGetPdfLinks(
       },
       body: JSON.stringify({
         url: baseUrl,
-        formats: ['links', 'html'],
+        formats: ['links', 'html', 'markdown'],
         waitFor: 3000,
       }),
     });
@@ -512,7 +631,11 @@ async function submitFormAndGetPdfLinks(
     if (firecrawlResponse.ok) {
       const data = await firecrawlResponse.json();
       const html = data.data?.html || '';
+      const markdown = data.data?.markdown || '';
       const links = data.data?.links || [];
+      
+      lastHtmlContent = html || lastHtmlContent;
+      lastMarkdownContent = markdown || lastMarkdownContent;
       
       console.log(`[scrape-causelist] Fallback HTML length: ${html.length} chars`);
       
@@ -525,15 +648,15 @@ async function submitFormAndGetPdfLinks(
       
       if (pdfLinks.length > 0) {
         console.log(`[scrape-causelist] ✅ Fallback got ${pdfLinks.length} PDF links`);
-        return pdfLinks;
+        return { pdfLinks, htmlContent: html, markdownContent: markdown };
       }
     }
   } catch (err) {
     console.log(`[scrape-causelist] ❌ Fallback scrape failed: ${err}`);
   }
   
-  console.log(`[scrape-causelist] ⚠️ All methods failed to find PDF links`);
-  return [];
+  console.log(`[scrape-causelist] ⚠️ All methods failed to find PDF links, returning HTML for table parsing`);
+  return { pdfLinks: [], htmlContent: lastHtmlContent, markdownContent: lastMarkdownContent };
 }
 
 serve(async (req) => {
@@ -608,10 +731,11 @@ serve(async (req) => {
 
     // STEP 1: Submit form to get PDF links
     console.log(`[scrape-causelist] STEP 1: Getting PDF links from ${targetUrl}`);
-    const pdfLinks = await submitFormAndGetPdfLinks(targetUrl, targetDate, firecrawlApiKey);
+    const scrapeResult = await submitFormAndGetPdfLinks(targetUrl, targetDate, firecrawlApiKey);
+    const pdfLinks = scrapeResult.pdfLinks;
     
     console.log(`[scrape-causelist] Found ${pdfLinks.length} PDF links:`);
-    pdfLinks.forEach((link, i) => console.log(`  ${i + 1}. ${link}`));
+    pdfLinks.forEach((link: string, i: number) => console.log(`  ${i + 1}. ${link}`));
     
     // STEP 2: Scrape and parse each PDF
     let allEntries: CauseListEntry[] = [];
@@ -660,6 +784,20 @@ serve(async (req) => {
     }
     
     console.log(`[scrape-causelist] Total entries parsed: ${allEntries.length}`);
+    
+    // STEP 2.5: If no PDFs found but we have HTML content, try parsing HTML tables
+    if (allEntries.length === 0 && (scrapeResult.htmlContent || scrapeResult.markdownContent)) {
+      console.log(`[scrape-causelist] STEP 2.5: No PDF entries, trying HTML table parsing...`);
+      const htmlEntries = parseHtmlTableContent(
+        scrapeResult.htmlContent || '',
+        scrapeResult.markdownContent || '',
+        bench,
+        targetDate,
+        list_type
+      );
+      allEntries = htmlEntries;
+      console.log(`[scrape-causelist] HTML table parsing found ${htmlEntries.length} entries`);
+    }
     
     // If preview mode, return the parsed data without inserting
     if (action === 'preview') {
