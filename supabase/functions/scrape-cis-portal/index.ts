@@ -138,8 +138,29 @@ async function solveCaptchaWithGemini(imageData: string, isFullScreenshot: boole
   console.log(`Sending ${isFullScreenshot ? 'screenshot' : 'CAPTCHA'} to Gemini (${imageData.length} chars)...`);
   
   const prompt = isFullScreenshot 
-    ? `This is a screenshot of a court cause list form page. There is a CAPTCHA image near the bottom of the form, next to "Enter Verification Code" label. The CAPTCHA shows 5-6 alphanumeric characters. Read the CAPTCHA text and return ONLY the exact characters you see - no explanation, no quotes, just the characters.`
-    : `This is a CAPTCHA image. Read the characters shown. Return ONLY the exact characters you see - no explanation, no quotes, just the characters.`;
+    ? `This is a screenshot of a court cause list form page. 
+Find the CAPTCHA image near the "Enter Verification Code" label.
+The CAPTCHA contains ONLY English letters (A-Z) and numbers (0-9) - typically 5-6 characters.
+
+IMPORTANT RULES:
+- Return ONLY letters (A-Z) and numbers (0-9)
+- Do NOT include any special symbols like ^, -, _, *, @, #, etc.
+- Do NOT include spaces, quotes, periods, or any punctuation
+- Do NOT include any explanation or text before/after the answer
+
+Just output the alphanumeric characters you see in the CAPTCHA.`
+    : `This is a CAPTCHA image from a court website.
+The CAPTCHA contains ONLY English letters (A-Z) and numbers (0-9).
+There are NO special characters, symbols, or punctuation marks in the CAPTCHA.
+
+IMPORTANT RULES:
+1. Look at the characters carefully
+2. Identify ONLY letters (A-Z) and numbers (0-9)
+3. Do NOT include any symbols like ^, -, _, *, @, #, etc.
+4. Do NOT include spaces, quotes, periods, or any punctuation
+5. Do NOT include any explanation
+
+Return ONLY the alphanumeric characters you see.`;
   
   const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
     method: 'POST',
@@ -170,10 +191,14 @@ async function solveCaptchaWithGemini(imageData: string, isFullScreenshot: boole
   }
   
   const data = await response.json();
-  const solution = data.choices?.[0]?.message?.content?.trim() || '';
-  const cleanSolution = solution.replace(/['".\s]/g, '').trim();
+  const rawSolution = data.choices?.[0]?.message?.content?.trim() || '';
   
-  console.log(`Gemini solved CAPTCHA: "${cleanSolution}"`);
+  // Remove ALL non-alphanumeric characters and convert to uppercase
+  const cleanSolution = rawSolution.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+  
+  console.log(`Gemini raw response: "${rawSolution}"`);
+  console.log(`Cleaned CAPTCHA solution: "${cleanSolution}"`);
+  
   return cleanSolution;
 }
 
