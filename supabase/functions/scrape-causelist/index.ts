@@ -143,7 +143,7 @@ async function getPageWithCaptcha(
   }
 }
 
-// Phase 2: Submit form and get HTML result using Browserless /function
+// Phase 2: Submit form and get HTML result using Browserless /content with addScriptTag
 async function submitFormForHtml(
   browserlessKey: string,
   cisUrl: string,
@@ -154,58 +154,47 @@ async function submitFormForHtml(
   console.log(`[scrape-causelist] Phase 2: Submitting form for HTML`);
   console.log(`[scrape-causelist] Date: ${formattedDate}, ListType: ${listType}, CAPTCHA: ${captchaSolution}`);
 
-  const puppeteerCode = `
-    module.exports = async ({ page, context }) => {
-      const { url, date, listType, captcha } = context;
-      
-      await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
-      await page.waitForSelector('#captcha', { timeout: 10000 });
-      
-      // Select HTML format (radio button)
-      await page.click('#formatradio1');
-      
-      // Set date - clear and type
-      await page.evaluate((d) => {
-        const dateInput = document.getElementById('causelstdt');
-        if (dateInput) dateInput.value = d;
-      }, date);
-      
-      // Select list type
-      await page.select('#causelisttype', listType);
-      
-      // Enter CAPTCHA
-      await page.type('#txtCaptcha', captcha, { delay: 30 });
-      
-      // Click View Cause List button
-      await page.click('#btnViewCauseList');
-      
-      // Wait for response
-      await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 }).catch(() => {});
-      await new Promise(r => setTimeout(r, 2000));
-      
-      return await page.content();
-    };
-  `;
+  // Use Browserless /content endpoint with addScriptTag to fill form
+  const contentConfig = {
+    url: cisUrl,
+    gotoOptions: { waitUntil: 'networkidle2', timeout: 30000 },
+    waitForSelector: { selector: '#captcha', timeout: 10000 },
+    addScriptTag: [
+      {
+        content: `
+          // Fill the form
+          const htmlRadio = document.getElementById('formatradio1');
+          if (htmlRadio) htmlRadio.click();
+          
+          const dateInput = document.getElementById('causelstdt');
+          if (dateInput) dateInput.value = '${formattedDate}';
+          
+          const listTypeSelect = document.getElementById('causelisttype');
+          if (listTypeSelect) listTypeSelect.value = '${listType}';
+          
+          const captchaInput = document.getElementById('txtCaptcha');
+          if (captchaInput) captchaInput.value = '${captchaSolution}';
+          
+          // Click view button
+          const viewBtn = document.getElementById('btnViewCauseList');
+          if (viewBtn) viewBtn.click();
+        `
+      }
+    ],
+    waitForTimeout: 5000, // Wait for AJAX response
+  };
 
   try {
-    const response = await fetch(`https://chrome.browserless.io/function?token=${browserlessKey}`, {
+    const response = await fetch(`https://chrome.browserless.io/content?token=${browserlessKey}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        code: puppeteerCode,
-        context: {
-          url: cisUrl,
-          date: formattedDate,
-          listType: listType,
-          captcha: captchaSolution,
-        },
-      }),
+      body: JSON.stringify(contentConfig),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`[scrape-causelist] Browserless /function failed: ${response.status} - ${errorText}`);
-      return { html: '', success: false, error: `Browserless function error: ${response.status}` };
+      console.error(`[scrape-causelist] Browserless /content failed: ${response.status} - ${errorText}`);
+      return { html: '', success: false, error: `Browserless content error: ${response.status}` };
     }
 
     const html = await response.text();
@@ -216,6 +205,12 @@ async function submitFormForHtml(
       return { html, success: false, error: 'Invalid CAPTCHA solution' };
     }
 
+    // Check for no records
+    if (html.toLowerCase().includes('no record') || html.toLowerCase().includes('no data found')) {
+      console.log(`[scrape-causelist] No records found for this date`);
+      return { html, success: true }; // Success but no data
+    }
+
     return { html, success: true };
 
   } catch (error) {
@@ -224,7 +219,7 @@ async function submitFormForHtml(
   }
 }
 
-// Phase 2 (PDF): Submit form and download PDF using Browserless /download
+// Phase 2 (PDF): Submit form and download PDF using Browserless /content with script injection
 async function submitFormForPdf(
   browserlessKey: string,
   cisUrl: string,
@@ -235,80 +230,116 @@ async function submitFormForPdf(
   console.log(`[scrape-causelist] Phase 2: Submitting form for PDF download`);
   console.log(`[scrape-causelist] Date: ${formattedDate}, ListType: ${listType}, CAPTCHA: ${captchaSolution}`);
 
-  const puppeteerCode = `
-    module.exports = async ({ page, context }) => {
-      const { url, date, listType, captcha } = context;
-      
-      await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
-      await page.waitForSelector('#captcha', { timeout: 10000 });
-      
-      // Select PDF format (radio button)
-      await page.click('#formatradio2');
-      
-      // Set date
-      await page.evaluate((d) => {
-        const dateInput = document.getElementById('causelstdt');
-        if (dateInput) dateInput.value = d;
-      }, date);
-      
-      // Select list type
-      await page.select('#causelisttype', listType);
-      
-      // Enter CAPTCHA
-      await page.type('#txtCaptcha', captcha, { delay: 30 });
-      
-      // Click Download Cause List button
-      await page.click('#btnSearchCauseList');
-    };
-  `;
+  // For PDF download, we use /content with addScriptTag to fill form then check for download link
+  // The CIS portal generates PDFs via JavaScript, so we need to capture the download URL
+  const contentConfig = {
+    url: cisUrl,
+    gotoOptions: { waitUntil: 'networkidle2', timeout: 30000 },
+    waitForSelector: { selector: '#captcha', timeout: 10000 },
+    addScriptTag: [
+      {
+        content: `
+          // Fill the form
+          const pdfRadio = document.getElementById('formatradio2');
+          if (pdfRadio) pdfRadio.click();
+          
+          const dateInput = document.getElementById('causelstdt');
+          if (dateInput) dateInput.value = '${formattedDate}';
+          
+          const listTypeSelect = document.getElementById('causelisttype');
+          if (listTypeSelect) listTypeSelect.value = '${listType}';
+          
+          const captchaInput = document.getElementById('txtCaptcha');
+          if (captchaInput) captchaInput.value = '${captchaSolution}';
+          
+          // Click download button
+          const downloadBtn = document.getElementById('btnSearchCauseList');
+          if (downloadBtn) downloadBtn.click();
+        `
+      }
+    ],
+    waitForTimeout: 5000, // Wait for response
+  };
 
   try {
-    const response = await fetch(`https://chrome.browserless.io/download?token=${browserlessKey}`, {
+    const response = await fetch(`https://chrome.browserless.io/content?token=${browserlessKey}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        code: puppeteerCode,
-        context: {
-          url: cisUrl,
-          date: formattedDate,
-          listType: listType,
-          captcha: captchaSolution,
-        },
-      }),
+      body: JSON.stringify(contentConfig),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`[scrape-causelist] Browserless /download failed: ${response.status} - ${errorText}`);
-      
-      // Check if it's a CAPTCHA error
-      if (errorText.toLowerCase().includes('captcha')) {
-        return { pdfBuffer: null, success: false, error: 'Invalid CAPTCHA solution' };
-      }
-      
-      return { pdfBuffer: null, success: false, error: `Browserless download error: ${response.status}` };
+      console.error(`[scrape-causelist] Browserless /content for PDF failed: ${response.status} - ${errorText}`);
+      return { pdfBuffer: null, success: false, error: `Browserless error: ${response.status}` };
     }
 
-    const contentType = response.headers.get('content-type') || '';
-    console.log(`[scrape-causelist] Download response content-type: ${contentType}`);
+    const html = await response.text();
+    console.log(`[scrape-causelist] Got HTML after form submission: ${html.length} chars`);
 
-    if (contentType.includes('application/pdf') || contentType.includes('application/octet-stream')) {
-      const pdfBuffer = await response.arrayBuffer();
-      console.log(`[scrape-causelist] Got PDF: ${pdfBuffer.byteLength} bytes`);
-      return { pdfBuffer, success: true };
-    }
-
-    // If not a PDF, it might be an error page
-    const text = await response.text();
-    if (text.toLowerCase().includes('invalid captcha') || text.toLowerCase().includes('wrong captcha')) {
+    // Check for CAPTCHA errors
+    if (html.toLowerCase().includes('invalid captcha') || html.toLowerCase().includes('wrong captcha')) {
       return { pdfBuffer: null, success: false, error: 'Invalid CAPTCHA solution' };
     }
-    if (text.toLowerCase().includes('no record') || text.toLowerCase().includes('no data')) {
+
+    // Check for no records
+    if (html.toLowerCase().includes('no record') || html.toLowerCase().includes('no data')) {
       return { pdfBuffer: null, success: false, error: 'No records found for this date' };
     }
 
-    console.log(`[scrape-causelist] Unexpected response: ${text.substring(0, 500)}`);
-    return { pdfBuffer: null, success: false, error: 'Unexpected response - no PDF received' };
+    // Look for download link or PDF URL in the response
+    const downloadLinkMatch = html.match(/href=["']([^"']*\.pdf[^"']*)["']/i) ||
+                              html.match(/window\.open\(['"]([^'"]*\.pdf[^'"]*)['"]/i) ||
+                              html.match(/location\.href\s*=\s*['"]([^'"]*\.pdf[^'"]*)['"]/i);
+    
+    if (downloadLinkMatch) {
+      const pdfUrl = downloadLinkMatch[1].startsWith('http') 
+        ? downloadLinkMatch[1] 
+        : new URL(downloadLinkMatch[1], cisUrl).toString();
+      
+      console.log(`[scrape-causelist] Found PDF URL: ${pdfUrl}`);
+      
+      // Download the PDF
+      const pdfResponse = await fetch(pdfUrl, {
+        headers: {
+          'Referer': cisUrl,
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        }
+      });
+      
+      if (pdfResponse.ok) {
+        const pdfBuffer = await pdfResponse.arrayBuffer();
+        console.log(`[scrape-causelist] Downloaded PDF: ${pdfBuffer.byteLength} bytes`);
+        return { pdfBuffer, success: true };
+      }
+    }
+
+    // Alternative: Check for downloadFile element (from screenshot analysis)
+    const downloadFileMatch = html.match(/id=["']downloadFile["'][^>]*href=["']([^"']+)["']/i);
+    if (downloadFileMatch) {
+      const pdfUrl = downloadFileMatch[1].startsWith('http') 
+        ? downloadFileMatch[1] 
+        : new URL(downloadFileMatch[1], cisUrl).toString();
+      
+      console.log(`[scrape-causelist] Found downloadFile URL: ${pdfUrl}`);
+      
+      const pdfResponse = await fetch(pdfUrl, {
+        headers: {
+          'Referer': cisUrl,
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        }
+      });
+      
+      if (pdfResponse.ok) {
+        const pdfBuffer = await pdfResponse.arrayBuffer();
+        console.log(`[scrape-causelist] Downloaded PDF: ${pdfBuffer.byteLength} bytes`);
+        return { pdfBuffer, success: true };
+      }
+    }
+
+    console.log(`[scrape-causelist] No PDF download link found in response`);
+    console.log(`[scrape-causelist] HTML snippet: ${html.substring(0, 1500)}`);
+    return { pdfBuffer: null, success: false, error: 'PDF download link not found in response' };
 
   } catch (error) {
     console.error(`[scrape-causelist] Phase 2 PDF error:`, error);
