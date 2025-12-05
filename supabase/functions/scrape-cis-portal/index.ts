@@ -29,6 +29,106 @@ interface CauseListEntry {
   court_room_no: string;
 }
 
+// Extract cookies from Set-Cookie headers
+function extractCookies(response: Response): string {
+  const cookies: string[] = [];
+  response.headers.forEach((value, key) => {
+    if (key.toLowerCase() === 'set-cookie') {
+      const cookiePart = value.split(';')[0];
+      cookies.push(cookiePart);
+    }
+  });
+  return cookies.join('; ');
+}
+
+// Extract ASP.NET hidden fields from HTML
+function extractAspNetFields(html: string): Record<string, string> {
+  const fields: Record<string, string> = {};
+  
+  const fieldNames = ['__VIEWSTATE', '__VIEWSTATEGENERATOR', '__EVENTVALIDATION', '__EVENTTARGET', '__EVENTARGUMENT'];
+  
+  for (const fieldName of fieldNames) {
+    const regex = new RegExp(`id="${fieldName}"[^>]*value="([^"]*)"`, 'i');
+    const match = html.match(regex);
+    if (match) {
+      fields[fieldName] = match[1];
+    }
+  }
+  
+  return fields;
+}
+
+// Extract CAPTCHA image as base64
+function extractCaptchaBase64(html: string): string | null {
+  // Pattern 1: src before id
+  const match1 = html.match(/src=["'](data:image\/[^"']+)["'][^>]*id=["']captcha["']/i);
+  if (match1) {
+    console.log('CAPTCHA found with pattern 1 (src before id)');
+    return match1[1];
+  }
+  
+  // Pattern 2: id before src  
+  const match2 = html.match(/id=["']captcha["'][^>]*src=["'](data:image\/[^"']+)["']/i);
+  if (match2) {
+    console.log('CAPTCHA found with pattern 2 (id before src)');
+    return match2[1];
+  }
+  
+  // Pattern 3: More flexible - find img tag with captcha id
+  const imgMatch = html.match(/<img[^>]*id=["']captcha["'][^>]*>/i);
+  if (imgMatch) {
+    const srcMatch = imgMatch[0].match(/src=["'](data:image\/[^"']+)["']/i);
+    if (srcMatch) {
+      console.log('CAPTCHA found with pattern 3 (flexible)');
+      return srcMatch[1];
+    }
+  }
+  
+  // Pattern 4: Find any base64 image near "captcha" text
+  const nearbyMatch = html.match(/src=["'](data:image\/png;base64,[A-Za-z0-9+/=]+)["'][^>]*(?:alt=["']captcha["']|id=["']captcha["'])/i);
+  if (nearbyMatch) {
+    console.log('CAPTCHA found with pattern 4 (nearby)');
+    return nearbyMatch[1];
+  }
+  
+  console.log('No CAPTCHA pattern matched');
+  return null;
+}
+
+// Solve CAPTCHA using our solve-captcha endpoint
+async function solveCaptcha(imageBase64: string): Promise<string | null> {
+  const supabaseUrl = Deno.env.get('SUPABASE_URL');
+  const supabaseKey = Deno.env.get('SUPABASE_ANON_KEY');
+  
+  try {
+    const response = await fetch(`${supabaseUrl}/functions/v1/solve-captcha`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${supabaseKey}`
+      },
+      body: JSON.stringify({ image: imageBase64 })
+    });
+    
+    if (!response.ok) {
+      console.error('CAPTCHA solver error:', response.status);
+      return null;
+    }
+    
+    const result = await response.json();
+    if (result.error) {
+      console.error('CAPTCHA solver returned error:', result.error);
+      return null;
+    }
+    
+    console.log(`CAPTCHA solved: ${result.solution}`);
+    return result.solution;
+  } catch (error) {
+    console.error('CAPTCHA solver exception:', error);
+    return null;
+  }
+}
+
 // Parse cause list HTML to extract entries
 function parseCauseListHtml(html: string): CauseListEntry[] {
   const entries: CauseListEntry[] = [];
@@ -114,148 +214,96 @@ function parseCauseListHtml(html: string): CauseListEntry[] {
   return entries;
 }
 
-// Single Firecrawl call that: loads page, solves CAPTCHA via external API, fills form, submits
-async function scrapeWithSingleSession(
+// Scrape using direct HTTP requests with session cookies
+async function scrapeWithHttpSession(
   baseUrl: string,
   date: string,
-  listType: string,
-  firecrawlApiKey: string,
-  solverEndpoint: string
-): Promise<{ html: string; captchaSolution?: string; debugInfo?: string }> {
-  console.log(`Single-session scrape: ${baseUrl}, date=${date}, listType=${listType}`);
+  listType: string
+): Promise<{ html: string; captchaSolution?: string; error?: string }> {
+  console.log(`HTTP session scrape: ${baseUrl}, date=${date}, listType=${listType}`);
   
-  // JavaScript that runs in the browser to:
-  // 1. Extract CAPTCHA base64
-  // 2. Call our solver endpoint
-  // 3. Fill form with solution
-  // 4. Submit form via JavaScript click (more reliable than Firecrawl click)
-  const solveAndSubmitScript = `
-    (function() {
-      try {
-        // Get CAPTCHA image base64
-        const captchaImg = document.getElementById('captcha');
-        if (!captchaImg) {
-          window.__scraperError = 'CAPTCHA image not found';
-          return;
-        }
-        
-        const captchaBase64 = captchaImg.src;
-        if (!captchaBase64 || !captchaBase64.startsWith('data:')) {
-          window.__scraperError = 'CAPTCHA not loaded as base64';
-          return;
-        }
-        
-        window.__captchaExtracted = captchaBase64.substring(0, 100);
-        
-        // Use synchronous XMLHttpRequest to call solver
-        const xhr = new XMLHttpRequest();
-        xhr.open('POST', '${solverEndpoint}', false); // false = synchronous
-        xhr.setRequestHeader('Content-Type', 'application/json');
-        xhr.send(JSON.stringify({ image: captchaBase64 }));
-        
-        if (xhr.status !== 200) {
-          window.__scraperError = 'Solver API error: ' + xhr.status;
-          return;
-        }
-        
-        const result = JSON.parse(xhr.responseText);
-        if (result.error || !result.solution) {
-          window.__scraperError = 'Solver returned error: ' + (result.error || 'no solution');
-          return;
-        }
-        
-        const solution = result.solution;
-        window.__captchaSolution = solution;
-        
-        // Fill form fields
-        const dateInput = document.getElementById('causelstdt');
-        if (dateInput) {
-          dateInput.value = '${date}';
-          dateInput.dispatchEvent(new Event('change', { bubbles: true }));
-        }
-        
-        const listTypeSelect = document.getElementById('causelisttype');
-        if (listTypeSelect) {
-          listTypeSelect.value = '${listType}';
-          listTypeSelect.dispatchEvent(new Event('change', { bubbles: true }));
-        }
-        
-        const formatRadio = document.getElementById('formatradio1');
-        if (formatRadio) {
-          formatRadio.checked = true;
-          formatRadio.dispatchEvent(new Event('change', { bubbles: true }));
-        }
-        
-        const captchaInput = document.getElementById('txtCaptcha');
-        if (captchaInput) {
-          captchaInput.value = solution;
-          captchaInput.dispatchEvent(new Event('input', { bubbles: true }));
-          captchaInput.dispatchEvent(new Event('change', { bubbles: true }));
-        }
-        
-        window.__formFilled = true;
-        window.__filledValues = {
-          date: dateInput ? dateInput.value : 'no dateInput',
-          listType: listTypeSelect ? listTypeSelect.value : 'no listType',
-          captcha: captchaInput ? captchaInput.value : 'no captchaInput'
-        };
-        
-        // Click the submit button directly from JavaScript
-        const submitBtn = document.getElementById('btnViewCauseList');
-        if (submitBtn) {
-          submitBtn.click();
-          window.__submitClicked = true;
-        } else {
-          window.__scraperError = 'Submit button not found';
-        }
-        
-      } catch (err) {
-        window.__scraperError = 'Script error: ' + err.message;
-      }
-    })();
-  `;
+  // Step 1: GET the initial page to get session cookie and CAPTCHA
+  console.log('Step 1: Fetching initial page...');
+  const initialResponse = await fetch(baseUrl, {
+    method: 'GET',
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+      'Accept-Language': 'en-US,en;q=0.5',
+    }
+  });
   
-  const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
+  if (!initialResponse.ok) {
+    return { html: '', error: `Initial page fetch failed: ${initialResponse.status}` };
+  }
+  
+  const initialHtml = await initialResponse.text();
+  console.log(`Initial page: ${initialHtml.length} chars`);
+  
+  // Extract session cookies
+  const cookies = extractCookies(initialResponse);
+  console.log(`Cookies: ${cookies.substring(0, 100)}...`);
+  
+  // Extract ASP.NET hidden fields
+  const aspFields = extractAspNetFields(initialHtml);
+  console.log(`ASP.NET fields found: ${Object.keys(aspFields).join(', ')}`);
+  
+  // Extract CAPTCHA image
+  const captchaBase64 = extractCaptchaBase64(initialHtml);
+  if (!captchaBase64) {
+    return { html: initialHtml, error: 'CAPTCHA image not found in page' };
+  }
+  console.log(`CAPTCHA extracted: ${captchaBase64.length} chars`);
+  
+  // Step 2: Solve CAPTCHA
+  console.log('Step 2: Solving CAPTCHA...');
+  const captchaSolution = await solveCaptcha(captchaBase64);
+  if (!captchaSolution) {
+    return { html: initialHtml, error: 'Failed to solve CAPTCHA' };
+  }
+  
+  // Step 3: Submit form with POST request
+  console.log('Step 3: Submitting form...');
+  
+  const formData = new URLSearchParams();
+  
+  // Add ASP.NET fields
+  for (const [key, value] of Object.entries(aspFields)) {
+    formData.append(key, value);
+  }
+  
+  // Add form fields
+  formData.append('causelstdt', date);
+  formData.append('causelisttype', listType);
+  formData.append('txtCaptcha', captchaSolution);
+  formData.append('formatradio', 'opthtml'); // HTML format
+  formData.append('__EVENTTARGET', 'btnViewCauseList');
+  formData.append('__EVENTARGUMENT', '');
+  
+  console.log(`Form data: date=${date}, listType=${listType}, captcha=${captchaSolution}`);
+  
+  const submitResponse = await fetch(baseUrl, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${firecrawlApiKey}`,
-      'Content-Type': 'application/json',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+      'Accept-Language': 'en-US,en;q=0.5',
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'Cookie': cookies,
+      'Referer': baseUrl,
+      'Origin': new URL(baseUrl).origin,
     },
-    body: JSON.stringify({
-      url: baseUrl,
-      formats: ['html'],
-      waitFor: 5000,
-      timeout: 90000,
-      actions: [
-        { type: 'wait', milliseconds: 4000 }, // Wait for page to fully load
-        { type: 'executeJavascript', script: solveAndSubmitScript },
-        { type: 'wait', milliseconds: 15000 }, // Wait for form submission and page navigation
-      ],
-    }),
+    body: formData.toString()
   });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error('Firecrawl error:', response.status, errorText);
-    throw new Error(`Firecrawl error: ${response.status}`);
+  
+  if (!submitResponse.ok) {
+    return { html: '', error: `Form submission failed: ${submitResponse.status}` };
   }
-
-  const data = await response.json();
-  const html = data.data?.html || '';
   
-  console.log(`Firecrawl returned HTML (${html.length} chars)`);
+  const resultHtml = await submitResponse.text();
+  console.log(`Result page: ${resultHtml.length} chars`);
   
-  // Try to extract debug info from the page
-  let captchaSolution: string | undefined;
-  let debugInfo: string | undefined;
-  
-  const solutionMatch = html.match(/window\.__captchaSolution\s*=\s*['"]([^'"]+)['"]/);
-  if (solutionMatch) captchaSolution = solutionMatch[1];
-  
-  const errorMatch = html.match(/window\.__scraperError\s*=\s*['"]([^'"]+)['"]/);
-  if (errorMatch) debugInfo = errorMatch[1];
-  
-  return { html, captchaSolution, debugInfo };
+  return { html: resultHtml, captchaSolution };
 }
 
 // Main scrape function
@@ -265,47 +313,30 @@ async function scrapeCISPortal(request: ScrapeRequest): Promise<{
   error?: string;
   attempts: number;
   rawResponse?: string;
-  captchaExtracted?: boolean;
   captchaSolution?: string;
-  debugInfo?: string;
 }> {
   const baseUrl = CIS_URLS[request.bench];
   const maxAttempts = 3;
-  
-  const FIRECRAWL_API_KEY = Deno.env.get('FIRECRAWL_API_KEY');
-  if (!FIRECRAWL_API_KEY) {
-    return { success: false, entries: [], error: 'FIRECRAWL_API_KEY not configured', attempts: 0 };
-  }
-  
-  // Get our solver endpoint URL
-  const supabaseUrl = Deno.env.get('SUPABASE_URL');
-  const solverEndpoint = `${supabaseUrl}/functions/v1/solve-captcha`;
   
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     console.log(`\n=== Attempt ${attempt}/${maxAttempts} for ${request.bench} ===`);
     
     try {
-      const { html, captchaSolution, debugInfo } = await scrapeWithSingleSession(
+      const { html, captchaSolution, error } = await scrapeWithHttpSession(
         baseUrl,
         request.date,
-        request.list_type,
-        FIRECRAWL_API_KEY,
-        solverEndpoint
+        request.list_type
       );
       
-      console.log(`CAPTCHA solution: ${captchaSolution || 'unknown'}`);
-      console.log(`Debug info: ${debugInfo || 'none'}`);
-      
-      if (debugInfo) {
-        console.log(`Script error: ${debugInfo}`);
+      if (error) {
+        console.log(`Scrape error: ${error}`);
         if (attempt === maxAttempts) {
           return {
             success: false,
             entries: [],
-            error: debugInfo,
+            error,
             attempts: attempt,
-            captchaExtracted: false,
-            debugInfo,
+            captchaSolution,
             rawResponse: request.test_mode ? html.substring(0, 5000) : undefined
           };
         }
@@ -319,7 +350,6 @@ async function scrapeCISPortal(request: ScrapeRequest): Promise<{
           success: true,
           entries,
           attempts: attempt,
-          captchaExtracted: true,
           captchaSolution: request.test_mode ? captchaSolution : undefined,
           rawResponse: request.test_mode ? html.substring(0, 5000) : undefined
         };
@@ -335,10 +365,6 @@ async function scrapeCISPortal(request: ScrapeRequest): Promise<{
     } catch (error: unknown) {
       const errMsg = error instanceof Error ? error.message : String(error);
       console.error(`Attempt ${attempt} failed:`, errMsg);
-      
-      if (errMsg.includes('Rate limit') || errMsg.includes('Payment required')) {
-        return { success: false, entries: [], error: errMsg, attempts: attempt };
-      }
       
       if (attempt === maxAttempts) {
         return { success: false, entries: [], error: errMsg, attempts: attempt };
@@ -449,9 +475,7 @@ serve(async (req) => {
         entries_count: result.entries.length,
         entries: test_mode ? result.entries : undefined,
         attempts: result.attempts,
-        captcha_extracted: result.captchaExtracted,
         captcha_solution: result.captchaSolution,
-        debug_info: result.debugInfo,
         raw_response_preview: result.rawResponse
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
