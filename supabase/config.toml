@@ -1,16 +1,16 @@
 project_id = "pwpnnixoscppfzjogcgj"
 
 [functions.simulate-live-board]
-verify_jwt = false
+verify_jwt = true
 
 [functions.auto-match-aliases]
 verify_jwt = false
 
 [functions.sync-live-board]
-verify_jwt = false
+verify_jwt = true
 
 [functions.data-validation]
-verify_jwt = false
+verify_jwt = true
 
 [functions.scrape-causelist]
-verify_jwt = false
+verify_jwt = true
