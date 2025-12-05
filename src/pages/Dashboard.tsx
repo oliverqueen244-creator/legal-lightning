@@ -5,6 +5,7 @@ import { LiveCourtWidget } from '@/components/dashboard/LiveCourtWidget';
 import { CaseTimeEstimator } from '@/components/dashboard/CaseTimeEstimator';
 import { LawyerSearchPanel } from '@/components/dashboard/LawyerSearchPanel';
 import { ScraperStatusWidget } from '@/components/dashboard/ScraperStatusWidget';
+import { CourtMetadataWidget } from '@/components/dashboard/CourtMetadataWidget';
 import { Header } from '@/components/layout/Header';
 import { AuthGuard } from '@/components/layout/AuthGuard';
 import { useDocket } from '@/hooks/useDocket';
@@ -217,6 +218,9 @@ export default function Dashboard() {
                 ) : (
                   <LiveTicker liveBoards={filteredLiveBoards} />
                 )}
+                
+                {/* Court Metadata Widget - Shows active courts */}
+                <CourtMetadataWidget bench={profile?.bench || undefined} />
                 
                 {/* Live Board Simulator for testing */}
                 <LiveBoardSimulator liveBoards={filteredLiveBoards} />
