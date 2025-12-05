@@ -2,18 +2,14 @@ import { useNavigate } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Scale, Clock, AlertTriangle, ChevronRight, SkipForward, Coffee } from 'lucide-react';
-import type { DocketItem, LiveBoardCache } from '@/types/database';
+import { Scale, Clock, AlertTriangle, ChevronRight, SkipForward, Coffee, Ban } from 'lucide-react';
+import type { DocketItem, LiveBoardCache, BoardStatus } from '@/types/database';
 import { cn } from '@/lib/utils';
 import type { AppRole } from '@/hooks/useAuth';
 
-interface ExtendedLiveBoard extends LiveBoardCache {
-  status?: 'hearing' | 'passover' | 'lunch';
-}
-
 interface DocketCardProps {
   item: DocketItem;
-  liveBoard?: ExtendedLiveBoard;
+  liveBoard?: LiveBoardCache;
   userRole?: AppRole | null;
 }
 
@@ -21,17 +17,19 @@ export function DocketCard({ item, liveBoard, userRole }: DocketCardProps) {
   const navigate = useNavigate();
   
   const currentItem = liveBoard?.current_item ?? 0;
-  const status = liveBoard?.status ?? 'hearing';
+  const status: BoardStatus = liveBoard?.status ?? 'hearing';
   const distance = item.item_no - currentItem;
   const isPanic = distance > 0 && distance <= 5 && status === 'hearing';
   const isRunning = distance <= 0 && status === 'hearing';
   const isPassover = status === 'passover';
   const isLunch = status === 'lunch';
+  const isAdjourned = status === 'adjourned';
   const isSupplementary = item.list_type === 'SUPPLEMENTARY';
 
   const getStatusText = () => {
     if (isPassover) return 'SKIPPED';
     if (isLunch) return 'LUNCH BREAK';
+    if (isAdjourned) return 'ADJOURNED';
     if (isRunning) return 'RUNNING NOW';
     if (isPanic) return `${distance} ITEMS AWAY`;
     return `Item #${item.item_no}`;
@@ -40,6 +38,7 @@ export function DocketCard({ item, liveBoard, userRole }: DocketCardProps) {
   const getStatusIcon = () => {
     if (isPassover) return SkipForward;
     if (isLunch) return Coffee;
+    if (isAdjourned) return Ban;
     return Clock;
   };
 
@@ -69,8 +68,9 @@ export function DocketCard({ item, liveBoard, userRole }: DocketCardProps) {
         isRunning && 'border-primary gold-glow',
         isPassover && 'card-passover border-muted',
         isLunch && 'border-court-warning/50 bg-court-warning/5',
-        isSupplementary && !isPanic && !isRunning && !isPassover && !isLunch && 'border-court-warning/50',
-        !isPanic && !isRunning && !isSupplementary && !isPassover && !isLunch && 'border-border hover:border-primary/50'
+        isAdjourned && 'border-muted/50 bg-muted/10 opacity-60',
+        isSupplementary && !isPanic && !isRunning && !isPassover && !isLunch && !isAdjourned && 'border-court-warning/50',
+        !isPanic && !isRunning && !isSupplementary && !isPassover && !isLunch && !isAdjourned && 'border-border hover:border-primary/50'
       )}
       onClick={handleClick}
       onKeyDown={handleKeyDown}
@@ -95,6 +95,12 @@ export function DocketCard({ item, liveBoard, userRole }: DocketCardProps) {
                 <Badge className="flex items-center gap-1 bg-court-warning/20 text-court-warning border-court-warning/30">
                   <Coffee className="h-3 w-3" aria-hidden="true" />
                   LUNCH BREAK
+                </Badge>
+              )}
+              {isAdjourned && (
+                <Badge variant="secondary" className="flex items-center gap-1 bg-muted text-muted-foreground">
+                  <Ban className="h-3 w-3" aria-hidden="true" />
+                  ADJOURNED
                 </Badge>
               )}
               {isPanic && (

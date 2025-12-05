@@ -169,6 +169,38 @@ export type Database = {
           },
         ]
       }
+      lawyer_aliases: {
+        Row: {
+          alias_name: string
+          created_at: string | null
+          id: string
+          is_primary: boolean | null
+          profile_id: string
+        }
+        Insert: {
+          alias_name: string
+          created_at?: string | null
+          id?: string
+          is_primary?: boolean | null
+          profile_id: string
+        }
+        Update: {
+          alias_name?: string
+          created_at?: string | null
+          id?: string
+          is_primary?: boolean | null
+          profile_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lawyer_aliases_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       live_board_cache: {
         Row: {
           court_location: string
@@ -240,23 +272,35 @@ export type Database = {
       }
       profiles: {
         Row: {
+          bar_registration_number: string | null
+          bench: string | null
           created_at: string | null
           full_name: string | null
           id: string
+          is_verified: boolean | null
+          onboarding_completed: boolean | null
           role: string | null
           whatsapp_number: string | null
         }
         Insert: {
+          bar_registration_number?: string | null
+          bench?: string | null
           created_at?: string | null
           full_name?: string | null
           id: string
+          is_verified?: boolean | null
+          onboarding_completed?: boolean | null
           role?: string | null
           whatsapp_number?: string | null
         }
         Update: {
+          bar_registration_number?: string | null
+          bench?: string | null
           created_at?: string | null
           full_name?: string | null
           id?: string
+          is_verified?: boolean | null
+          onboarding_completed?: boolean | null
           role?: string | null
           whatsapp_number?: string | null
         }
@@ -302,6 +346,7 @@ export type Database = {
     }
     Enums: {
       app_role: "SENIOR" | "JUNIOR" | "CLERK" | "ADMIN"
+      board_status: "hearing" | "passover" | "lunch" | "adjourned"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -430,6 +475,7 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["SENIOR", "JUNIOR", "CLERK", "ADMIN"],
+      board_status: ["hearing", "passover", "lunch", "adjourned"],
     },
   },
 } as const

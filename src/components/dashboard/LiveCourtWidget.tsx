@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
-import { Gavel, Clock, Coffee, SkipForward } from 'lucide-react';
+import { Gavel, Clock, Coffee, SkipForward, Ban } from 'lucide-react';
+import type { BoardStatus } from '@/types/database';
 
 interface LiveCourtWidgetProps {
   courtRoom: string;
   currentItem: number;
   myItemNumber?: number;
-  status?: 'hearing' | 'passover' | 'lunch';
+  status?: BoardStatus;
   courtLocation?: string;
 }
 
@@ -51,6 +52,13 @@ export function LiveCourtWidget({
           label: 'LUNCH BREAK',
           bgClass: 'bg-court-warning/10',
           borderClass: 'border-court-warning/30',
+        };
+      case 'adjourned':
+        return {
+          icon: Ban,
+          label: 'ADJOURNED',
+          bgClass: 'bg-muted/30',
+          borderClass: 'border-muted/50',
         };
       default:
         return {
@@ -106,6 +114,7 @@ export function LiveCourtWidget({
             text-xs font-semibold px-3 py-1
             ${status === 'passover' ? 'bg-muted text-muted-foreground' : ''}
             ${status === 'lunch' ? 'bg-court-warning/20 text-court-warning' : ''}
+            ${status === 'adjourned' ? 'bg-muted/50 text-muted-foreground' : ''}
           `}
         >
           {statusConfig.label}
