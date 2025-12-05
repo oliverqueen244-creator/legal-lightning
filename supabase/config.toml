@@ -14,3 +14,6 @@ verify_jwt = true
 
 [functions.scrape-causelist]
 verify_jwt = false
+
+[functions.scrape-cis-portal]
+verify_jwt = false
