@@ -29,244 +29,6 @@ interface CauseListEntry {
   court_room_no: string;
 }
 
-// Use Firecrawl to render page with JavaScript (CAPTCHA is dynamically loaded)
-async function fetchRenderedPage(baseUrl: string, firecrawlApiKey: string): Promise<{ html: string; screenshot?: string }> {
-  console.log(`Fetching rendered page via Firecrawl: ${baseUrl}`);
-  
-  const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${firecrawlApiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      url: baseUrl,
-      formats: ['html', 'screenshot'],
-      waitFor: 5000, // Wait for JavaScript to load CAPTCHA
-      timeout: 30000
-    }),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error('Firecrawl error:', response.status, errorText);
-    throw new Error(`Firecrawl error: ${response.status}`);
-  }
-
-  const data = await response.json();
-  const html = data.data?.html || '';
-  const screenshot = data.data?.screenshot || '';
-  
-  console.log(`Firecrawl returned HTML (${html.length} chars), screenshot: ${screenshot ? 'yes' : 'no'}`);
-  
-  return { html, screenshot };
-}
-
-// Convert screenshot URL to base64 for Gemini
-async function convertScreenshotToBase64(screenshotUrl: string): Promise<string> {
-  // If already base64, return as-is
-  if (screenshotUrl.startsWith('data:')) {
-    return screenshotUrl;
-  }
-  
-  console.log(`Fetching screenshot URL: ${screenshotUrl.substring(0, 100)}...`);
-  
-  const response = await fetch(screenshotUrl);
-  if (!response.ok) {
-    throw new Error(`Failed to fetch screenshot: ${response.status}`);
-  }
-  
-  const arrayBuffer = await response.arrayBuffer();
-  const uint8Array = new Uint8Array(arrayBuffer);
-  let binary = '';
-  for (let i = 0; i < uint8Array.length; i++) {
-    binary += String.fromCharCode(uint8Array[i]);
-  }
-  const base64 = btoa(binary);
-  
-  console.log(`Converted screenshot to base64 (${base64.length} chars)`);
-  
-  return `data:image/png;base64,${base64}`;
-}
-
-// Extract base64 CAPTCHA from rendered HTML
-function extractCaptchaBase64(html: string): string | null {
-  console.log(`Searching for CAPTCHA in HTML (${html.length} chars)`);
-  
-  // Look for img tag with id="captcha" and extract src
-  const imgTagMatch = html.match(/<img[^>]*id=["']?captcha["']?[^>]*>/i);
-  if (imgTagMatch) {
-    console.log('Found img tag with captcha id:', imgTagMatch[0].substring(0, 150));
-    const srcMatch = imgTagMatch[0].match(/src=["'](data:image[^"']+)["']/i);
-    if (srcMatch) {
-      console.log(`Extracted CAPTCHA base64 (${srcMatch[1].length} chars)`);
-      return srcMatch[1];
-    }
-  }
-  
-  // Search for any base64 PNG images
-  const base64Pattern = /data:image\/png;base64,[A-Za-z0-9+\/=]+/g;
-  const allBase64 = html.match(base64Pattern);
-  if (allBase64 && allBase64.length > 0) {
-    console.log(`Found ${allBase64.length} base64 images`);
-    // Return the one near "captcha" text
-    for (const b64 of allBase64) {
-      const idx = html.indexOf(b64);
-      const context = html.substring(Math.max(0, idx - 200), Math.min(html.length, idx + b64.length + 200));
-      if (context.toLowerCase().includes('captcha')) {
-        console.log('Found CAPTCHA base64 near captcha text');
-        return b64;
-      }
-    }
-    // Return first one as fallback
-    console.log('Returning first base64 image');
-    return allBase64[0];
-  }
-  
-  console.log('Could not find base64 CAPTCHA in HTML');
-  return null;
-}
-
-// Solve CAPTCHA using Gemini - can accept either base64 CAPTCHA image or full page screenshot
-async function solveCaptchaWithGemini(imageData: string, isFullScreenshot: boolean = false): Promise<string> {
-  const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-  
-  if (!LOVABLE_API_KEY) {
-    throw new Error('LOVABLE_API_KEY is not configured');
-  }
-  
-  console.log(`Sending ${isFullScreenshot ? 'screenshot' : 'CAPTCHA'} to Gemini (${imageData.length} chars)...`);
-  
-  const prompt = isFullScreenshot 
-    ? `This is a screenshot of a court cause list form page. 
-Find the CAPTCHA image near the "Enter Verification Code" label.
-The CAPTCHA contains ONLY English letters (A-Z) and numbers (0-9) - typically 5-6 characters.
-
-IMPORTANT RULES:
-- Return ONLY letters (A-Z) and numbers (0-9)
-- Do NOT include any special symbols like ^, -, _, *, @, #, etc.
-- Do NOT include spaces, quotes, periods, or any punctuation
-- Do NOT include any explanation or text before/after the answer
-
-Just output the alphanumeric characters you see in the CAPTCHA.`
-    : `This is a CAPTCHA image from a court website.
-The CAPTCHA contains ONLY English letters (A-Z) and numbers (0-9).
-There are NO special characters, symbols, or punctuation marks in the CAPTCHA.
-
-IMPORTANT RULES:
-1. Look at the characters carefully
-2. Identify ONLY letters (A-Z) and numbers (0-9)
-3. Do NOT include any symbols like ^, -, _, *, @, #, etc.
-4. Do NOT include spaces, quotes, periods, or any punctuation
-5. Do NOT include any explanation
-
-Return ONLY the alphanumeric characters you see.`;
-  
-  const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      model: 'google/gemini-2.5-flash',
-      messages: [{
-        role: 'user',
-        content: [
-          { type: 'text', text: prompt },
-          { type: 'image_url', image_url: { url: imageData } }
-        ]
-      }],
-      max_tokens: 50
-    })
-  });
-  
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error('Gemini API error:', response.status, errorText);
-    
-    if (response.status === 429) throw new Error('Rate limit exceeded. Please try again later.');
-    if (response.status === 402) throw new Error('Payment required. Please add credits.');
-    throw new Error(`Gemini API error: ${response.status}`);
-  }
-  
-  const data = await response.json();
-  const rawSolution = data.choices?.[0]?.message?.content?.trim() || '';
-  
-  // Remove ALL non-alphanumeric characters and convert to uppercase
-  const cleanSolution = rawSolution.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
-  
-  console.log(`Gemini raw response: "${rawSolution}"`);
-  console.log(`Cleaned CAPTCHA solution: "${cleanSolution}"`);
-  
-  return cleanSolution;
-}
-
-// Use Firecrawl to fill form and submit
-async function submitFormWithFirecrawl(
-  baseUrl: string,
-  date: string,
-  listType: string,
-  captchaSolution: string,
-  firecrawlApiKey: string
-): Promise<string> {
-  console.log(`Submitting form via Firecrawl: date=${date}, listType=${listType}, captcha=${captchaSolution}`);
-  
-  const fillFormScript = `
-    // Set date
-    const dateInput = document.getElementById('causelstdt');
-    if (dateInput) dateInput.value = '${date}';
-    
-    // Set list type
-    const listTypeSelect = document.getElementById('causelisttype');
-    if (listTypeSelect) listTypeSelect.value = '${listType}';
-    
-    // Set format to HTML
-    const formatRadio = document.getElementById('formatradio1');
-    if (formatRadio) formatRadio.checked = true;
-    
-    // Set CAPTCHA
-    const captchaInput = document.getElementById('txtCaptcha');
-    if (captchaInput) captchaInput.value = '${captchaSolution}';
-    
-    // Trigger events
-    if (listTypeSelect) listTypeSelect.dispatchEvent(new Event('change', { bubbles: true }));
-  `;
-  
-  const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${firecrawlApiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      url: baseUrl,
-      formats: ['html', 'markdown'],
-      waitFor: 3000,
-      timeout: 60000,
-      actions: [
-        { type: 'wait', milliseconds: 3000 },
-        { type: 'executeJavascript', script: fillFormScript },
-        { type: 'wait', milliseconds: 1000 },
-        { type: 'click', selector: '#btnViewCauseList' },
-        { type: 'wait', milliseconds: 8000 },
-      ],
-    }),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error('Firecrawl submit error:', response.status, errorText);
-    throw new Error(`Form submission failed: ${response.status}`);
-  }
-
-  const data = await response.json();
-  const html = data.data?.html || data.data?.markdown || '';
-  
-  console.log(`Form submitted, got response (${html.length} chars)`);
-  return html;
-}
-
 // Parse cause list HTML to extract entries
 function parseCauseListHtml(html: string): CauseListEntry[] {
   const entries: CauseListEntry[] = [];
@@ -279,7 +41,7 @@ function parseCauseListHtml(html: string): CauseListEntry[] {
   }
   
   if (html.includes('No Record Found') || html.includes('no record found') || html.includes('No Data')) {
-    console.log('No records found');
+    console.log('No records found for this date');
     return [];
   }
   
@@ -344,6 +106,128 @@ function parseCauseListHtml(html: string): CauseListEntry[] {
   return entries;
 }
 
+// Single Firecrawl call that: loads page, solves CAPTCHA via external API, fills form, submits
+async function scrapeWithSingleSession(
+  baseUrl: string,
+  date: string,
+  listType: string,
+  firecrawlApiKey: string,
+  solverEndpoint: string
+): Promise<{ html: string; captchaSolution?: string; debugInfo?: string }> {
+  console.log(`Single-session scrape: ${baseUrl}, date=${date}, listType=${listType}`);
+  
+  // JavaScript that runs in the browser to:
+  // 1. Extract CAPTCHA base64
+  // 2. Call our solver endpoint
+  // 3. Fill form with solution
+  // 4. Submit form
+  const solveAndSubmitScript = `
+    (async function() {
+      try {
+        // Get CAPTCHA image base64
+        const captchaImg = document.getElementById('captcha');
+        if (!captchaImg) {
+          window.__scraperError = 'CAPTCHA image not found';
+          return;
+        }
+        
+        const captchaBase64 = captchaImg.src;
+        if (!captchaBase64 || !captchaBase64.startsWith('data:')) {
+          window.__scraperError = 'CAPTCHA not loaded as base64';
+          return;
+        }
+        
+        window.__captchaExtracted = captchaBase64.substring(0, 100);
+        
+        // Call our solver endpoint
+        const response = await fetch('${solverEndpoint}', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ image: captchaBase64 })
+        });
+        
+        if (!response.ok) {
+          window.__scraperError = 'Solver API error: ' + response.status;
+          return;
+        }
+        
+        const { solution, error } = await response.json();
+        if (error || !solution) {
+          window.__scraperError = 'Solver returned error: ' + (error || 'no solution');
+          return;
+        }
+        
+        window.__captchaSolution = solution;
+        
+        // Fill form
+        const dateInput = document.getElementById('causelstdt');
+        if (dateInput) dateInput.value = '${date}';
+        
+        const listTypeSelect = document.getElementById('causelisttype');
+        if (listTypeSelect) {
+          listTypeSelect.value = '${listType}';
+          listTypeSelect.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        
+        const formatRadio = document.getElementById('formatradio1');
+        if (formatRadio) formatRadio.checked = true;
+        
+        const captchaInput = document.getElementById('txtCaptcha');
+        if (captchaInput) captchaInput.value = solution;
+        
+        window.__formFilled = true;
+        
+      } catch (err) {
+        window.__scraperError = 'Script error: ' + err.message;
+      }
+    })();
+  `;
+  
+  const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${firecrawlApiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      url: baseUrl,
+      formats: ['html'],
+      waitFor: 5000,
+      timeout: 90000,
+      actions: [
+        { type: 'wait', milliseconds: 3000 },
+        { type: 'executeJavascript', script: solveAndSubmitScript },
+        { type: 'wait', milliseconds: 5000 }, // Wait for API call to complete
+        { type: 'click', selector: '#btnViewCauseList' },
+        { type: 'wait', milliseconds: 8000 }, // Wait for results to load
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error('Firecrawl error:', response.status, errorText);
+    throw new Error(`Firecrawl error: ${response.status}`);
+  }
+
+  const data = await response.json();
+  const html = data.data?.html || '';
+  
+  console.log(`Firecrawl returned HTML (${html.length} chars)`);
+  
+  // Try to extract debug info from the page
+  let captchaSolution: string | undefined;
+  let debugInfo: string | undefined;
+  
+  const solutionMatch = html.match(/window\.__captchaSolution\s*=\s*['"]([^'"]+)['"]/);
+  if (solutionMatch) captchaSolution = solutionMatch[1];
+  
+  const errorMatch = html.match(/window\.__scraperError\s*=\s*['"]([^'"]+)['"]/);
+  if (errorMatch) debugInfo = errorMatch[1];
+  
+  return { html, captchaSolution, debugInfo };
+}
+
 // Main scrape function
 async function scrapeCISPortal(request: ScrapeRequest): Promise<{
   success: boolean;
@@ -353,6 +237,7 @@ async function scrapeCISPortal(request: ScrapeRequest): Promise<{
   rawResponse?: string;
   captchaExtracted?: boolean;
   captchaSolution?: string;
+  debugInfo?: string;
 }> {
   const baseUrl = CIS_URLS[request.bench];
   const maxAttempts = 3;
@@ -362,59 +247,43 @@ async function scrapeCISPortal(request: ScrapeRequest): Promise<{
     return { success: false, entries: [], error: 'FIRECRAWL_API_KEY not configured', attempts: 0 };
   }
   
+  // Get our solver endpoint URL
+  const supabaseUrl = Deno.env.get('SUPABASE_URL');
+  const solverEndpoint = `${supabaseUrl}/functions/v1/solve-captcha`;
+  
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     console.log(`\n=== Attempt ${attempt}/${maxAttempts} for ${request.bench} ===`);
     
     try {
-      // Step 1: Fetch rendered page with Firecrawl (JS loaded)
-      const { html: pageHtml, screenshot } = await fetchRenderedPage(baseUrl, FIRECRAWL_API_KEY);
+      const { html, captchaSolution, debugInfo } = await scrapeWithSingleSession(
+        baseUrl,
+        request.date,
+        request.list_type,
+        FIRECRAWL_API_KEY,
+        solverEndpoint
+      );
       
-      // Step 2: Try to extract CAPTCHA from HTML first
-      let captchaBase64 = extractCaptchaBase64(pageHtml);
-      let useScreenshot = false;
+      console.log(`CAPTCHA solution: ${captchaSolution || 'unknown'}`);
+      console.log(`Debug info: ${debugInfo || 'none'}`);
       
-      // Step 3: If no CAPTCHA in HTML, use screenshot
-      if (!captchaBase64 && screenshot) {
-        console.log('No CAPTCHA in HTML, using screenshot for Gemini');
-        captchaBase64 = await convertScreenshotToBase64(screenshot);
-        useScreenshot = true;
-      }
-      
-      if (!captchaBase64) {
-        console.log('Failed to get CAPTCHA image');
-        if (request.test_mode) {
+      if (debugInfo) {
+        console.log(`Script error: ${debugInfo}`);
+        if (attempt === maxAttempts) {
           return {
             success: false,
             entries: [],
-            error: 'Could not extract CAPTCHA',
+            error: debugInfo,
             attempts: attempt,
             captchaExtracted: false,
-            rawResponse: pageHtml.substring(0, 3000)
+            debugInfo,
+            rawResponse: request.test_mode ? html.substring(0, 5000) : undefined
           };
         }
         continue;
       }
       
-      // Step 4: Solve CAPTCHA with Gemini
-      const captchaSolution = await solveCaptchaWithGemini(captchaBase64, useScreenshot);
-      
-      if (!captchaSolution || captchaSolution.length < 3 || captchaSolution.length > 10) {
-        console.log(`Invalid CAPTCHA solution: "${captchaSolution}"`);
-        continue;
-      }
-      
-      // Step 5: Submit form
-      const resultHtml = await submitFormWithFirecrawl(
-        baseUrl,
-        request.date,
-        request.list_type,
-        captchaSolution,
-        FIRECRAWL_API_KEY
-      );
-      
-      // Step 6: Parse results
       try {
-        const entries = parseCauseListHtml(resultHtml);
+        const entries = parseCauseListHtml(html);
         
         return {
           success: true,
@@ -422,7 +291,7 @@ async function scrapeCISPortal(request: ScrapeRequest): Promise<{
           attempts: attempt,
           captchaExtracted: true,
           captchaSolution: request.test_mode ? captchaSolution : undefined,
-          rawResponse: request.test_mode ? resultHtml.substring(0, 5000) : undefined
+          rawResponse: request.test_mode ? html.substring(0, 5000) : undefined
         };
       } catch (parseError: unknown) {
         const errMsg = parseError instanceof Error ? parseError.message : String(parseError);
@@ -526,6 +395,21 @@ serve(async (req) => {
       });
     }
     
+    // Log failed attempts
+    if (!result.success) {
+      const supabaseUrl = Deno.env.get('SUPABASE_URL');
+      const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+      if (supabaseUrl && supabaseKey) {
+        const supabase = createClient(supabaseUrl, supabaseKey);
+        await supabase.from('scraper_logs').insert({
+          bench,
+          status: 'error',
+          error_message: result.error?.substring(0, 500),
+          list_type: list_type === 'D' ? 'DAILY' : 'SUPPLEMENTARY'
+        });
+      }
+    }
+    
     return new Response(
       JSON.stringify({
         success: result.success,
@@ -534,19 +418,19 @@ serve(async (req) => {
           : result.error,
         entries_count: result.entries.length,
         entries: test_mode ? result.entries : undefined,
-        raw_response_preview: result.rawResponse,
+        attempts: result.attempts,
         captcha_extracted: result.captchaExtracted,
         captcha_solution: result.captchaSolution,
-        attempts: result.attempts
+        debug_info: result.debugInfo,
+        raw_response_preview: result.rawResponse
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
     
-  } catch (error: unknown) {
-    const errMsg = error instanceof Error ? error.message : String(error);
-    console.error('Edge function error:', errMsg);
+  } catch (error) {
+    console.error('Handler error:', error);
     return new Response(
-      JSON.stringify({ success: false, error: errMsg }),
+      JSON.stringify({ success: false, error: error instanceof Error ? error.message : 'Unknown error' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
