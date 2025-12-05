@@ -136,32 +136,39 @@ async function scrapeInSingleSession(
     return { html: '', success: false, error: 'CAPTCHA solve failed' };
   }
   
-  // Step 3: Submit form with CAPTCHA using same session cookies
-  // The key insight: we need to maintain cookies between requests
-  // Browserless doesn't expose cookies directly, so we'll make a second request
-  // but include addScriptTag to fill and submit the form, then wait for results
-  
+  // Step 3: Submit form with CAPTCHA
+  // Use /screenshot endpoint with html:true - it waits for page to fully render after scripts
   console.log(`[scrape-causelist] Step 3: Submitting form...`);
   
-  // Use addScriptTag to inject and execute form submission
   const formScript = `
-    document.querySelector('#causelstdt').value = '${formattedDate}';
-    document.querySelector('#causelisttype').value = '${listType}';
-    ${lawyerName ? `document.querySelector('#lawyername').value = '${lawyerName}';` : ''}
-    document.querySelector('#formatradio1').checked = true;
-    document.querySelector('#txtCaptcha').value = '${captchaSolution}';
-    document.querySelector('#btnSearchCauseList').click();
+    (function() {
+      document.querySelector('#causelstdt').value = '${formattedDate}';
+      document.querySelector('#causelisttype').value = '${listType}';
+      ${lawyerName ? `document.querySelector('#lawyername').value = '${lawyerName}';` : ''}
+      document.querySelector('#formatradio1').checked = true;
+      document.querySelector('#txtCaptcha').value = '${captchaSolution}';
+      
+      // Trigger change events
+      document.querySelector('#causelisttype').dispatchEvent(new Event('change'));
+      
+      // Click search after a small delay
+      setTimeout(function() {
+        document.querySelector('#btnSearchCauseList').click();
+      }, 500);
+    })();
   `;
   
-  const submitResponse = await fetch(`https://chrome.browserless.io/content?token=${browserlessKey}`, {
+  const submitResponse = await fetch(`https://chrome.browserless.io/screenshot?token=${browserlessKey}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       url: cisUrl,
-      waitForSelector: { selector: '#captcha', timeout: 20000 },
+      options: { fullPage: true, type: 'png' },
       gotoOptions: { waitUntil: 'networkidle2', timeout: 30000 },
+      waitForSelector: { selector: '#captcha', timeout: 20000 },
       addScriptTag: [{ content: formScript }],
-      waitForTimeout: 8000, // Wait after script execution for AJAX
+      waitForTimeout: 10000, // Wait 10s for AJAX results
+      html: true, // Return HTML along with screenshot
     }),
   });
 
@@ -171,14 +178,12 @@ async function scrapeInSingleSession(
     return { html: '', success: false, captchaSolution, error: `Form submission failed: ${submitResponse.status}` };
   }
 
-  const resultHtml = await submitResponse.text();
+  // Response is JSON with screenshot and html
+  const result = await submitResponse.json();
+  const resultHtml = result.html || '';
   console.log(`[scrape-causelist] Got result: ${resultHtml.length} chars`);
   
-  // The issue: addScriptTag runs AFTER content is captured
-  // So we're getting the same form page, not results
-  // This approach won't work for AJAX-based forms
-  
-  // Check for results or errors
+  // Check for CAPTCHA errors
   const lowerHtml = resultHtml.toLowerCase();
   if (lowerHtml.includes('invalid captcha') || lowerHtml.includes('wrong captcha')) {
     return { html: resultHtml, success: false, captchaSolution, error: 'Invalid CAPTCHA' };
