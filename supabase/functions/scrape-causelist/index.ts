@@ -57,232 +57,156 @@ function formatDateForForm(dateStr: string): string {
   return `${day}/${month}/${year}`;
 }
 
-// Call solve-captcha function
-async function solveCaptcha(imageData: string, supabaseUrl: string, supabaseKey: string): Promise<string | null> {
-  console.log(`[scrape-causelist] Solving CAPTCHA...`);
-  
-  try {
-    const response = await fetch(`${supabaseUrl}/functions/v1/solve-captcha`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${supabaseKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ image: imageData }),
-    });
-
-    if (!response.ok) {
-      console.error(`[scrape-causelist] CAPTCHA solve failed: ${response.status}`);
-      return null;
-    }
-
-    const data = await response.json();
-    console.log(`[scrape-causelist] CAPTCHA solution: ${data.solution}`);
-    return data.solution;
-  } catch (error) {
-    console.error('[scrape-causelist] CAPTCHA solve error:', error);
-    return null;
-  }
-}
-
-// Step 1: Get initial page - extract CAPTCHA and ASP.NET ViewState
-async function getInitialPage(
-  cisUrl: string,
-  browserlessKey: string
-): Promise<{ html: string; captchaImage: string | null; viewState: string | null; eventValidation: string | null; error?: string }> {
-  console.log(`[scrape-causelist] Getting initial page...`);
-  
-  // Script to extract CAPTCHA and ASP.NET hidden fields
-  const extractScript = `
-    (function() {
-      var captchaEl = document.querySelector('#captcha');
-      var viewStateEl = document.querySelector('#__VIEWSTATE');
-      var eventValidationEl = document.querySelector('#__EVENTVALIDATION');
-      
-      var marker = document.createElement('div');
-      marker.id = '__extracted_data__';
-      marker.setAttribute('data-captcha', captchaEl ? captchaEl.src : '');
-      marker.setAttribute('data-viewstate', viewStateEl ? viewStateEl.value : '');
-      marker.setAttribute('data-eventvalidation', eventValidationEl ? eventValidationEl.value : '');
-      document.body.appendChild(marker);
-    })();
-  `;
-  
-  const response = await fetch(`https://chrome.browserless.io/content?token=${browserlessKey}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      url: cisUrl,
-      gotoOptions: { waitUntil: 'networkidle2', timeout: 30000 },
-      waitForSelector: { selector: '#captcha', timeout: 20000 },
-      addScriptTag: [{ content: extractScript }],
-      waitForTimeout: 1000,
-    }),
-  });
-
-  if (!response.ok) {
-    const error = await response.text();
-    console.error(`[scrape-causelist] Initial page failed: ${response.status} - ${error}`);
-    return { html: '', captchaImage: null, viewState: null, eventValidation: null, error: `Initial page failed: ${response.status}` };
-  }
-
-  const html = await response.text();
-  console.log(`[scrape-causelist] Got page: ${html.length} chars`);
-  
-  // Extract data from marker
-  const markerMatch = html.match(/id="__extracted_data__"[^>]*data-captcha="([^"]*)"[^>]*data-viewstate="([^"]*)"[^>]*data-eventvalidation="([^"]*)"/);
-  let captchaImage: string | null = null;
-  let viewState: string | null = null;
-  let eventValidation: string | null = null;
-  
-  if (markerMatch) {
-    captchaImage = markerMatch[1] || null;
-    viewState = markerMatch[2] || null;
-    eventValidation = markerMatch[3] || null;
-  }
-  
-  // Fallback: extract CAPTCHA from HTML directly
-  if (!captchaImage) {
-    const captchaMatch = html.match(/<img[^>]*src=["'](data:image\/[^"']+)["'][^>]*id=["']captcha["']/i) ||
-                         html.match(/<img[^>]*id=["']captcha["'][^>]*src=["'](data:image\/[^"']+)["']/i);
-    if (captchaMatch) {
-      captchaImage = captchaMatch[1];
-    }
-  }
-  
-  // Fallback: extract ViewState from HTML
-  if (!viewState) {
-    const vsMatch = html.match(/<input[^>]*id="__VIEWSTATE"[^>]*value="([^"]*)"/i) ||
-                    html.match(/<input[^>]*name="__VIEWSTATE"[^>]*value="([^"]*)"/i);
-    if (vsMatch) {
-      viewState = vsMatch[1];
-    }
-  }
-  
-  // Fallback: extract EventValidation from HTML
-  if (!eventValidation) {
-    const evMatch = html.match(/<input[^>]*id="__EVENTVALIDATION"[^>]*value="([^"]*)"/i) ||
-                    html.match(/<input[^>]*name="__EVENTVALIDATION"[^>]*value="([^"]*)"/i);
-    if (evMatch) {
-      eventValidation = evMatch[1];
-    }
-  }
-  
-  console.log(`[scrape-causelist] CAPTCHA: ${captchaImage ? 'found' : 'not found'}, ViewState: ${viewState ? viewState.length + ' chars' : 'not found'}, EventValidation: ${eventValidation ? eventValidation.length + ' chars' : 'not found'}`);
-  
-  return { html, captchaImage, viewState, eventValidation };
-}
-
-// Step 2: Submit form via direct POST with ViewState (ASP.NET stateless approach)
-async function submitFormViaPost(
-  cisUrl: string,
-  viewState: string,
-  eventValidation: string | null,
-  formattedDate: string,
-  listType: string,
-  captchaSolution: string,
-  lawyerName?: string
-): Promise<{ html: string; success: boolean; error?: string }> {
-  console.log(`[scrape-causelist] Submitting form via POST...`);
-  
-  // Build form data - this is what ASP.NET expects
-  const formData = new URLSearchParams();
-  formData.append('__VIEWSTATE', viewState);
-  if (eventValidation) {
-    formData.append('__EVENTVALIDATION', eventValidation);
-  }
-  formData.append('causelstdt', formattedDate);
-  formData.append('causelisttype', listType);
-  formData.append('txtCaptcha', captchaSolution);
-  formData.append('formatradio', 'formatradio1'); // HTML format
-  formData.append('btnSearchCauseList', 'Search');
-  if (lawyerName) {
-    formData.append('lawyername', lawyerName);
-  }
-  
-  console.log(`[scrape-causelist] POST data: date=${formattedDate}, type=${listType}, captcha=${captchaSolution}`);
-  
-  try {
-    const response = await fetch(cisUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.5',
-        'Origin': new URL(cisUrl).origin,
-        'Referer': cisUrl,
-      },
-      body: formData.toString(),
-    });
-
-    if (!response.ok) {
-      console.error(`[scrape-causelist] POST failed: ${response.status}`);
-      return { html: '', success: false, error: `POST failed: ${response.status}` };
-    }
-
-    const html = await response.text();
-    console.log(`[scrape-causelist] Got POST response: ${html.length} chars`);
-    
-    // Check for errors
-    const lowerHtml = html.toLowerCase();
-    if (lowerHtml.includes('invalid captcha') || lowerHtml.includes('wrong captcha')) {
-      return { html, success: false, error: 'Invalid CAPTCHA' };
-    }
-    
-    return { html, success: true };
-  } catch (error) {
-    console.error(`[scrape-causelist] POST error:`, error);
-    return { html: '', success: false, error: `POST error: ${error}` };
-  }
-}
-
-// Main scrape function
-async function scrapeWithViewState(
+// Use BrowserQL for full automation including CAPTCHA solving
+async function scrapeWithBrowserQL(
   cisUrl: string,
   browserlessKey: string,
   formattedDate: string,
   listType: string,
-  lawyerName: string | undefined,
-  supabaseUrl: string,
-  supabaseKey: string
-): Promise<{ html: string; success: boolean; captchaSolution?: string; error?: string }> {
-  console.log(`[scrape-causelist] Starting ViewState-based scrape...`);
+  lawyerName?: string
+): Promise<{ html: string; success: boolean; captchaSolved?: boolean; error?: string }> {
+  console.log(`[scrape-causelist] Starting BrowserQL scrape...`);
+  console.log(`[scrape-causelist] URL: ${cisUrl}`);
+  console.log(`[scrape-causelist] Date: ${formattedDate}, Type: ${listType}, Lawyer: ${lawyerName || 'none'}`);
   
-  // Step 1: Get initial page with CAPTCHA and ViewState
-  const initial = await getInitialPage(cisUrl, browserlessKey);
+  // Build BrowserQL mutation
+  const lawyerTypeStep = lawyerName ? `
+    fillLawyer: type(
+      selector: "#lawyername"
+      text: "${lawyerName}"
+    ) {
+      time
+    }
+  ` : '';
   
-  if (initial.error) {
-    return { html: '', success: false, error: initial.error };
+  const bqlQuery = `
+    mutation ScrapeCauseList {
+      goto(url: "${cisUrl}", waitUntil: networkIdle) {
+        status
+        time
+      }
+      
+      fillDate: type(
+        selector: "#causelstdt"
+        text: "${formattedDate}"
+      ) {
+        time
+      }
+      
+      selectListType: evaluate(
+        content: "document.querySelector('#causelisttype').value = '${listType}'; document.querySelector('#causelisttype').dispatchEvent(new Event('change', {bubbles: true}));"
+      ) {
+        time
+      }
+      
+      ${lawyerTypeStep}
+      
+      selectHtmlFormat: click(
+        selector: "#formatradio1"
+      ) {
+        time
+      }
+      
+      solveCaptcha: solveImageCaptcha(
+        captchaSelector: "#captcha"
+        inputSelector: "#txtCaptcha"
+        timeout: 30000
+      ) {
+        found
+        solved
+        time
+        token
+      }
+      
+      waitBeforeSubmit: waitForTimeout(time: 500) {
+        time
+      }
+      
+      submitForm: click(
+        selector: "#btnSearchCauseList"
+      ) {
+        time
+      }
+      
+      waitForResults: waitForTimeout(time: 8000) {
+        time
+      }
+      
+      getHtml: html {
+        html
+      }
+    }
+  `;
+  
+  console.log(`[scrape-causelist] Executing BrowserQL query...`);
+  
+  try {
+    // Use the correct BrowserQL endpoint
+    const endpoint = `https://chrome.browserless.io/chromium/bql?token=${browserlessKey}`;
+    console.log(`[scrape-causelist] Endpoint: ${endpoint}`);
+    
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        query: bqlQuery,
+      }),
+    });
+    
+    const responseText = await response.text();
+    console.log(`[scrape-causelist] Response status: ${response.status}`);
+    console.log(`[scrape-causelist] Response preview: ${responseText.substring(0, 500)}`);
+    
+    if (!response.ok) {
+      console.error(`[scrape-causelist] BrowserQL request failed: ${response.status}`);
+      return { html: '', success: false, error: `BrowserQL failed: ${response.status} - ${responseText.substring(0, 200)}` };
+    }
+    
+    let result;
+    try {
+      result = JSON.parse(responseText);
+    } catch (e) {
+      console.error(`[scrape-causelist] Failed to parse response as JSON`);
+      return { html: '', success: false, error: `Invalid JSON response: ${responseText.substring(0, 100)}` };
+    }
+    
+    // Check for GraphQL errors
+    if (result.errors && result.errors.length > 0) {
+      const errorMsg = result.errors.map((e: any) => e.message).join(', ');
+      console.error(`[scrape-causelist] BrowserQL errors: ${errorMsg}`);
+      return { html: '', success: false, error: `BrowserQL errors: ${errorMsg}` };
+    }
+    
+    console.log(`[scrape-causelist] Response structure:`, JSON.stringify(Object.keys(result)));
+    console.log(`[scrape-causelist] Data keys:`, result.data ? Object.keys(result.data) : 'no data');
+    
+    // Get CAPTCHA result
+    const captchaResult = result.data?.solveCaptcha;
+    const captchaSolved = captchaResult?.solved === true;
+    console.log(`[scrape-causelist] CAPTCHA found: ${captchaResult?.found}, solved: ${captchaSolved}`);
+    
+    // Get HTML from response
+    const html = result.data?.getHtml?.html || '';
+    console.log(`[scrape-causelist] Got HTML: ${html.length} chars`);
+    
+    // Check for errors in HTML
+    const lowerHtml = html.toLowerCase();
+    if (lowerHtml.includes('invalid captcha') || lowerHtml.includes('wrong captcha')) {
+      return { html, success: false, captchaSolved, error: 'Invalid CAPTCHA - BrowserQL solution was rejected' };
+    }
+    
+    if (lowerHtml.includes('no record found') || lowerHtml.includes('no data')) {
+      return { html, success: true, captchaSolved, error: 'No records found for this date' };
+    }
+    
+    return { html, success: true, captchaSolved };
+    
+  } catch (error) {
+    console.error(`[scrape-causelist] BrowserQL error:`, error);
+    return { html: '', success: false, error: `BrowserQL error: ${error}` };
   }
-  
-  if (!initial.captchaImage) {
-    console.error(`[scrape-causelist] CAPTCHA not found in initial page`);
-    return { html: initial.html, success: false, error: 'CAPTCHA image not found' };
-  }
-  
-  if (!initial.viewState) {
-    console.error(`[scrape-causelist] ViewState not found - cannot submit form`);
-    return { html: initial.html, success: false, error: 'ViewState not found' };
-  }
-  
-  // Step 2: Solve CAPTCHA
-  const captchaSolution = await solveCaptcha(initial.captchaImage, supabaseUrl, supabaseKey);
-  if (!captchaSolution) {
-    return { html: '', success: false, error: 'CAPTCHA solve failed' };
-  }
-  
-  // Step 3: Submit form via POST with ViewState
-  const result = await submitFormViaPost(
-    cisUrl,
-    initial.viewState,
-    initial.eventValidation,
-    formattedDate,
-    listType,
-    captchaSolution,
-    lawyerName
-  );
-  
-  return { ...result, captchaSolution };
 }
 
 // Parse cause list HTML to extract entries
@@ -408,6 +332,7 @@ serve(async (req) => {
     console.log(`[scrape-causelist] Action: ${action}, Bench: ${bench}`);
     console.log(`[scrape-causelist] Date: ${targetDate} (${formattedDate}), ListType: ${list_type}`);
     console.log(`[scrape-causelist] Lawyer: ${lawyer_name || 'none'}`);
+    console.log(`[scrape-causelist] Using BrowserQL with solveImageCaptcha`);
     console.log(`[scrape-causelist] ========================================`);
 
     if (!browserlessKey) {
@@ -427,21 +352,19 @@ serve(async (req) => {
 
     // Scrape with retries
     const maxAttempts = 2;
-    let lastResult: { html: string; success: boolean; captchaSolution?: string; error?: string } = {
+    let lastResult: { html: string; success: boolean; captchaSolved?: boolean; error?: string } = {
       html: '', success: false, error: 'No attempts made'
     };
     
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       console.log(`[scrape-causelist] === Attempt ${attempt}/${maxAttempts} ===`);
       
-      lastResult = await scrapeWithViewState(
+      lastResult = await scrapeWithBrowserQL(
         cisUrl,
         browserlessKey,
         formattedDate,
         list_type,
-        lawyer_name,
-        supabaseUrl,
-        supabaseKey
+        lawyer_name
       );
       
       if (lastResult.success) break;
@@ -478,7 +401,7 @@ serve(async (req) => {
         entries,
         entries_count: entries.length,
         inserted,
-        captcha_solution: lastResult.captchaSolution,
+        captcha_solved: lastResult.captchaSolved,
         raw_content_preview: lastResult.html.substring(0, 3000),
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
