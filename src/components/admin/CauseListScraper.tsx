@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { 
@@ -18,7 +19,8 @@ import {
   AlertCircle, 
   CheckCircle2, 
   FileText,
-  ExternalLink
+  ExternalLink,
+  FileDown
 } from 'lucide-react';
 
 interface CauseListEntry {
@@ -34,22 +36,23 @@ interface CauseListEntry {
 
 interface ScrapeResult {
   success: boolean;
+  format: 'html' | 'pdf';
   message?: string;
   error?: string;
   entries?: CauseListEntry[];
   entries_count?: number;
-  pdf_links?: string[];
+  pdf_url?: string;
+  pdf_filename?: string;
+  attempts?: number;
+  captcha_solution?: string;
   raw_content_preview?: string;
-  needs_firecrawl?: boolean;
-  inserted?: number;
-  updated?: number;
 }
 
 export function CauseListScraper() {
   const [bench, setBench] = useState<'JAIPUR' | 'JODHPUR'>('JAIPUR');
-  const [courtNo, setCourtNo] = useState('1');
+  const [listType, setListType] = useState<'D' | 'S'>('D');
+  const [format, setFormat] = useState<'html' | 'pdf'>('html');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-  const [customUrl, setCustomUrl] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState<ScrapeResult | null>(null);
   const [previewEntries, setPreviewEntries] = useState<CauseListEntry[]>([]);
@@ -65,8 +68,8 @@ export function CauseListScraper() {
           action: preview ? 'preview' : 'scrape',
           bench,
           date,
-          court_no: courtNo,
-          url: customUrl || undefined,
+          list_type: listType,
+          format,
         },
       });
 
@@ -85,7 +88,7 @@ export function CauseListScraper() {
       }
     } catch (error: any) {
       console.error('Scrape error:', error);
-      setResult({ success: false, error: error.message });
+      setResult({ success: false, format, error: error.message });
       toast.error('Failed to scrape cause list');
     } finally {
       setIsLoading(false);
@@ -101,11 +104,11 @@ export function CauseListScraper() {
             Cause List Scraper
           </CardTitle>
           <CardDescription>
-            Scrape cause lists from the Rajasthan High Court website. Cases will be automatically matched to lawyers based on their aliases.
+            Scrape cause lists from the Rajasthan High Court CIS portal using Browserless automation.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="space-y-2">
               <Label>Bench</Label>
               <Select value={bench} onValueChange={(v) => setBench(v as 'JAIPUR' | 'JODHPUR')}>
@@ -120,13 +123,16 @@ export function CauseListScraper() {
             </div>
 
             <div className="space-y-2">
-              <Label>Court No.</Label>
-              <Input
-                type="text"
-                value={courtNo}
-                onChange={(e) => setCourtNo(e.target.value)}
-                placeholder="1"
-              />
+              <Label>List Type</Label>
+              <Select value={listType} onValueChange={(v) => setListType(v as 'D' | 'S')}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="D">Daily Cause List</SelectItem>
+                  <SelectItem value="S">Supplementary Cause List</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="space-y-2">
@@ -139,13 +145,17 @@ export function CauseListScraper() {
             </div>
 
             <div className="space-y-2">
-              <Label>Custom URL (optional)</Label>
-              <Input
-                type="url"
-                value={customUrl}
-                onChange={(e) => setCustomUrl(e.target.value)}
-                placeholder="https://hcraj.nic.in/..."
-              />
+              <Label>Output Format</Label>
+              <RadioGroup value={format} onValueChange={(v) => setFormat(v as 'html' | 'pdf')} className="flex gap-4 pt-2">
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="html" id="format-html" />
+                  <Label htmlFor="format-html" className="cursor-pointer">HTML (Parse Data)</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="pdf" id="format-pdf" />
+                  <Label htmlFor="format-pdf" className="cursor-pointer">PDF (Archive)</Label>
+                </div>
+              </RadioGroup>
             </div>
           </div>
 
@@ -168,10 +178,12 @@ export function CauseListScraper() {
             >
               {isLoading ? (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : format === 'pdf' ? (
+                <FileDown className="h-4 w-4 mr-2" />
               ) : (
                 <Download className="h-4 w-4 mr-2" />
               )}
-              Scrape & Import
+              {format === 'pdf' ? 'Download PDF' : 'Scrape & Import'}
             </Button>
           </div>
         </CardContent>
@@ -191,26 +203,16 @@ export function CauseListScraper() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {result.needs_firecrawl && (
-              <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
-                <AlertTitle>Firecrawl Required</AlertTitle>
-                <AlertDescription>
-                  Please connect Firecrawl in your workspace settings to enable web scraping.
-                  Go to Workspace Settings → Integrations → Connect Firecrawl.
-                </AlertDescription>
-              </Alert>
-            )}
-
             {result.message && (
               <Alert variant={result.success ? "default" : "destructive"}>
                 <AlertDescription>{result.message}</AlertDescription>
               </Alert>
             )}
 
-            {result.error && !result.needs_firecrawl && (
+            {result.error && (
               <Alert variant="destructive">
                 <AlertCircle className="h-4 w-4" />
+                <AlertTitle>Error</AlertTitle>
                 <AlertDescription>{result.error}</AlertDescription>
               </Alert>
             )}
@@ -219,56 +221,58 @@ export function CauseListScraper() {
             {result.success && (
               <div className="flex gap-4 flex-wrap">
                 <Badge variant="secondary" className="text-sm">
-                  {result.entries_count || 0} entries found
+                  Format: {result.format?.toUpperCase()}
                 </Badge>
-                {result.inserted !== undefined && (
-                  <Badge variant="default" className="text-sm bg-green-500">
-                    {result.inserted} inserted
-                  </Badge>
-                )}
-                {result.updated !== undefined && (
+                {result.attempts && (
                   <Badge variant="outline" className="text-sm">
-                    {result.updated} updated
+                    {result.attempts} attempt(s)
                   </Badge>
                 )}
-                {result.pdf_links && result.pdf_links.length > 0 && (
+                {result.format === 'html' && (
                   <Badge variant="secondary" className="text-sm">
-                    {result.pdf_links.length} PDF links
+                    {result.entries_count || 0} entries found
+                  </Badge>
+                )}
+                {result.captcha_solution && (
+                  <Badge variant="outline" className="text-sm font-mono">
+                    CAPTCHA: {result.captcha_solution}
                   </Badge>
                 )}
               </div>
             )}
 
-            {/* PDF Links */}
-            {result.pdf_links && result.pdf_links.length > 0 && (
+            {/* PDF Download Link */}
+            {result.pdf_url && (
               <div className="space-y-2">
                 <h4 className="font-medium flex items-center gap-2">
                   <FileText className="h-4 w-4" />
-                  Available PDF Links
+                  Downloaded PDF
                 </h4>
-                <ScrollArea className="h-32 border rounded-md p-2">
-                  <div className="space-y-1">
-                    {result.pdf_links.map((link, i) => (
-                      <a
-                        key={i}
-                        href={link}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-1 text-sm text-primary hover:underline truncate"
-                      >
-                        <ExternalLink className="h-3 w-3 flex-shrink-0" />
-                        {link}
-                      </a>
-                    ))}
+                <div className="flex items-center gap-4 p-4 border rounded-lg bg-muted/50">
+                  <FileText className="h-8 w-8 text-primary" />
+                  <div className="flex-1">
+                    <p className="font-medium">{result.pdf_filename}</p>
+                    <p className="text-sm text-muted-foreground">Stored in causelist-pdfs bucket</p>
                   </div>
-                </ScrollArea>
+                  <a
+                    href={result.pdf_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2"
+                  >
+                    <Button variant="outline" size="sm">
+                      <ExternalLink className="h-4 w-4 mr-2" />
+                      Open PDF
+                    </Button>
+                  </a>
+                </div>
               </div>
             )}
 
-            {/* Preview Entries */}
+            {/* Preview Entries (HTML format) */}
             {previewEntries.length > 0 && (
               <div className="space-y-2">
-                <h4 className="font-medium">Parsed Entries</h4>
+                <h4 className="font-medium">Parsed Entries ({previewEntries.length})</h4>
                 <ScrollArea className="h-64 border rounded-md">
                   <Table>
                     <TableHeader>
@@ -299,7 +303,7 @@ export function CauseListScraper() {
             {/* Raw Content Preview */}
             {result.raw_content_preview && (
               <div className="space-y-2">
-                <h4 className="font-medium">Raw Content Preview</h4>
+                <h4 className="font-medium">Raw HTML Preview</h4>
                 <ScrollArea className="h-40 border rounded-md p-2">
                   <pre className="text-xs text-muted-foreground whitespace-pre-wrap">
                     {result.raw_content_preview}
@@ -317,10 +321,11 @@ export function CauseListScraper() {
           <CardTitle className="text-sm">How it works</CardTitle>
         </CardHeader>
         <CardContent className="text-sm text-muted-foreground space-y-2">
-          <p>1. <strong>Scrape:</strong> Fetches cause list from hcraj.nic.in using Firecrawl</p>
-          <p>2. <strong>Parse:</strong> Extracts case numbers, item numbers, and lawyer names</p>
-          <p>3. <strong>Import:</strong> Inserts entries into the docket database</p>
-          <p>4. <strong>Auto-match:</strong> The system automatically matches cases to lawyers based on their registered aliases</p>
+          <p>1. <strong>Browserless:</strong> Automates browser to navigate to CIS portal</p>
+          <p>2. <strong>CAPTCHA:</strong> Extracts and solves CAPTCHA using AI (up to 3 retries)</p>
+          <p>3. <strong>HTML Mode:</strong> Parses cause list table and imports to database</p>
+          <p>4. <strong>PDF Mode:</strong> Downloads PDF and stores in causelist-pdfs bucket</p>
+          <p>5. <strong>Auto-match:</strong> System matches cases to lawyers based on aliases</p>
         </CardContent>
       </Card>
     </div>
