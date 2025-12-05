@@ -8,6 +8,7 @@ import ControlDeck from "./pages/ControlDeck";
 import Auth from "./pages/Auth";
 import Admin from "./pages/Admin";
 import Documentation from "./pages/Documentation";
+import Onboarding from "./pages/Onboarding";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -25,6 +26,7 @@ const App = () => (
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/auth" element={<Auth />} />
+          <Route path="/onboarding" element={<Onboarding />} />
           <Route path="/docs" element={<Documentation />} />
           <Route path="/admin" element={<Admin />} />
           <Route path="/war-room/:caseId" element={<WarRoom />} />

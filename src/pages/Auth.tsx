@@ -11,7 +11,7 @@ import { toast } from 'sonner';
 
 export default function Auth() {
   const navigate = useNavigate();
-  const { signIn, signUp, isAuthenticated, loading } = useAuth();
+  const { signIn, signUp, isAuthenticated, profile, loading } = useAuth();
   
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
@@ -23,10 +23,16 @@ export default function Auth() {
 
   // Redirect if already authenticated
   useEffect(() => {
-    if (isAuthenticated && !loading) {
-      navigate('/');
+    if (isAuthenticated && !loading && profile) {
+      // Check if onboarding is completed
+      const onboardingCompleted = (profile as any).onboarding_completed;
+      if (onboardingCompleted) {
+        navigate('/');
+      } else {
+        navigate('/onboarding');
+      }
     }
-  }, [isAuthenticated, loading, navigate]);
+  }, [isAuthenticated, loading, profile, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -44,7 +50,7 @@ export default function Auth() {
           }
         } else {
           toast.success('Welcome back!');
-          navigate('/');
+          // Navigation handled by useEffect
         }
       } else {
         if (!fullName.trim()) {
@@ -61,8 +67,8 @@ export default function Auth() {
             setError(error.message);
           }
         } else {
-          toast.success('Account created successfully!');
-          navigate('/');
+          toast.success('Account created! Let\'s set up your profile.');
+          navigate('/onboarding');
         }
       }
     } catch (err) {

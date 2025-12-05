@@ -3,6 +3,18 @@ export interface Profile {
   role: 'SENIOR' | 'JUNIOR' | 'CLERK';
   full_name: string | null;
   whatsapp_number: string | null;
+  bar_registration_number: string | null;
+  bench: 'JAIPUR' | 'JODHPUR' | null;
+  is_verified: boolean;
+  onboarding_completed: boolean;
+  created_at: string;
+}
+
+export interface LawyerAlias {
+  id: string;
+  profile_id: string;
+  alias_name: string;
+  is_primary: boolean;
   created_at: string;
 }
 
@@ -20,10 +32,13 @@ export interface DocketItem {
   created_at: string;
 }
 
+export type BoardStatus = 'hearing' | 'passover' | 'lunch' | 'adjourned';
+
 export interface LiveBoardCache {
   court_location: string;
   court_no: string;
   current_item: number;
+  status: BoardStatus;
   is_supplementary_running: boolean;
   last_updated: string;
 }
@@ -52,4 +67,15 @@ export interface WhisperMessage {
   message: string;
   is_read: boolean;
   created_at: string;
+}
+
+export interface MatchedCase {
+  id: string;
+  case_number: string;
+  court_location: string;
+  court_room_no: string;
+  item_no: number;
+  date: string;
+  matched_as: 'petitioner' | 'respondent';
+  alias_matched: string;
 }

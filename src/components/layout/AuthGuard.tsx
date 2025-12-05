@@ -1,21 +1,34 @@
 import { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { Scale } from 'lucide-react';
 
 interface AuthGuardProps {
   children: React.ReactNode;
+  requireOnboarding?: boolean;
 }
 
-export function AuthGuard({ children }: AuthGuardProps) {
+export function AuthGuard({ children, requireOnboarding = true }: AuthGuardProps) {
   const navigate = useNavigate();
-  const { isAuthenticated, loading } = useAuth();
+  const location = useLocation();
+  const { isAuthenticated, profile, loading } = useAuth();
 
   useEffect(() => {
     if (!loading && !isAuthenticated) {
       navigate('/auth');
+      return;
     }
-  }, [isAuthenticated, loading, navigate]);
+
+    // Check onboarding completion (skip if on onboarding page)
+    if (requireOnboarding && !loading && isAuthenticated && profile) {
+      const onboardingCompleted = (profile as any).onboarding_completed;
+      const isOnboardingPage = location.pathname === '/onboarding';
+      
+      if (!onboardingCompleted && !isOnboardingPage) {
+        navigate('/onboarding');
+      }
+    }
+  }, [isAuthenticated, loading, profile, navigate, requireOnboarding, location.pathname]);
 
   if (loading) {
     return (
