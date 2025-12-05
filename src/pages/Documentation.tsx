@@ -5,7 +5,9 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { 
   ArrowLeft, Scale, Users, FileText, Bell, Shield, 
-  Keyboard, Eye, Monitor, Zap, Download, Github, Code, ExternalLink
+  Keyboard, Eye, Monitor, Zap, Download, Github, Code, ExternalLink,
+  Database, Server, Wifi, Lock, AlertTriangle, MessageSquare, 
+  Upload, Layers, Globe, Palette, Settings
 } from 'lucide-react';
 
 export default function Documentation() {
@@ -51,9 +53,49 @@ export default function Documentation() {
               Rajasthan High Court Case Management System
             </p>
             <p className="text-sm text-muted-foreground mt-2">
-              Complete User Guide & Documentation
+              Complete User Guide & Technical Documentation
             </p>
           </div>
+
+          {/* Table of Contents */}
+          <Card className="mb-8">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="h-5 w-5 text-primary" aria-hidden="true" />
+                Table of Contents
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-2 md:grid-cols-2 text-sm">
+                <div className="space-y-1">
+                  <p className="font-semibold text-foreground">User Guide</p>
+                  <ul className="list-disc list-inside text-muted-foreground space-y-1 ml-2">
+                    <li>Overview</li>
+                    <li>User Roles & Workflows</li>
+                    <li>Key Features</li>
+                    <li>Accessibility Features</li>
+                    <li>Security Features</li>
+                    <li>Common Workflows</li>
+                  </ul>
+                </div>
+                <div className="space-y-1">
+                  <p className="font-semibold text-foreground">Technical Documentation</p>
+                  <ul className="list-disc list-inside text-muted-foreground space-y-1 ml-2">
+                    <li>System Architecture</li>
+                    <li>Database Schema</li>
+                    <li>Authentication System</li>
+                    <li>Real-time Synchronization</li>
+                    <li>Panic Alert Logic</li>
+                    <li>Whisper System</li>
+                    <li>Document & Annotation System</li>
+                    <li>Offline Support</li>
+                    <li>Edge Functions</li>
+                    <li>Design System</li>
+                  </ul>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 
           {/* Overview */}
           <Card className="mb-8">
@@ -351,6 +393,1577 @@ export default function Documentation() {
             </CardContent>
           </Card>
 
+          {/* ============================================ */}
+          {/* TECHNICAL ARCHITECTURE DOCUMENTATION SECTION */}
+          {/* ============================================ */}
+
+          <div className="my-12 py-8 border-t border-b border-primary/30">
+            <h2 className="text-3xl font-display font-bold text-center text-foreground">
+              Technical Architecture & System Documentation
+            </h2>
+            <p className="text-center text-muted-foreground mt-2">
+              Detailed technical specifications for developers and maintainers
+            </p>
+          </div>
+
+          {/* 1. System Architecture Overview */}
+          <Card className="mb-8">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Server className="h-5 w-5 text-primary" aria-hidden="true" />
+                1. System Architecture Overview
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div>
+                <h3 className="font-semibold text-foreground mb-3">Technology Stack</h3>
+                <div className="grid gap-2 md:grid-cols-2">
+                  <div className="p-3 rounded bg-muted/30 border border-border">
+                    <p className="text-sm font-medium text-foreground">Frontend Framework</p>
+                    <p className="text-sm text-muted-foreground">React 18 with TypeScript</p>
+                  </div>
+                  <div className="p-3 rounded bg-muted/30 border border-border">
+                    <p className="text-sm font-medium text-foreground">Build Tool</p>
+                    <p className="text-sm text-muted-foreground">Vite with PWA support</p>
+                  </div>
+                  <div className="p-3 rounded bg-muted/30 border border-border">
+                    <p className="text-sm font-medium text-foreground">Styling</p>
+                    <p className="text-sm text-muted-foreground">TailwindCSS + shadcn/ui</p>
+                  </div>
+                  <div className="p-3 rounded bg-muted/30 border border-border">
+                    <p className="text-sm font-medium text-foreground">State Management</p>
+                    <p className="text-sm text-muted-foreground">TanStack Query v5</p>
+                  </div>
+                  <div className="p-3 rounded bg-muted/30 border border-border">
+                    <p className="text-sm font-medium text-foreground">Backend</p>
+                    <p className="text-sm text-muted-foreground">Supabase (PostgreSQL + Auth + Storage)</p>
+                  </div>
+                  <div className="p-3 rounded bg-muted/30 border border-border">
+                    <p className="text-sm font-medium text-foreground">Real-time</p>
+                    <p className="text-sm text-muted-foreground">Supabase Realtime (WebSocket)</p>
+                  </div>
+                </div>
+              </div>
+
+              <Separator />
+
+              <div>
+                <h3 className="font-semibold text-foreground mb-3">Application Routes</h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-border">
+                        <th className="text-left py-2 text-foreground">Route</th>
+                        <th className="text-left py-2 text-foreground">Component</th>
+                        <th className="text-left py-2 text-foreground">Access</th>
+                        <th className="text-left py-2 text-foreground">Description</th>
+                      </tr>
+                    </thead>
+                    <tbody className="text-muted-foreground">
+                      <tr className="border-b border-border/50">
+                        <td className="py-2 font-mono text-xs">/</td>
+                        <td className="py-2">Index</td>
+                        <td className="py-2">Public</td>
+                        <td className="py-2">Redirect to dashboard or auth</td>
+                      </tr>
+                      <tr className="border-b border-border/50">
+                        <td className="py-2 font-mono text-xs">/auth</td>
+                        <td className="py-2">Auth</td>
+                        <td className="py-2">Public</td>
+                        <td className="py-2">Login/Signup page</td>
+                      </tr>
+                      <tr className="border-b border-border/50">
+                        <td className="py-2 font-mono text-xs">/docs</td>
+                        <td className="py-2">Documentation</td>
+                        <td className="py-2">Public</td>
+                        <td className="py-2">This documentation page</td>
+                      </tr>
+                      <tr className="border-b border-border/50">
+                        <td className="py-2 font-mono text-xs">/dashboard</td>
+                        <td className="py-2">Dashboard</td>
+                        <td className="py-2">AuthGuard</td>
+                        <td className="py-2">Main dashboard with case list</td>
+                      </tr>
+                      <tr className="border-b border-border/50">
+                        <td className="py-2 font-mono text-xs">/admin</td>
+                        <td className="py-2">Admin</td>
+                        <td className="py-2">AuthGuard + ADMIN role</td>
+                        <td className="py-2">Admin management panel</td>
+                      </tr>
+                      <tr className="border-b border-border/50">
+                        <td className="py-2 font-mono text-xs">/war-room/:caseId</td>
+                        <td className="py-2">WarRoom</td>
+                        <td className="py-2">AuthGuard</td>
+                        <td className="py-2">Senior advocate case view</td>
+                      </tr>
+                      <tr>
+                        <td className="py-2 font-mono text-xs">/control-deck/:caseId</td>
+                        <td className="py-2">ControlDeck</td>
+                        <td className="py-2">AuthGuard</td>
+                        <td className="py-2">Junior advocate control panel</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <Separator />
+
+              <div>
+                <h3 className="font-semibold text-foreground mb-3">Architecture Diagram</h3>
+                <div className="p-4 rounded bg-muted/30 border border-border font-mono text-xs overflow-x-auto">
+                  <pre className="text-muted-foreground whitespace-pre">
+{`┌─────────────────────────────────────────────────────────────────┐
+│                         CLIENT (React)                          │
+├─────────────────────────────────────────────────────────────────┤
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────────────┐ │
+│  │Dashboard │  │ War Room │  │  Control │  │     Admin        │ │
+│  │          │  │          │  │   Deck   │  │     Panel        │ │
+│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────────┬─────────┘ │
+│       │             │             │                  │           │
+│       └─────────────┴─────────────┴──────────────────┘           │
+│                              │                                   │
+│                    ┌─────────▼─────────┐                         │
+│                    │  TanStack Query   │ (Cache + State)         │
+│                    └─────────┬─────────┘                         │
+└──────────────────────────────┼───────────────────────────────────┘
+                               │
+                    ┌──────────▼──────────┐
+                    │   Supabase Client   │
+                    └──────────┬──────────┘
+                               │
+         ┌─────────────────────┼─────────────────────┐
+         │                     │                     │
+┌────────▼────────┐  ┌─────────▼─────────┐  ┌───────▼───────┐
+│   PostgreSQL    │  │  Supabase Auth    │  │    Storage    │
+│   + RLS + RT    │  │                   │  │  (Documents)  │
+└─────────────────┘  └───────────────────┘  └───────────────┘`}
+                  </pre>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* 2. Database Schema */}
+          <Card className="mb-8">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Database className="h-5 w-5 text-primary" aria-hidden="true" />
+                2. Database Schema
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <p className="text-muted-foreground">
+                The database consists of 8 tables with Row-Level Security (RLS) enabled on all tables.
+              </p>
+
+              {/* profiles table */}
+              <div className="p-4 rounded bg-muted/30 border border-border">
+                <h4 className="font-semibold text-foreground mb-2 font-mono">profiles</h4>
+                <p className="text-sm text-muted-foreground mb-3">Stores user profile information. Links to auth.users via id.</p>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-border">
+                        <th className="text-left py-1 text-foreground">Column</th>
+                        <th className="text-left py-1 text-foreground">Type</th>
+                        <th className="text-left py-1 text-foreground">Default</th>
+                        <th className="text-left py-1 text-foreground">Description</th>
+                      </tr>
+                    </thead>
+                    <tbody className="text-muted-foreground font-mono">
+                      <tr><td className="py-1">id</td><td>uuid</td><td>-</td><td className="font-sans">Primary key (matches auth.users.id)</td></tr>
+                      <tr><td className="py-1">full_name</td><td>text</td><td>null</td><td className="font-sans">User's display name</td></tr>
+                      <tr><td className="py-1">whatsapp_number</td><td>text</td><td>null</td><td className="font-sans">Contact number</td></tr>
+                      <tr><td className="py-1">role</td><td>text</td><td>'JUNIOR'</td><td className="font-sans">Legacy role field (use user_roles instead)</td></tr>
+                      <tr><td className="py-1">created_at</td><td>timestamptz</td><td>now()</td><td className="font-sans">Account creation time</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* user_roles table */}
+              <div className="p-4 rounded bg-muted/30 border border-border">
+                <h4 className="font-semibold text-foreground mb-2 font-mono">user_roles</h4>
+                <p className="text-sm text-muted-foreground mb-3">
+                  <span className="text-primary font-semibold">SECURITY CRITICAL:</span> Secure role storage table. 
+                  Roles MUST be stored here (not in profiles) to prevent privilege escalation attacks.
+                </p>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-border">
+                        <th className="text-left py-1 text-foreground">Column</th>
+                        <th className="text-left py-1 text-foreground">Type</th>
+                        <th className="text-left py-1 text-foreground">Description</th>
+                      </tr>
+                    </thead>
+                    <tbody className="text-muted-foreground font-mono">
+                      <tr><td className="py-1">id</td><td>uuid</td><td className="font-sans">Primary key</td></tr>
+                      <tr><td className="py-1">user_id</td><td>uuid</td><td className="font-sans">References auth.users</td></tr>
+                      <tr><td className="py-1">role</td><td>app_role (enum)</td><td className="font-sans">SENIOR | JUNIOR | CLERK | ADMIN</td></tr>
+                      <tr><td className="py-1">created_at</td><td>timestamptz</td><td className="font-sans">Role assignment time</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div className="mt-3 p-2 bg-primary/10 rounded text-xs text-muted-foreground">
+                  <strong className="text-foreground">RLS Policies:</strong> Users can only view their own roles. Insert is system-only via trigger.
+                </div>
+              </div>
+
+              {/* daily_court_docket table */}
+              <div className="p-4 rounded bg-muted/30 border border-border">
+                <h4 className="font-semibold text-foreground mb-2 font-mono">daily_court_docket</h4>
+                <p className="text-sm text-muted-foreground mb-3">Case listings for each court date.</p>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-border">
+                        <th className="text-left py-1 text-foreground">Column</th>
+                        <th className="text-left py-1 text-foreground">Type</th>
+                        <th className="text-left py-1 text-foreground">Description</th>
+                      </tr>
+                    </thead>
+                    <tbody className="text-muted-foreground font-mono">
+                      <tr><td className="py-1">id</td><td>uuid</td><td className="font-sans">Primary key</td></tr>
+                      <tr><td className="py-1">date</td><td>date</td><td className="font-sans">Court date (default: CURRENT_DATE)</td></tr>
+                      <tr><td className="py-1">item_no</td><td>integer</td><td className="font-sans">Case position in queue</td></tr>
+                      <tr><td className="py-1">case_number</td><td>text</td><td className="font-sans">Official case number</td></tr>
+                      <tr><td className="py-1">court_location</td><td>text</td><td className="font-sans">e.g., 'JODHPUR', 'JAIPUR'</td></tr>
+                      <tr><td className="py-1">court_room_no</td><td>text</td><td className="font-sans">Court room number</td></tr>
+                      <tr><td className="py-1">list_type</td><td>text</td><td className="font-sans">'FRESH' | 'REGULAR' | 'MISC'</td></tr>
+                      <tr><td className="py-1">petitioner_lawyer</td><td>text</td><td className="font-sans">Petitioner's advocate name</td></tr>
+                      <tr><td className="py-1">respondent_lawyer</td><td>text</td><td className="font-sans">Respondent's advocate name</td></tr>
+                      <tr><td className="py-1">matched_profile_id</td><td>uuid</td><td className="font-sans">FK to profiles (assigned advocate)</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* live_board_cache table */}
+              <div className="p-4 rounded bg-muted/30 border border-border">
+                <h4 className="font-semibold text-foreground mb-2 font-mono">live_board_cache</h4>
+                <p className="text-sm text-muted-foreground mb-3">Real-time court status. Updated by Control Deck or Admin.</p>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-border">
+                        <th className="text-left py-1 text-foreground">Column</th>
+                        <th className="text-left py-1 text-foreground">Type</th>
+                        <th className="text-left py-1 text-foreground">Description</th>
+                      </tr>
+                    </thead>
+                    <tbody className="text-muted-foreground font-mono">
+                      <tr><td className="py-1">court_location</td><td>text</td><td className="font-sans">Composite PK part 1</td></tr>
+                      <tr><td className="py-1">court_no</td><td>text</td><td className="font-sans">Composite PK part 2</td></tr>
+                      <tr><td className="py-1">current_item</td><td>integer</td><td className="font-sans">Current item being heard (default: 1)</td></tr>
+                      <tr><td className="py-1">is_supplementary_running</td><td>boolean</td><td className="font-sans">Supplementary list active (default: false)</td></tr>
+                      <tr><td className="py-1">status</td><td>text</td><td className="font-sans">'hearing' | 'passover' | 'lunch'</td></tr>
+                      <tr><td className="py-1">last_updated</td><td>timestamptz</td><td className="font-sans">Last status change time</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div className="mt-3 p-2 bg-primary/10 rounded text-xs text-muted-foreground">
+                  <strong className="text-foreground">Composite Primary Key:</strong> (court_location, court_no) - ensures one row per courtroom.
+                </div>
+              </div>
+
+              {/* live_courtroom_feed table */}
+              <div className="p-4 rounded bg-muted/30 border border-border">
+                <h4 className="font-semibold text-foreground mb-2 font-mono">live_courtroom_feed</h4>
+                <p className="text-sm text-muted-foreground mb-3">Whisper messages between team members.</p>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-border">
+                        <th className="text-left py-1 text-foreground">Column</th>
+                        <th className="text-left py-1 text-foreground">Type</th>
+                        <th className="text-left py-1 text-foreground">Description</th>
+                      </tr>
+                    </thead>
+                    <tbody className="text-muted-foreground font-mono">
+                      <tr><td className="py-1">id</td><td>uuid</td><td className="font-sans">Primary key</td></tr>
+                      <tr><td className="py-1">docket_id</td><td>uuid</td><td className="font-sans">FK to daily_court_docket</td></tr>
+                      <tr><td className="py-1">sender_id</td><td>uuid</td><td className="font-sans">FK to profiles (message sender)</td></tr>
+                      <tr><td className="py-1">message</td><td>text</td><td className="font-sans">Text or '[VOICE_MEMO]url' format</td></tr>
+                      <tr><td className="py-1">is_read</td><td>boolean</td><td className="font-sans">Read status (default: false)</td></tr>
+                      <tr><td className="py-1">created_at</td><td>timestamptz</td><td className="font-sans">Message timestamp</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* case_documents table */}
+              <div className="p-4 rounded bg-muted/30 border border-border">
+                <h4 className="font-semibold text-foreground mb-2 font-mono">case_documents</h4>
+                <p className="text-sm text-muted-foreground mb-3">Uploaded case files metadata.</p>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-border">
+                        <th className="text-left py-1 text-foreground">Column</th>
+                        <th className="text-left py-1 text-foreground">Type</th>
+                        <th className="text-left py-1 text-foreground">Description</th>
+                      </tr>
+                    </thead>
+                    <tbody className="text-muted-foreground font-mono">
+                      <tr><td className="py-1">id</td><td>uuid</td><td className="font-sans">Primary key</td></tr>
+                      <tr><td className="py-1">docket_id</td><td>uuid</td><td className="font-sans">FK to daily_court_docket</td></tr>
+                      <tr><td className="py-1">file_url</td><td>text</td><td className="font-sans">Supabase Storage public URL</td></tr>
+                      <tr><td className="py-1">doc_type</td><td>text</td><td className="font-sans">File type (e.g., 'application/pdf')</td></tr>
+                      <tr><td className="py-1">uploaded_at</td><td>timestamptz</td><td className="font-sans">Upload timestamp</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* case_arguments table */}
+              <div className="p-4 rounded bg-muted/30 border border-border">
+                <h4 className="font-semibold text-foreground mb-2 font-mono">case_arguments</h4>
+                <p className="text-sm text-muted-foreground mb-3">Arguments linked to specific PDF pages.</p>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-border">
+                        <th className="text-left py-1 text-foreground">Column</th>
+                        <th className="text-left py-1 text-foreground">Type</th>
+                        <th className="text-left py-1 text-foreground">Description</th>
+                      </tr>
+                    </thead>
+                    <tbody className="text-muted-foreground font-mono">
+                      <tr><td className="py-1">id</td><td>uuid</td><td className="font-sans">Primary key</td></tr>
+                      <tr><td className="py-1">docket_id</td><td>uuid</td><td className="font-sans">FK to daily_court_docket</td></tr>
+                      <tr><td className="py-1">title</td><td>text</td><td className="font-sans">Argument title (required)</td></tr>
+                      <tr><td className="py-1">linked_page_number</td><td>integer</td><td className="font-sans">PDF page to jump to (default: 1)</td></tr>
+                      <tr><td className="py-1">highlight_coords</td><td>jsonb</td><td className="font-sans">Optional highlight coordinates</td></tr>
+                      <tr><td className="py-1">created_at</td><td>timestamptz</td><td className="font-sans">Creation timestamp</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* document_annotations table */}
+              <div className="p-4 rounded bg-muted/30 border border-border">
+                <h4 className="font-semibold text-foreground mb-2 font-mono">document_annotations</h4>
+                <p className="text-sm text-muted-foreground mb-3">PDF annotations (highlights, drawings, notes).</p>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-border">
+                        <th className="text-left py-1 text-foreground">Column</th>
+                        <th className="text-left py-1 text-foreground">Type</th>
+                        <th className="text-left py-1 text-foreground">Description</th>
+                      </tr>
+                    </thead>
+                    <tbody className="text-muted-foreground font-mono">
+                      <tr><td className="py-1">id</td><td>uuid</td><td className="font-sans">Primary key</td></tr>
+                      <tr><td className="py-1">document_id</td><td>uuid</td><td className="font-sans">FK to case_documents</td></tr>
+                      <tr><td className="py-1">user_id</td><td>uuid</td><td className="font-sans">Creator (required)</td></tr>
+                      <tr><td className="py-1">page_number</td><td>integer</td><td className="font-sans">PDF page (required)</td></tr>
+                      <tr><td className="py-1">annotation_type</td><td>text</td><td className="font-sans">'highlight' | 'pen' | 'text'</td></tr>
+                      <tr><td className="py-1">annotation_json</td><td>jsonb</td><td className="font-sans">Annotation data (see format below)</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div className="mt-3 p-2 bg-muted/50 rounded font-mono text-xs overflow-x-auto">
+                  <pre className="text-muted-foreground">
+{`annotation_json: {
+  color?: string;           // e.g., '#FFEB3B' for highlight
+  text?: string;            // For text annotations
+  coordinates?: {x, y}[];   // For pen strokes
+  boundingRect?: {x, y, width, height}  // For highlights
+}`}
+                  </pre>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* 3. Authentication System */}
+          <Card className="mb-8">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Lock className="h-5 w-5 text-primary" aria-hidden="true" />
+                3. Authentication System
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div>
+                <h3 className="font-semibold text-foreground mb-3">Authentication Flow</h3>
+                <div className="p-4 rounded bg-muted/30 border border-border font-mono text-xs overflow-x-auto">
+                  <pre className="text-muted-foreground whitespace-pre">
+{`┌────────────────┐      ┌──────────────────┐      ┌─────────────────┐
+│  User Signup   │ ───▶ │  Supabase Auth   │ ───▶ │ auth.users row  │
+│  (email/pass)  │      │  (auto-confirm)  │      │    created      │
+└────────────────┘      └────────┬─────────┘      └────────┬────────┘
+                                 │                         │
+                                 ▼                         ▼
+                     ┌───────────────────────┐   ┌─────────────────────┐
+                     │  handle_new_user()    │   │  Trigger fires on   │
+                     │  SECURITY DEFINER     │   │  auth.users INSERT  │
+                     └───────────┬───────────┘   └─────────────────────┘
+                                 │
+              ┌──────────────────┴──────────────────┐
+              │                                     │
+              ▼                                     ▼
+    ┌──────────────────┐               ┌───────────────────┐
+    │ profiles INSERT  │               │ user_roles INSERT │
+    │ (id, full_name)  │               │ (user_id, role)   │
+    └──────────────────┘               └───────────────────┘`}
+                  </pre>
+                </div>
+              </div>
+
+              <Separator />
+
+              <div>
+                <h3 className="font-semibold text-foreground mb-3">Database Functions</h3>
+                
+                <div className="space-y-4">
+                  <div className="p-3 rounded bg-muted/30 border border-border">
+                    <h4 className="font-mono text-sm text-foreground mb-2">handle_new_user()</h4>
+                    <p className="text-sm text-muted-foreground mb-2">
+                      Trigger function executed on auth.users INSERT. Creates profile and assigns role from user metadata.
+                    </p>
+                    <div className="font-mono text-xs bg-muted/50 p-2 rounded overflow-x-auto">
+                      <pre className="text-muted-foreground">
+{`RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER
+-- Inserts into profiles (id, full_name)
+-- Inserts into user_roles (user_id, role)
+-- Role defaults to 'JUNIOR' if not specified`}
+                      </pre>
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded bg-muted/30 border border-border">
+                    <h4 className="font-mono text-sm text-foreground mb-2">get_user_role(_user_id uuid)</h4>
+                    <p className="text-sm text-muted-foreground mb-2">
+                      Retrieves user's role. Uses SECURITY DEFINER to bypass RLS and prevent recursive policy checks.
+                    </p>
+                    <div className="font-mono text-xs bg-muted/50 p-2 rounded overflow-x-auto">
+                      <pre className="text-muted-foreground">
+{`RETURNS app_role LANGUAGE sql STABLE SECURITY DEFINER
+SELECT role FROM user_roles WHERE user_id = _user_id LIMIT 1`}
+                      </pre>
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded bg-muted/30 border border-border">
+                    <h4 className="font-mono text-sm text-foreground mb-2">has_role(_user_id uuid, _role app_role)</h4>
+                    <p className="text-sm text-muted-foreground mb-2">
+                      Checks if user has specific role. Used in RLS policies for role-based access.
+                    </p>
+                    <div className="font-mono text-xs bg-muted/50 p-2 rounded overflow-x-auto">
+                      <pre className="text-muted-foreground">
+{`RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER
+SELECT EXISTS (SELECT 1 FROM user_roles WHERE user_id = _user_id AND role = _role)`}
+                      </pre>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <Separator />
+
+              <div>
+                <h3 className="font-semibold text-foreground mb-3">Session Management (useAuth Hook)</h3>
+                <div className="p-3 rounded bg-muted/30 border border-border font-mono text-xs overflow-x-auto">
+                  <pre className="text-muted-foreground">
+{`// Critical: Set up listener BEFORE checking session
+useEffect(() => {
+  // 1. Subscribe to auth changes
+  const { data: { subscription } } = supabase.auth.onAuthStateChange(
+    (event, session) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      
+      // 2. Defer Supabase calls to prevent deadlock
+      if (session?.user) {
+        setTimeout(() => {
+          fetchProfile(session.user.id);
+          fetchRole(session.user.id);
+        }, 0);
+      }
+    }
+  );
+
+  // 3. Then check existing session
+  supabase.auth.getSession().then(({ data: { session } }) => {
+    setSession(session);
+    setUser(session?.user ?? null);
+  });
+
+  return () => subscription.unsubscribe();
+}, []);`}
+                  </pre>
+                </div>
+                <div className="mt-3 p-2 bg-danger/10 border border-danger/30 rounded text-xs text-muted-foreground">
+                  <strong className="text-danger">Critical:</strong> Always use setTimeout(0) when calling Supabase functions 
+                  inside onAuthStateChange to prevent authentication deadlocks.
+                </div>
+              </div>
+
+              <Separator />
+
+              <div>
+                <h3 className="font-semibold text-foreground mb-3">Role Types</h3>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div className="p-3 rounded bg-muted/30 border border-border">
+                    <p className="font-mono text-sm text-primary">SENIOR</p>
+                    <p className="text-xs text-muted-foreground">Access War Room, receive whispers, view documents</p>
+                  </div>
+                  <div className="p-3 rounded bg-muted/30 border border-border">
+                    <p className="font-mono text-sm text-primary">JUNIOR</p>
+                    <p className="text-xs text-muted-foreground">Access Control Deck, send whispers, upload documents</p>
+                  </div>
+                  <div className="p-3 rounded bg-muted/30 border border-border">
+                    <p className="font-mono text-sm text-primary">CLERK</p>
+                    <p className="text-xs text-muted-foreground">Basic access, view docket information</p>
+                  </div>
+                  <div className="p-3 rounded bg-muted/30 border border-border">
+                    <p className="font-mono text-sm text-primary">ADMIN</p>
+                    <p className="text-xs text-muted-foreground">Full access, manage docket, control live board</p>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* 4. Real-time Synchronization */}
+          <Card className="mb-8">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Wifi className="h-5 w-5 text-primary" aria-hidden="true" />
+                4. Real-time Synchronization System
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <p className="text-muted-foreground">
+                Three real-time subscriptions power the live features. All use Supabase Realtime's postgres_changes events.
+              </p>
+
+              {/* Live Board Sync */}
+              <div className="p-4 rounded bg-muted/30 border border-border">
+                <h4 className="font-semibold text-foreground mb-3 flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-success animate-pulse"></span>
+                  Live Board Sync (useLiveBoard hook)
+                </h4>
+                <div className="font-mono text-xs bg-muted/50 p-3 rounded overflow-x-auto">
+                  <pre className="text-muted-foreground">
+{`const channel = supabase
+  .channel('live-board-changes')
+  .on('postgres_changes', {
+    event: '*',                    // INSERT, UPDATE, DELETE
+    schema: 'public',
+    table: 'live_board_cache',
+  }, () => {
+    queryClient.invalidateQueries({ queryKey: ['liveBoard'] });
+  })
+  .subscribe();`}
+                  </pre>
+                </div>
+                <ul className="mt-3 text-xs text-muted-foreground space-y-1">
+                  <li>• <strong>Events:</strong> All (*, catches INSERT/UPDATE/DELETE)</li>
+                  <li>• <strong>Scope:</strong> Global (all courtrooms)</li>
+                  <li>• <strong>Action:</strong> Invalidates TanStack Query cache → triggers refetch</li>
+                  <li>• <strong>Update Frequency:</strong> When admin/control deck changes court status</li>
+                </ul>
+              </div>
+
+              {/* Whisper Sync */}
+              <div className="p-4 rounded bg-muted/30 border border-border">
+                <h4 className="font-semibold text-foreground mb-3 flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
+                  Whisper Message Sync (useWhisperListener hook)
+                </h4>
+                <div className="font-mono text-xs bg-muted/50 p-3 rounded overflow-x-auto">
+                  <pre className="text-muted-foreground">
+{`const channel = supabase
+  .channel(\`whisper-\${docketId}\`)
+  .on('postgres_changes', {
+    event: 'INSERT',               // Only new messages
+    schema: 'public',
+    table: 'live_courtroom_feed',
+    filter: \`docket_id=eq.\${docketId}\`,  // Filter by case
+  }, (payload) => {
+    const newMessage = payload.new as WhisperMessage;
+    
+    // Show toast notification
+    toast(newMessage.message, {
+      className: 'mission-critical-toast',
+      duration: 8000,
+    });
+    
+    // Play notification sound
+    playNotification('message');
+    
+    // Refresh messages list
+    queryClient.invalidateQueries({ queryKey: ['whisper', docketId] });
+  })
+  .subscribe();`}
+                  </pre>
+                </div>
+                <ul className="mt-3 text-xs text-muted-foreground space-y-1">
+                  <li>• <strong>Events:</strong> INSERT only (new messages)</li>
+                  <li>• <strong>Scope:</strong> Filtered by docket_id (case-specific)</li>
+                  <li>• <strong>Actions:</strong> Toast notification + sound + cache invalidation</li>
+                  <li>• <strong>Toast Duration:</strong> 8 seconds (mission-critical styling)</li>
+                </ul>
+              </div>
+
+              {/* Annotations Sync */}
+              <div className="p-4 rounded bg-muted/30 border border-border">
+                <h4 className="font-semibold text-foreground mb-3 flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-warning animate-pulse"></span>
+                  Annotations Sync (useAnnotations hook)
+                </h4>
+                <div className="font-mono text-xs bg-muted/50 p-3 rounded overflow-x-auto">
+                  <pre className="text-muted-foreground">
+{`const channel = supabase
+  .channel(\`annotations-\${documentId}\`)
+  .on('postgres_changes', {
+    event: '*',                    // All changes
+    schema: 'public',
+    table: 'document_annotations',
+    filter: \`document_id=eq.\${documentId}\`,
+  }, () => {
+    queryClient.invalidateQueries({ 
+      queryKey: ['annotations', documentId] 
+    });
+  })
+  .subscribe();`}
+                  </pre>
+                </div>
+                <ul className="mt-3 text-xs text-muted-foreground space-y-1">
+                  <li>• <strong>Events:</strong> All (INSERT/UPDATE/DELETE)</li>
+                  <li>• <strong>Scope:</strong> Filtered by document_id</li>
+                  <li>• <strong>Purpose:</strong> Collaborative annotation editing</li>
+                </ul>
+              </div>
+
+              <Separator />
+
+              <div>
+                <h3 className="font-semibold text-foreground mb-3">Network Status Indicator</h3>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div className="p-3 rounded bg-success/10 border border-success/30">
+                    <p className="font-semibold text-success text-sm flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-success animate-ping"></span>
+                      Live Sync
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Online - Real-time updates active. Animated ping indicator.
+                    </p>
+                  </div>
+                  <div className="p-3 rounded bg-danger/10 border border-danger/30">
+                    <p className="font-semibold text-danger text-sm flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-danger"></span>
+                      Bunker Mode
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Offline - Using cached data. Mutations queued for sync.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* 5. Panic Alert System Logic */}
+          <Card className="mb-8">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-primary" aria-hidden="true" />
+                5. Panic Alert System Logic
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div>
+                <h3 className="font-semibold text-foreground mb-3">Distance Calculation Formula</h3>
+                <div className="p-4 rounded bg-muted/30 border border-border font-mono text-sm">
+                  <pre className="text-muted-foreground">
+{`// Core calculation
+const myItemNumber = docketItem.item_no;        // Your case position
+const currentItem = liveBoard.current_item;     // Court's current item
+const distance = myItemNumber - currentItem;    // Items until your case
+
+// Status determination
+const isPanic = distance > 0 && distance <= 5 && status === 'hearing';
+const isRunning = distance <= 0 && status === 'hearing';
+const isWaiting = distance > 5;`}
+                  </pre>
+                </div>
+              </div>
+
+              <Separator />
+
+              <div>
+                <h3 className="font-semibold text-foreground mb-3">Status States & Visual Indicators</h3>
+                <div className="space-y-3">
+                  <div className="p-3 rounded border-2 border-danger bg-danger/10 flex items-center gap-3">
+                    <div className="w-4 h-4 rounded-full bg-danger animate-pulse shadow-[0_0_10px_rgba(239,68,68,0.5)]"></div>
+                    <div>
+                      <p className="font-semibold text-danger">PANIC (1-5 items away)</p>
+                      <p className="text-xs text-muted-foreground">Red pulsing glow, urgent badge, CSS: panic-pulse animation</p>
+                    </div>
+                  </div>
+                  
+                  <div className="p-3 rounded border-2 border-primary bg-primary/10 flex items-center gap-3">
+                    <div className="w-4 h-4 rounded-full bg-primary shadow-[0_0_10px_rgba(251,191,36,0.5)]"></div>
+                    <div>
+                      <p className="font-semibold text-primary">RUNNING (0 or less)</p>
+                      <p className="text-xs text-muted-foreground">Gold glow effect, "NOW" badge, CSS: gold-glow shadow</p>
+                    </div>
+                  </div>
+                  
+                  <div className="p-3 rounded border border-border flex items-center gap-3">
+                    <div className="w-4 h-4 rounded-full bg-muted"></div>
+                    <div>
+                      <p className="font-semibold text-foreground">WAITING (6+ items away)</p>
+                      <p className="text-xs text-muted-foreground">Neutral styling, shows "X items away" text</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <Separator />
+
+              <div>
+                <h3 className="font-semibold text-foreground mb-3">Court Status Modifiers</h3>
+                <div className="grid gap-3 md:grid-cols-3">
+                  <div className="p-3 rounded bg-muted/30 border border-border text-center">
+                    <p className="font-mono text-sm text-success">hearing</p>
+                    <p className="text-xs text-muted-foreground mt-1">Normal operation, panic alerts active</p>
+                  </div>
+                  <div className="p-3 rounded bg-muted/30 border border-border text-center">
+                    <p className="font-mono text-sm text-muted-foreground">passover</p>
+                    <p className="text-xs text-muted-foreground mt-1">Case skipped, grayscale styling</p>
+                  </div>
+                  <div className="p-3 rounded bg-muted/30 border border-border text-center">
+                    <p className="font-mono text-sm text-warning">lunch</p>
+                    <p className="text-xs text-muted-foreground mt-1">Break time, yellow styling</p>
+                  </div>
+                </div>
+              </div>
+
+              <Separator />
+
+              <div>
+                <h3 className="font-semibold text-foreground mb-3">CSS Animations</h3>
+                <div className="font-mono text-xs bg-muted/30 p-3 rounded overflow-x-auto">
+                  <pre className="text-muted-foreground">
+{`/* Panic pulse animation */
+@keyframes panic-pulse {
+  0%, 100% { 
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
+    transform: scale(1);
+  }
+  50% { 
+    box-shadow: 0 0 20px 10px rgba(239, 68, 68, 0.2);
+    transform: scale(1.02);
+  }
+}
+
+.animate-panic-pulse {
+  animation: panic-pulse 1.5s ease-in-out infinite;
+}
+
+/* Gold glow for running cases */
+.gold-glow {
+  box-shadow: 0 0 20px rgba(251, 191, 36, 0.4);
+}`}
+                  </pre>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* 6. Whisper System Technical Flow */}
+          <Card className="mb-8">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <MessageSquare className="h-5 w-5 text-primary" aria-hidden="true" />
+                6. Whisper System Technical Flow
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Text Messages */}
+              <div>
+                <h3 className="font-semibold text-foreground mb-3">Text Message Flow</h3>
+                <div className="p-4 rounded bg-muted/30 border border-border font-mono text-xs overflow-x-auto">
+                  <pre className="text-muted-foreground whitespace-pre">
+{`┌───────────────┐     ┌─────────────────────┐     ┌─────────────────┐
+│ Junior types  │ ──▶ │ useSendWhisper      │ ──▶ │ INSERT into     │
+│ message       │     │ mutation            │     │ live_courtroom  │
+└───────────────┘     └─────────────────────┘     │ _feed table     │
+                                                  └────────┬────────┘
+                                                           │
+┌───────────────┐     ┌─────────────────────┐             │
+│ Senior sees   │ ◀── │ Realtime triggers   │ ◀───────────┘
+│ toast + sound │     │ useWhisperListener  │
+└───────────────┘     └─────────────────────┘`}
+                  </pre>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Voice Memos */}
+              <div>
+                <h3 className="font-semibold text-foreground mb-3">Voice Memo Flow</h3>
+                <div className="p-4 rounded bg-muted/30 border border-border font-mono text-xs overflow-x-auto">
+                  <pre className="text-muted-foreground whitespace-pre">
+{`┌─────────────────┐     ┌───────────────────┐     ┌─────────────────────┐
+│ Hold mic button │ ──▶ │ MediaRecorder API │ ──▶ │ WebM Blob created   │
+│ (200ms minimum) │     │ starts recording  │     │ (on release)        │
+└─────────────────┘     └───────────────────┘     └──────────┬──────────┘
+                                                             │
+┌─────────────────────────────────────────────────────────────┘
+│
+▼
+┌─────────────────────┐     ┌─────────────────────────────────────────┐
+│ Upload to Storage   │ ──▶ │ Path: case-documents/whispers/          │
+│ supabase.storage    │     │ voice-{docketId}-{timestamp}.webm       │
+└─────────────────────┘     └────────────────────┬────────────────────┘
+                                                 │
+                                                 ▼
+                            ┌─────────────────────────────────────────┐
+                            │ INSERT message: "[VOICE_MEMO]{url}"     │
+                            │ into live_courtroom_feed                │
+                            └─────────────────────────────────────────┘`}
+                  </pre>
+                </div>
+                <div className="mt-3 space-y-2 text-xs text-muted-foreground">
+                  <p><strong>Recording Specs:</strong></p>
+                  <ul className="list-disc list-inside ml-2 space-y-1">
+                    <li>Format: WebM (audio/webm)</li>
+                    <li>Sample Rate: Browser default (typically 24kHz+)</li>
+                    <li>Minimum Duration: 1 second (configurable)</li>
+                    <li>Hold Threshold: 200ms before recording starts</li>
+                  </ul>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Notification Sound */}
+              <div>
+                <h3 className="font-semibold text-foreground mb-3">Notification Sound System (Web Audio API)</h3>
+                <div className="font-mono text-xs bg-muted/30 p-3 rounded overflow-x-auto">
+                  <pre className="text-muted-foreground">
+{`// useNotificationSound hook
+const playNotification = (type: 'message' | 'urgent') => {
+  const audioContext = audioContextRef.current;
+  const oscillator = audioContext.createOscillator();
+  const gainNode = audioContext.createGain();
+  
+  oscillator.connect(gainNode);
+  gainNode.connect(audioContext.destination);
+  
+  if (type === 'message') {
+    // Gentle chime: 800Hz, 0.1s
+    oscillator.type = 'sine';
+    oscillator.frequency.value = 800;
+    gainNode.gain.value = 0.1;
+    oscillator.start();
+    oscillator.stop(audioContext.currentTime + 0.1);
+  } else {
+    // Urgent two-tone: 600Hz → 800Hz, 0.15s each
+    oscillator.type = 'sine';
+    oscillator.frequency.setValueAtTime(600, audioContext.currentTime);
+    oscillator.frequency.setValueAtTime(800, audioContext.currentTime + 0.15);
+    gainNode.gain.value = 0.15;
+    oscillator.start();
+    oscillator.stop(audioContext.currentTime + 0.3);
+  }
+};`}
+                  </pre>
+                </div>
+                <div className="mt-3 p-2 bg-primary/10 rounded text-xs text-muted-foreground">
+                  <strong className="text-foreground">Note:</strong> AudioContext is initialized on first user interaction 
+                  (click/touch) to comply with browser autoplay policies.
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Haptic Feedback */}
+              <div>
+                <h3 className="font-semibold text-foreground mb-3">Haptic Feedback (Mobile)</h3>
+                <div className="font-mono text-xs bg-muted/30 p-3 rounded">
+                  <pre className="text-muted-foreground">
+{`// Recording start vibration
+navigator.vibrate(50);              // Short 50ms pulse
+
+// Message sent success
+navigator.vibrate([50, 50, 50]);    // Triple pulse pattern`}
+                  </pre>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* 7. Document & Annotation System */}
+          <Card className="mb-8">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Upload className="h-5 w-5 text-primary" aria-hidden="true" />
+                7. Document & Annotation System
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Document Upload */}
+              <div>
+                <h3 className="font-semibold text-foreground mb-3">Document Upload Flow</h3>
+                <div className="p-4 rounded bg-muted/30 border border-border font-mono text-xs overflow-x-auto">
+                  <pre className="text-muted-foreground whitespace-pre">
+{`┌──────────────────┐     ┌──────────────────────┐     ┌───────────────────┐
+│ File selected    │ ──▶ │ supabase.storage     │ ──▶ │ Public URL        │
+│ (drag-drop/pick) │     │ .upload()            │     │ generated         │
+└──────────────────┘     └──────────────────────┘     └─────────┬─────────┘
+                                                                │
+Storage Path: case-documents/{docketId}/{timestamp}.{ext}       │
+                                                                ▼
+                                                  ┌──────────────────────────┐
+                                                  │ INSERT into case_docs    │
+                                                  │ (docket_id, file_url,    │
+                                                  │  doc_type)               │
+                                                  └──────────────────────────┘`}
+                  </pre>
+                </div>
+                <div className="mt-3 space-y-2 text-xs text-muted-foreground">
+                  <p><strong>Supported Formats:</strong> PDF, DOC, DOCX, JPG, JPEG, PNG</p>
+                  <p><strong>Storage Bucket:</strong> case-documents (public)</p>
+                  <p><strong>File Naming:</strong> {'{docketId}/{timestamp}.{extension}'}</p>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* PDF Viewer */}
+              <div>
+                <h3 className="font-semibold text-foreground mb-3">PDF Viewer Features (react-pdf)</h3>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div className="p-3 rounded bg-muted/30 border border-border">
+                    <p className="font-semibold text-foreground text-sm">Zoom Controls</p>
+                    <p className="text-xs text-muted-foreground">50% to 300% scale, pinch-to-zoom on touch devices</p>
+                  </div>
+                  <div className="p-3 rounded bg-muted/30 border border-border">
+                    <p className="font-semibold text-foreground text-sm">Page Navigation</p>
+                    <p className="text-xs text-muted-foreground">Arrow buttons, argument-linked jumps</p>
+                  </div>
+                  <div className="p-3 rounded bg-muted/30 border border-border">
+                    <p className="font-semibold text-foreground text-sm">Annotation Overlay</p>
+                    <p className="text-xs text-muted-foreground">Canvas layer for highlights and pen strokes</p>
+                  </div>
+                  <div className="p-3 rounded bg-muted/30 border border-border">
+                    <p className="font-semibold text-foreground text-sm">Fallback PDF</p>
+                    <p className="text-xs text-muted-foreground">Test PDF shown when no documents uploaded</p>
+                  </div>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Annotation Types */}
+              <div>
+                <h3 className="font-semibold text-foreground mb-3">Annotation Types</h3>
+                <div className="space-y-3">
+                  <div className="p-3 rounded bg-yellow-500/20 border border-yellow-500/30">
+                    <p className="font-mono text-sm text-yellow-500">highlight</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Yellow semi-transparent background. Stores boundingRect {'{x, y, width, height}'}.
+                      Created by click-drag selection.
+                    </p>
+                  </div>
+                  <div className="p-3 rounded bg-red-500/20 border border-red-500/30">
+                    <p className="font-mono text-sm text-red-500">pen</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Red stroke drawing. Stores coordinates array [{'{x, y}'}, ...].
+                      Created by freehand drawing on canvas.
+                    </p>
+                  </div>
+                  <div className="p-3 rounded bg-muted/30 border border-border">
+                    <p className="font-mono text-sm text-muted-foreground">text (planned)</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Text note annotations. Will store text content and position.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* 8. Offline Support System */}
+          <Card className="mb-8">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Globe className="h-5 w-5 text-primary" aria-hidden="true" />
+                8. Offline Support System (IndexedDB)
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div>
+                <h3 className="font-semibold text-foreground mb-3">IndexedDB Schema (useOfflineCache hook)</h3>
+                <div className="font-mono text-xs bg-muted/30 p-3 rounded overflow-x-auto">
+                  <pre className="text-muted-foreground">
+{`// Database: vakalat-os-cache
+// Version: 1
+
+Object Stores:
+┌─────────────────────┬────────────────────────────────────────┐
+│ Store Name          │ Purpose                                │
+├─────────────────────┼────────────────────────────────────────┤
+│ docket-items        │ Cached daily_court_docket rows         │
+│ case-documents      │ Document metadata (not file blobs)     │
+│ case-arguments      │ Cached case_arguments rows             │
+│ pending-mutations   │ Queued write operations for sync       │
+└─────────────────────┴────────────────────────────────────────┘
+
+Pending Mutation Format:
+{
+  id: string,           // UUID
+  type: 'INSERT' | 'UPDATE' | 'DELETE',
+  table: string,        // Target table name
+  data: object,         // Mutation payload
+  timestamp: number     // Created timestamp (ms)
+}`}
+                  </pre>
+                </div>
+              </div>
+
+              <Separator />
+
+              <div>
+                <h3 className="font-semibold text-foreground mb-3">Network Detection</h3>
+                <div className="font-mono text-xs bg-muted/30 p-3 rounded">
+                  <pre className="text-muted-foreground">
+{`// Browser events for online/offline detection
+window.addEventListener('online', () => {
+  setIsOnline(true);
+  // Sync pending mutations
+  processPendingMutations();
+});
+
+window.addEventListener('offline', () => {
+  setIsOnline(false);
+  // Switch to cached data
+});
+
+// Initial state from navigator
+const [isOnline, setIsOnline] = useState(navigator.onLine);`}
+                  </pre>
+                </div>
+              </div>
+
+              <Separator />
+
+              <div>
+                <h3 className="font-semibold text-foreground mb-3">Offline-First Write Pattern</h3>
+                <div className="p-4 rounded bg-muted/30 border border-border font-mono text-xs overflow-x-auto">
+                  <pre className="text-muted-foreground whitespace-pre">
+{`┌──────────────┐     ┌─────────────────────┐
+│ User action  │ ──▶ │ Is online?          │
+│ (write data) │     └──────────┬──────────┘
+└──────────────┘                │
+                    ┌───────────┴───────────┐
+                    │                       │
+                    ▼ YES                   ▼ NO
+         ┌──────────────────┐    ┌──────────────────────┐
+         │ Write to Supabase│    │ Queue in IndexedDB   │
+         │ immediately      │    │ pending-mutations    │
+         └──────────────────┘    └──────────────────────┘
+                    │                       │
+                    ▼                       ▼
+         ┌──────────────────┐    ┌──────────────────────┐
+         │ Update local     │    │ When back online:    │
+         │ cache            │    │ Process queue FIFO   │
+         └──────────────────┘    └──────────────────────┘`}
+                  </pre>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* 9. Data Fetching Patterns */}
+          <Card className="mb-8">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Layers className="h-5 w-5 text-primary" aria-hidden="true" />
+                9. Data Fetching Patterns (TanStack Query)
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div>
+                <h3 className="font-semibold text-foreground mb-3">Query Key Structure</h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-border">
+                        <th className="text-left py-2 text-foreground">Query Key</th>
+                        <th className="text-left py-2 text-foreground">Hook</th>
+                        <th className="text-left py-2 text-foreground">Data Source</th>
+                      </tr>
+                    </thead>
+                    <tbody className="text-muted-foreground font-mono">
+                      <tr className="border-b border-border/50">
+                        <td className="py-2">['docket', date]</td>
+                        <td className="py-2 font-sans">useDocket</td>
+                        <td className="py-2 font-sans">daily_court_docket</td>
+                      </tr>
+                      <tr className="border-b border-border/50">
+                        <td className="py-2">['docket', caseId]</td>
+                        <td className="py-2 font-sans">useDocketItem</td>
+                        <td className="py-2 font-sans">daily_court_docket (single)</td>
+                      </tr>
+                      <tr className="border-b border-border/50">
+                        <td className="py-2">['liveBoard']</td>
+                        <td className="py-2 font-sans">useLiveBoard</td>
+                        <td className="py-2 font-sans">live_board_cache</td>
+                      </tr>
+                      <tr className="border-b border-border/50">
+                        <td className="py-2">['whisper', docketId]</td>
+                        <td className="py-2 font-sans">useWhisperFeed</td>
+                        <td className="py-2 font-sans">live_courtroom_feed</td>
+                      </tr>
+                      <tr className="border-b border-border/50">
+                        <td className="py-2">['case-documents', docketId]</td>
+                        <td className="py-2 font-sans">useCaseDocuments</td>
+                        <td className="py-2 font-sans">case_documents</td>
+                      </tr>
+                      <tr className="border-b border-border/50">
+                        <td className="py-2">['arguments', docketId]</td>
+                        <td className="py-2 font-sans">useArguments</td>
+                        <td className="py-2 font-sans">case_arguments</td>
+                      </tr>
+                      <tr className="border-b border-border/50">
+                        <td className="py-2">['annotations', documentId]</td>
+                        <td className="py-2 font-sans">useAnnotations</td>
+                        <td className="py-2 font-sans">document_annotations</td>
+                      </tr>
+                      <tr>
+                        <td className="py-2">['user-role', userId]</td>
+                        <td className="py-2 font-sans">useUserRole</td>
+                        <td className="py-2 font-sans">get_user_role RPC</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <Separator />
+
+              <div>
+                <h3 className="font-semibold text-foreground mb-3">Cache Invalidation Strategy</h3>
+                <div className="font-mono text-xs bg-muted/30 p-3 rounded">
+                  <pre className="text-muted-foreground">
+{`// Automatic invalidation on realtime events
+supabase.channel('...').on('postgres_changes', {...}, () => {
+  queryClient.invalidateQueries({ queryKey: ['liveBoard'] });
+});
+
+// Manual invalidation after mutations
+const mutation = useMutation({
+  mutationFn: async (data) => { /* insert/update */ },
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ['whisper', docketId] });
+  }
+});`}
+                  </pre>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* 10. Edge Functions */}
+          <Card className="mb-8">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Server className="h-5 w-5 text-primary" aria-hidden="true" />
+                10. Edge Functions
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div>
+                <h3 className="font-semibold text-foreground mb-3">simulate-live-board</h3>
+                <p className="text-sm text-muted-foreground mb-3">
+                  Serverless function for admin control of live board status. Uses service role key for elevated permissions.
+                </p>
+                <div className="font-mono text-xs bg-muted/30 p-3 rounded overflow-x-auto">
+                  <pre className="text-muted-foreground">
+{`// Endpoint: /functions/v1/simulate-live-board
+// Method: POST
+// Auth: Supabase anon key (public)
+
+Request Actions:
+┌─────────────────────┬──────────────────────────────────────────────┐
+│ Action              │ Payload                                      │
+├─────────────────────┼──────────────────────────────────────────────┤
+│ increment           │ { court_location, court_no, increment: ±n } │
+│ toggle_supplementary│ { court_location, court_no }                 │
+│ get_status          │ { }                                          │
+└─────────────────────┴──────────────────────────────────────────────┘
+
+Response:
+{
+  success: boolean,
+  data?: object,
+  error?: string
+}`}
+                  </pre>
+                </div>
+              </div>
+
+              <Separator />
+
+              <div>
+                <h3 className="font-semibold text-foreground mb-3">CORS Configuration</h3>
+                <div className="font-mono text-xs bg-muted/30 p-3 rounded">
+                  <pre className="text-muted-foreground">
+{`const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 
+    'authorization, x-client-info, apikey, content-type',
+};
+
+// OPTIONS preflight handler
+if (req.method === 'OPTIONS') {
+  return new Response(null, { headers: corsHeaders });
+}`}
+                  </pre>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* 11. Design System */}
+          <Card className="mb-8">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Palette className="h-5 w-5 text-primary" aria-hidden="true" />
+                11. Design System - "Golden Gavel" Theme
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div>
+                <h3 className="font-semibold text-foreground mb-3">Color Palette (HSL)</h3>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div className="p-3 rounded border border-border flex items-center gap-3">
+                    <div className="w-8 h-8 rounded bg-primary"></div>
+                    <div>
+                      <p className="font-mono text-xs text-foreground">--primary</p>
+                      <p className="text-xs text-muted-foreground">Royal Gold: 43 96% 56%</p>
+                    </div>
+                  </div>
+                  <div className="p-3 rounded border border-border flex items-center gap-3">
+                    <div className="w-8 h-8 rounded bg-background border border-border"></div>
+                    <div>
+                      <p className="font-mono text-xs text-foreground">--background</p>
+                      <p className="text-xs text-muted-foreground">Deep Midnight: 222 47% 9%</p>
+                    </div>
+                  </div>
+                  <div className="p-3 rounded border border-border flex items-center gap-3">
+                    <div className="w-8 h-8 rounded bg-danger"></div>
+                    <div>
+                      <p className="font-mono text-xs text-foreground">--danger</p>
+                      <p className="text-xs text-muted-foreground">Court Red: 0 84% 60%</p>
+                    </div>
+                  </div>
+                  <div className="p-3 rounded border border-border flex items-center gap-3">
+                    <div className="w-8 h-8 rounded bg-success"></div>
+                    <div>
+                      <p className="font-mono text-xs text-foreground">--success</p>
+                      <p className="text-xs text-muted-foreground">Court Green: 142 76% 36%</p>
+                    </div>
+                  </div>
+                  <div className="p-3 rounded border border-border flex items-center gap-3">
+                    <div className="w-8 h-8 rounded bg-warning"></div>
+                    <div>
+                      <p className="font-mono text-xs text-foreground">--warning</p>
+                      <p className="text-xs text-muted-foreground">Court Orange: 38 92% 50%</p>
+                    </div>
+                  </div>
+                  <div className="p-3 rounded border border-border flex items-center gap-3">
+                    <div className="w-8 h-8 rounded bg-card border border-border"></div>
+                    <div>
+                      <p className="font-mono text-xs text-foreground">--card</p>
+                      <p className="text-xs text-muted-foreground">Card Surface: 222 47% 13%</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <Separator />
+
+              <div>
+                <h3 className="font-semibold text-foreground mb-3">Typography</h3>
+                <div className="space-y-3">
+                  <div className="p-3 rounded bg-muted/30 border border-border">
+                    <p className="font-display text-lg text-foreground">font-display: "Playfair Display"</p>
+                    <p className="text-xs text-muted-foreground">Used for headings and titles</p>
+                  </div>
+                  <div className="p-3 rounded bg-muted/30 border border-border">
+                    <p className="font-sans text-lg text-foreground">font-sans: "Inter"</p>
+                    <p className="text-xs text-muted-foreground">Used for body text and UI elements</p>
+                  </div>
+                </div>
+              </div>
+
+              <Separator />
+
+              <div>
+                <h3 className="font-semibold text-foreground mb-3">Custom CSS Classes</h3>
+                <div className="font-mono text-xs bg-muted/30 p-3 rounded overflow-x-auto">
+                  <pre className="text-muted-foreground">
+{`/* Glassmorphism card effect */
+.glass-card {
+  background: rgba(var(--card), 0.8);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(var(--border), 0.5);
+}
+
+/* Giant number display (Live Board) */
+.giant-number {
+  font-size: clamp(4rem, 15vw, 9rem);
+  text-shadow: 0 0 40px hsl(var(--primary) / 0.5);
+}
+
+/* Gold glow effect */
+.gold-glow {
+  box-shadow: 0 0 20px hsl(var(--primary) / 0.4);
+}
+
+/* Mission-critical toast */
+.mission-critical-toast {
+  border: 2px solid hsl(var(--primary));
+  box-shadow: 0 0 20px hsl(var(--primary) / 0.4);
+}`}
+                  </pre>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* 12. Security Architecture */}
+          <Card className="mb-8">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Shield className="h-5 w-5 text-primary" aria-hidden="true" />
+                12. Security Architecture
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div>
+                <h3 className="font-semibold text-foreground mb-3">Row-Level Security (RLS) Summary</h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-border">
+                        <th className="text-left py-2 text-foreground">Table</th>
+                        <th className="text-left py-2 text-foreground">SELECT</th>
+                        <th className="text-left py-2 text-foreground">INSERT</th>
+                        <th className="text-left py-2 text-foreground">UPDATE</th>
+                        <th className="text-left py-2 text-foreground">DELETE</th>
+                      </tr>
+                    </thead>
+                    <tbody className="text-muted-foreground">
+                      <tr className="border-b border-border/50">
+                        <td className="py-2 font-mono">profiles</td>
+                        <td className="py-2 text-success">Public</td>
+                        <td className="py-2 text-warning">Own only</td>
+                        <td className="py-2 text-warning">Own only</td>
+                        <td className="py-2 text-danger">Denied</td>
+                      </tr>
+                      <tr className="border-b border-border/50">
+                        <td className="py-2 font-mono">user_roles</td>
+                        <td className="py-2 text-warning">Own only</td>
+                        <td className="py-2 text-muted-foreground">System</td>
+                        <td className="py-2 text-danger">Denied</td>
+                        <td className="py-2 text-danger">Denied</td>
+                      </tr>
+                      <tr className="border-b border-border/50">
+                        <td className="py-2 font-mono">daily_court_docket</td>
+                        <td className="py-2 text-success">Public</td>
+                        <td className="py-2 text-success">Auth</td>
+                        <td className="py-2 text-success">Auth</td>
+                        <td className="py-2 text-danger">Denied</td>
+                      </tr>
+                      <tr className="border-b border-border/50">
+                        <td className="py-2 font-mono">live_board_cache</td>
+                        <td className="py-2 text-success">Public</td>
+                        <td className="py-2 text-success">Auth</td>
+                        <td className="py-2 text-success">Auth</td>
+                        <td className="py-2 text-danger">Denied</td>
+                      </tr>
+                      <tr className="border-b border-border/50">
+                        <td className="py-2 font-mono">live_courtroom_feed</td>
+                        <td className="py-2 text-success">Public</td>
+                        <td className="py-2 text-success">Auth</td>
+                        <td className="py-2 text-success">Auth</td>
+                        <td className="py-2 text-danger">Denied</td>
+                      </tr>
+                      <tr className="border-b border-border/50">
+                        <td className="py-2 font-mono">case_documents</td>
+                        <td className="py-2 text-success">Public</td>
+                        <td className="py-2 text-success">Auth</td>
+                        <td className="py-2 text-danger">Denied</td>
+                        <td className="py-2 text-danger">Denied</td>
+                      </tr>
+                      <tr className="border-b border-border/50">
+                        <td className="py-2 font-mono">case_arguments</td>
+                        <td className="py-2 text-success">Public</td>
+                        <td className="py-2 text-success">Auth</td>
+                        <td className="py-2 text-success">Auth</td>
+                        <td className="py-2 text-success">Auth</td>
+                      </tr>
+                      <tr>
+                        <td className="py-2 font-mono">document_annotations</td>
+                        <td className="py-2 text-success">Public</td>
+                        <td className="py-2 text-success">Auth</td>
+                        <td className="py-2 text-warning">Own only</td>
+                        <td className="py-2 text-warning">Own only</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div className="mt-3 flex gap-4 text-xs">
+                  <span className="text-success">● Public = Anyone</span>
+                  <span className="text-warning">● Own only = auth.uid() match</span>
+                  <span className="text-success">● Auth = Authenticated</span>
+                  <span className="text-danger">● Denied = No policy</span>
+                </div>
+              </div>
+
+              <Separator />
+
+              <div>
+                <h3 className="font-semibold text-foreground mb-3">Security Best Practices Implemented</h3>
+                <ul className="space-y-2 text-sm text-muted-foreground">
+                  <li className="flex items-start gap-2">
+                    <span className="text-success mt-1">✓</span>
+                    <span><strong>Separate Role Storage:</strong> Roles stored in user_roles table (not profiles) to prevent privilege escalation via profile updates.</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-success mt-1">✓</span>
+                    <span><strong>SECURITY DEFINER Functions:</strong> Role checks use SECURITY DEFINER to bypass RLS recursion and provide consistent access control.</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-success mt-1">✓</span>
+                    <span><strong>Client-Side Auth Guard:</strong> AuthGuard component protects routes, but server-side RLS provides true security.</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-success mt-1">✓</span>
+                    <span><strong>Service Role Isolation:</strong> Service role key only used in edge functions, never exposed to client.</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-success mt-1">✓</span>
+                    <span><strong>Email Redirect URL:</strong> Signup uses window.location.origin for emailRedirectTo to prevent open redirect attacks.</span>
+                  </li>
+                </ul>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* 13. Accessibility Implementation */}
+          <Card className="mb-8">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Eye className="h-5 w-5 text-primary" aria-hidden="true" />
+                13. Accessibility Implementation (WCAG 2.1 AA)
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div>
+                <h3 className="font-semibold text-foreground mb-3">ARIA Implementation</h3>
+                <div className="font-mono text-xs bg-muted/30 p-3 rounded overflow-x-auto">
+                  <pre className="text-muted-foreground">
+{`<!-- Live regions for status updates -->
+<div aria-live="polite" aria-atomic="true">
+  {statusMessage}
+</div>
+
+<!-- Urgent alerts -->
+<div aria-live="assertive" role="alert">
+  {panicAlert}
+</div>
+
+<!-- Interactive elements -->
+<button aria-label="Send whisper message" aria-describedby="whisper-help">
+  <SendIcon aria-hidden="true" />
+</button>
+
+<!-- Skip link -->
+<a href="#main-content" className="skip-link">
+  Skip to main content
+</a>`}
+                  </pre>
+                </div>
+              </div>
+
+              <Separator />
+
+              <div>
+                <h3 className="font-semibold text-foreground mb-3">Touch & Click Targets</h3>
+                <div className="font-mono text-xs bg-muted/30 p-3 rounded">
+                  <pre className="text-muted-foreground">
+{`/* Minimum 44x44px touch targets (WCAG 2.5.5) */
+.min-touch-target {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+/* Tailwind utilities */
+.min-h-touch { min-height: 44px; }
+.min-w-touch { min-width: 44px; }`}
+                  </pre>
+                </div>
+              </div>
+
+              <Separator />
+
+              <div>
+                <h3 className="font-semibold text-foreground mb-3">Reduced Motion Support</h3>
+                <div className="font-mono text-xs bg-muted/30 p-3 rounded">
+                  <pre className="text-muted-foreground">
+{`@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}`}
+                  </pre>
+                </div>
+              </div>
+
+              <Separator />
+
+              <div>
+                <h3 className="font-semibold text-foreground mb-3">Focus Management</h3>
+                <div className="font-mono text-xs bg-muted/30 p-3 rounded">
+                  <pre className="text-muted-foreground">
+{`/* Visible focus indicators */
+:focus-visible {
+  outline: 2px solid hsl(var(--primary));
+  outline-offset: 2px;
+}
+
+/* Ring utility classes */
+.focus:ring-2 { --tw-ring-width: 2px; }
+.ring-primary { --tw-ring-color: hsl(var(--primary)); }
+.ring-offset-2 { --tw-ring-offset-width: 2px; }`}
+                  </pre>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* ============================= */}
+          {/* END TECHNICAL DOCUMENTATION   */}
+          {/* ============================= */}
+
           {/* Download Source Code */}
           <Card className="mb-8" id="download">
             <CardHeader>
@@ -431,7 +2044,7 @@ export default function Documentation() {
               <div>
                 <h4 className="font-semibold text-foreground mb-2">Tech Stack</h4>
                 <div className="flex flex-wrap gap-2">
-                  {['React', 'TypeScript', 'Tailwind CSS', 'Supabase', 'Vite', 'shadcn/ui'].map((tech) => (
+                  {['React 18', 'TypeScript', 'Tailwind CSS', 'Supabase', 'Vite', 'shadcn/ui', 'TanStack Query v5', 'react-pdf'].map((tech) => (
                     <span 
                       key={tech}
                       className="px-3 py-1 rounded-full text-sm bg-card border border-border text-muted-foreground"
