@@ -10,10 +10,11 @@ import { formatDistanceToNow } from 'date-fns';
 
 interface ScraperStatusWidgetProps {
   bench?: string;
+  selectedDate?: string;
   onRefreshComplete?: () => void;
 }
 
-export function ScraperStatusWidget({ bench, onRefreshComplete }: ScraperStatusWidgetProps) {
+export function ScraperStatusWidget({ bench, selectedDate, onRefreshComplete }: ScraperStatusWidgetProps) {
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Fetch latest scraper log for user's bench
@@ -43,7 +44,7 @@ export function ScraperStatusWidget({ bench, onRefreshComplete }: ScraperStatusW
 
   const handleManualRefresh = async () => {
     setIsRefreshing(true);
-    toast.info('Refreshing cause list...', { duration: 2000 });
+    toast.info(`Refreshing cause list for ${selectedDate || 'today'}...`, { duration: 2000 });
 
     try {
       // Determine which benches to scrape
@@ -54,7 +55,11 @@ export function ScraperStatusWidget({ bench, onRefreshComplete }: ScraperStatusW
       const results = await Promise.all(
         benchesToScrape.map(b =>
           supabase.functions.invoke('scrape-causelist', {
-            body: { action: 'scrape', bench: b }
+            body: { 
+              action: 'scrape', 
+              bench: b,
+              date: selectedDate // Pass the selected date
+            }
           })
         )
       );
@@ -63,9 +68,18 @@ export function ScraperStatusWidget({ bench, onRefreshComplete }: ScraperStatusW
       const totalEntries = results.reduce((sum, r) => {
         return sum + (r.data?.entries_count || 0);
       }, 0);
+      const courtsFound = results.reduce((sum, r) => {
+        return sum + (r.data?.courts_found || 0);
+      }, 0);
 
       if (successCount === results.length) {
-        toast.success(`Cause list refreshed! Found ${totalEntries} cases.`);
+        if (totalEntries > 0) {
+          toast.success(`Cause list refreshed! Found ${totalEntries} cases.`);
+        } else if (courtsFound > 0) {
+          toast.info(`Found ${courtsFound} courts, but no case data yet. PDFs may not be available.`);
+        } else {
+          toast.warning('No data found. Try a different date.');
+        }
       } else if (successCount > 0) {
         toast.warning(`Partial refresh: ${successCount}/${results.length} benches updated.`);
       } else {
