@@ -7,6 +7,12 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// CIS Portal URLs - these are the correct cause list URLs
+const CIS_URLS: Record<string, string> = {
+  JAIPUR: 'https://hcraj.nic.in/cishcraj-jp/causelists/',
+  JODHPUR: 'https://hcraj.nic.in/cishcraj-jdp/causelists/'
+};
+
 interface CauseListEntry {
   item_no: number;
   case_number: string;
@@ -21,34 +27,12 @@ interface CauseListEntry {
   status: string;
 }
 
-interface CourtMetadata {
-  court_no: string;
-  judge_names: string;
-  list_type: string;
-  bench: string;
-}
-
 interface ScrapeRequest {
   action: 'scrape' | 'preview';
   bench?: 'JAIPUR' | 'JODHPUR';
   date?: string;
-  court_no?: string;
-  list_type?: 'DAILY' | 'SUPPLEMENTARY';
-}
-
-interface ScraperLog {
-  bench: string;
-  status: 'success' | 'partial' | 'failed' | 'warning';
-  cases_found: number;
-  error_message: string | null;
-  list_type: string;
-  court_no: string | null;
-}
-
-interface BrowserlessResult {
-  courts: CourtMetadata[];
-  entries: CauseListEntry[];
-  pdfLinks: string[];
+  lawyer_name?: string;
+  list_type?: 'D' | 'S'; // D=Daily, S=Supplementary
 }
 
 // Smart date logic
@@ -67,310 +51,350 @@ function getSmartTargetDate(): string {
   return istTime.toISOString().split('T')[0];
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
+// Format date as DD/MM/YYYY for the form
+function formatDateForForm(dateStr: string): string {
+  const [year, month, day] = dateStr.split('-');
+  return `${day}/${month}/${year}`;
 }
 
-// ============================================================
-// BROWSERLESS SCRAPER
-// ============================================================
+// Extract cookies from Set-Cookie headers
+function extractCookies(response: Response): string {
+  const cookies: string[] = [];
+  response.headers.forEach((value, key) => {
+    if (key.toLowerCase() === 'set-cookie') {
+      const cookiePart = value.split(';')[0];
+      cookies.push(cookiePart);
+    }
+  });
+  return cookies.join('; ');
+}
 
-async function scrapeWithBrowserless(
-  baseUrl: string,
-  targetDate: string,
-  bench: string,
-  browserlessApiKey: string,
-  maxCourts: number = 5
-): Promise<BrowserlessResult> {
-  console.log(`[scrape-causelist] 🚀 Starting Browserless scrape for ${bench}`);
+// Extract ASP.NET hidden fields from HTML
+function extractAspNetFields(html: string): Record<string, string> {
+  const fields: Record<string, string> = {};
   
-  const result: BrowserlessResult = {
-    courts: [],
-    entries: [],
-    pdfLinks: [],
-  };
+  const fieldNames = ['__VIEWSTATE', '__VIEWSTATEGENERATOR', '__EVENTVALIDATION', '__EVENTTARGET', '__EVENTARGUMENT'];
+  
+  for (const fieldName of fieldNames) {
+    const regex = new RegExp(`id="${fieldName}"[^>]*value="([^"]*)"`, 'i');
+    const match = html.match(regex);
+    if (match) {
+      fields[fieldName] = match[1];
+    }
+  }
+  
+  return fields;
+}
 
+// Extract CAPTCHA image as base64
+function extractCaptchaBase64(html: string): string | null {
+  // Pattern 1: img with src containing captcha
+  const imgPatterns = [
+    /src="(data:image\/[^"]+captcha[^"]+)"/i,
+    /src="([^"]*captcha[^"]*\.(?:png|jpg|jpeg|gif)[^"]*)"/i,
+    /src="(CaptchaImage\.axd[^"]*)"/i,
+    /src="([^"]*Captcha[^"]*\.axd[^"]*)"/i,
+  ];
+  
+  for (const pattern of imgPatterns) {
+    const match = html.match(pattern);
+    if (match) {
+      const src = match[1];
+      if (src.startsWith('data:')) {
+        return src;
+      }
+      // Return the relative URL for fetching
+      return src;
+    }
+  }
+  
+  // Pattern 2: Look for canvas or specific captcha element
+  if (html.includes('imgCaptcha') || html.includes('CaptchaImage')) {
+    console.log('[scrape-causelist] Found captcha reference in HTML');
+  }
+  
+  return null;
+}
+
+// Call solve-captcha function
+async function solveCaptcha(imageData: string, supabaseUrl: string, supabaseKey: string): Promise<string | null> {
+  console.log(`[scrape-causelist] Solving CAPTCHA...`);
+  
   try {
-    // Get the page - the website shows today's cause list by default
-    console.log(`[scrape-causelist] Getting page content`);
-    const contentResponse = await fetch(`https://chrome.browserless.io/content?token=${browserlessApiKey}`, {
+    const response = await fetch(`${supabaseUrl}/functions/v1/solve-captcha`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        url: baseUrl,
-        gotoOptions: {
-          waitUntil: 'networkidle2',
-          timeout: 30000,
-        },
-        waitForSelector: {
-          selector: 'table',
-          timeout: 15000,
-        },
-      }),
+      headers: {
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ image: imageData }),
     });
 
-    if (!contentResponse.ok) {
-      const errText = await contentResponse.text();
-      console.error(`[scrape-causelist] Content error: ${contentResponse.status} - ${errText}`);
-      throw new Error(`Content request failed: ${contentResponse.status}`);
+    if (!response.ok) {
+      console.error(`[scrape-causelist] CAPTCHA solve failed: ${response.status}`);
+      return null;
     }
 
-    const html = await contentResponse.text();
-    console.log(`[scrape-causelist] Got HTML: ${html.length} chars`);
-    
-    // Log sample of HTML to debug
-    const tableIndex = html.indexOf('<table');
-    if (tableIndex > -1) {
-      console.log(`[scrape-causelist] Table found at index ${tableIndex}`);
-      console.log(`[scrape-causelist] Table sample: ${html.substring(tableIndex, tableIndex + 500)}`);
-    } else {
-      console.log(`[scrape-causelist] No <table> found in HTML`);
-      console.log(`[scrape-causelist] HTML sample: ${html.substring(0, 1000)}`);
-    }
-
-    // Parse courts from HTML
-    result.courts = parseCourtTableFromHtml(html, bench);
-    console.log(`[scrape-causelist] Found ${result.courts.length} courts`);
-
-    // Extract PDF links
-    result.pdfLinks = extractPdfLinksFromHtml(html, baseUrl);
-    console.log(`[scrape-causelist] Found ${result.pdfLinks.length} PDF links`);
-
-    // Step 2: Try to scrape PDF content for each court
-    if (result.pdfLinks.length > 0) {
-      const pdfsToScrape = result.pdfLinks.slice(0, maxCourts);
-      console.log(`[scrape-causelist] Step 2: Scraping ${pdfsToScrape.length} PDFs`);
-
-      for (let i = 0; i < pdfsToScrape.length; i++) {
-        const pdfUrl = pdfsToScrape[i];
-        const courtNo = extractCourtNoFromUrl(pdfUrl);
-        
-        console.log(`[scrape-causelist] Scraping PDF ${i + 1}/${pdfsToScrape.length} (court ${courtNo})`);
-
-        try {
-          // Try to get PDF content via Browserless
-          const pdfResponse = await fetch(`https://chrome.browserless.io/content?token=${browserlessApiKey}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              url: pdfUrl,
-              gotoOptions: {
-                waitUntil: 'networkidle2',
-                timeout: 30000,
-              },
-              bestAttempt: true,
-            }),
-          });
-
-          if (pdfResponse.ok) {
-            const pdfContent = await pdfResponse.text();
-            console.log(`[scrape-causelist] PDF content: ${pdfContent.length} chars`);
-
-            if (pdfContent.length > 500) {
-              const listType = result.courts.find(c => c.court_no === courtNo)?.list_type || 'DAILY';
-              const entries = parseCauseListContent(pdfContent, bench, courtNo, targetDate, listType);
-              result.entries = result.entries.concat(entries);
-              console.log(`[scrape-causelist] Parsed ${entries.length} entries from court ${courtNo}`);
-            }
-          }
-        } catch (pdfErr) {
-          console.log(`[scrape-causelist] PDF error: ${pdfErr}`);
-        }
-
-        // Delay between requests
-        if (i < pdfsToScrape.length - 1) {
-          await sleep(2000);
-        }
-      }
-    }
-
-  } catch (err) {
-    console.error(`[scrape-causelist] Browserless error: ${err}`);
-    throw err;
+    const data = await response.json();
+    console.log(`[scrape-causelist] CAPTCHA solution: ${data.solution}`);
+    return data.solution;
+  } catch (error) {
+    console.error('[scrape-causelist] CAPTCHA solve error:', error);
+    return null;
   }
-
-  return result;
 }
 
-// ============================================================
-// PARSING FUNCTIONS
-// ============================================================
-
-function parseCourtTableFromHtml(html: string, bench: string): CourtMetadata[] {
-  const courts: CourtMetadata[] = [];
-  
-  // Match table rows
-  const trPattern = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
-  let match;
-  
-  while ((match = trPattern.exec(html)) !== null) {
-    const rowHtml = match[1];
-    const tdPattern = /<td[^>]*>([\s\S]*?)<\/td>/gi;
-    const cells: string[] = [];
-    let tdMatch;
+// Fetch CAPTCHA image and convert to base64
+async function fetchCaptchaImage(captchaUrl: string, baseUrl: string, cookies: string): Promise<string | null> {
+  try {
+    const fullUrl = captchaUrl.startsWith('http') ? captchaUrl : new URL(captchaUrl, baseUrl).toString();
+    console.log(`[scrape-causelist] Fetching CAPTCHA image: ${fullUrl}`);
     
-    while ((tdMatch = tdPattern.exec(rowHtml)) !== null) {
-      const cellText = tdMatch[1].replace(/<[^>]+>/g, '').trim();
+    const response = await fetch(fullUrl, {
+      headers: {
+        'Cookie': cookies,
+        'Referer': baseUrl,
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      }
+    });
+    
+    if (!response.ok) {
+      console.error(`[scrape-causelist] CAPTCHA image fetch failed: ${response.status}`);
+      return null;
+    }
+    
+    const buffer = await response.arrayBuffer();
+    const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
+    const contentType = response.headers.get('content-type') || 'image/png';
+    return `data:${contentType};base64,${base64}`;
+  } catch (error) {
+    console.error('[scrape-causelist] CAPTCHA image fetch error:', error);
+    return null;
+  }
+}
+
+// Main HTTP-based scraping function
+async function scrapeWithHttp(
+  bench: string,
+  targetDate: string,
+  listType: string,
+  supabaseUrl: string,
+  supabaseKey: string
+): Promise<{
+  success: boolean;
+  entries: CauseListEntry[];
+  error?: string;
+  captchaSolution?: string;
+  rawHtml?: string;
+}> {
+  const baseUrl = CIS_URLS[bench];
+  if (!baseUrl) {
+    return { success: false, entries: [], error: `Invalid bench: ${bench}` };
+  }
+
+  const formattedDate = formatDateForForm(targetDate);
+  console.log(`[scrape-causelist] Starting HTTP scrape for ${bench}`);
+  console.log(`[scrape-causelist] URL: ${baseUrl}`);
+  console.log(`[scrape-causelist] Date: ${formattedDate}, List Type: ${listType}`);
+
+  try {
+    // Step 1: GET the initial page to get session cookie and CAPTCHA
+    console.log('[scrape-causelist] Step 1: Fetching initial page...');
+    const initialResponse = await fetch(baseUrl, {
+      method: 'GET',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5',
+      }
+    });
+
+    if (!initialResponse.ok) {
+      return { success: false, entries: [], error: `Initial page fetch failed: ${initialResponse.status}` };
+    }
+
+    const initialHtml = await initialResponse.text();
+    console.log(`[scrape-causelist] Initial page: ${initialHtml.length} chars`);
+
+    // Extract session cookies
+    const cookies = extractCookies(initialResponse);
+    console.log(`[scrape-causelist] Cookies: ${cookies.substring(0, 100)}...`);
+
+    // Extract ASP.NET hidden fields
+    const aspFields = extractAspNetFields(initialHtml);
+    console.log(`[scrape-causelist] ASP.NET fields: ${Object.keys(aspFields).join(', ')}`);
+
+    // Extract CAPTCHA image URL
+    const captchaSrc = extractCaptchaBase64(initialHtml);
+    if (!captchaSrc) {
+      console.log('[scrape-causelist] HTML preview:', initialHtml.substring(0, 2000));
+      return { success: false, entries: [], error: 'CAPTCHA image not found', rawHtml: initialHtml.substring(0, 5000) };
+    }
+
+    // Fetch CAPTCHA image if it's a URL
+    let captchaBase64: string | null;
+    if (captchaSrc.startsWith('data:')) {
+      captchaBase64 = captchaSrc;
+    } else {
+      captchaBase64 = await fetchCaptchaImage(captchaSrc, baseUrl, cookies);
+    }
+
+    if (!captchaBase64) {
+      return { success: false, entries: [], error: 'Failed to fetch CAPTCHA image' };
+    }
+
+    // Step 2: Solve CAPTCHA
+    console.log('[scrape-causelist] Step 2: Solving CAPTCHA...');
+    const captchaSolution = await solveCaptcha(captchaBase64, supabaseUrl, supabaseKey);
+    if (!captchaSolution) {
+      return { success: false, entries: [], error: 'Failed to solve CAPTCHA' };
+    }
+
+    // Step 3: Submit form with POST request
+    console.log('[scrape-causelist] Step 3: Submitting form...');
+    
+    const formData = new URLSearchParams();
+    
+    // Add ASP.NET fields
+    for (const [key, value] of Object.entries(aspFields)) {
+      formData.append(key, value);
+    }
+    
+    // Add form fields matching the CIS portal form
+    formData.append('causelstdt', formattedDate);
+    formData.append('causelisttype', listType);
+    formData.append('txtCaptcha', captchaSolution);
+    formData.append('formatradio', 'opthtml'); // HTML format
+    formData.append('__EVENTTARGET', 'btnViewCauseList');
+    formData.append('__EVENTARGUMENT', '');
+    
+    console.log(`[scrape-causelist] Form data: date=${formattedDate}, listType=${listType}, captcha=${captchaSolution}`);
+    
+    const submitResponse = await fetch(baseUrl, {
+      method: 'POST',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5',
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Cookie': cookies,
+        'Referer': baseUrl,
+        'Origin': new URL(baseUrl).origin,
+      },
+      body: formData.toString()
+    });
+
+    if (!submitResponse.ok) {
+      return { success: false, entries: [], error: `Form submission failed: ${submitResponse.status}`, captchaSolution };
+    }
+
+    const resultHtml = await submitResponse.text();
+    console.log(`[scrape-causelist] Result page: ${resultHtml.length} chars`);
+
+    // Check for common error messages
+    if (resultHtml.includes('Invalid Captcha') || resultHtml.includes('invalid captcha') || resultHtml.includes('Wrong Captcha')) {
+      return { success: false, entries: [], error: 'CAPTCHA validation failed - wrong solution', captchaSolution, rawHtml: resultHtml.substring(0, 2000) };
+    }
+
+    // Parse the result HTML for case entries
+    const entries = parseCauseListHtml(resultHtml, bench, targetDate, listType === 'D' ? 'DAILY' : 'SUPPLEMENTARY');
+    
+    console.log(`[scrape-causelist] Parsed ${entries.length} entries`);
+
+    return {
+      success: true,
+      entries,
+      captchaSolution,
+      rawHtml: resultHtml.substring(0, 5000),
+    };
+
+  } catch (err) {
+    console.error(`[scrape-causelist] Error: ${err}`);
+    return { success: false, entries: [], error: String(err) };
+  }
+}
+
+// Parse cause list HTML to extract entries
+function parseCauseListHtml(html: string, bench: string, date: string, listType: string): CauseListEntry[] {
+  const entries: CauseListEntry[] = [];
+  
+  console.log('[scrape-causelist] Parsing response...');
+  
+  // Check for no records
+  if (html.includes('No Record Found') || html.includes('no record found') || html.includes('No Data')) {
+    console.log('[scrape-causelist] No records found for this date');
+    return [];
+  }
+  
+  // Find table rows
+  const tableRowPattern = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
+  const rows = html.match(tableRowPattern) || [];
+  console.log(`[scrape-causelist] Found ${rows.length} table rows`);
+  
+  let currentCourtNo = '1';
+  
+  for (const row of rows) {
+    const cells: string[] = [];
+    const cellRegex = /<td[^>]*>([\s\S]*?)<\/td>/gi;
+    let cellMatch;
+    
+    while ((cellMatch = cellRegex.exec(row)) !== null) {
+      const cellText = cellMatch[1]
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&amp;/g, '&')
+        .replace(/\s+/g, ' ')
+        .trim();
       cells.push(cellText);
     }
     
-    if (cells.length >= 3 && /^\d+$/.test(cells[0])) {
-      courts.push({
-        court_no: cells[0],
-        judge_names: cells[1],
-        list_type: cells[2] === 'S' ? 'SUPPLEMENTARY' : 'DAILY',
-        bench: bench,
-      });
-    }
-  }
-  
-  console.log(`[scrape-causelist] Parsed ${courts.length} courts`);
-  return courts;
-}
-
-function extractPdfLinksFromHtml(html: string, baseUrl: string): string[] {
-  const links: string[] = [];
-  const baseHost = new URL(baseUrl).origin;
-  const benchCode = baseUrl.includes('jdp') ? 'jdp' : 'jp';
-  
-  // Pattern: data-pdfpath (base64 encoded)
-  const pdfPathPattern = /data-pdfpath=["']([^"']+)["']/gi;
-  let match;
-  
-  while ((match = pdfPathPattern.exec(html)) !== null) {
-    try {
-      const decoded = atob(match[1]);
-      const pdfUrl = `${baseHost}/quick-causelist-${benchCode}/download_pdf.php?path=${encodeURIComponent(decoded)}`;
-      if (!links.includes(pdfUrl)) {
-        links.push(pdfUrl);
-        console.log(`[scrape-causelist] Found PDF: ${decoded.split('/').pop()}`);
-      }
-    } catch (e) {}
-  }
-  
-  // Pattern: Direct PDF href
-  const hrefPattern = /href=["']([^"']*\.pdf[^"']*)["']/gi;
-  while ((match = hrefPattern.exec(html)) !== null) {
-    let url = match[1];
-    if (!url.startsWith('http')) {
-      try { url = new URL(url, baseUrl).toString(); } catch { continue; }
-    }
-    if (!links.includes(url)) {
-      links.push(url);
-    }
-  }
-  
-  return links;
-}
-
-function extractCourtNoFromUrl(pdfUrl: string): string {
-  // Pattern: DDMMYYYY_HHMM_COURTNO.pdf -> extract court from COURTNO (e.g., 1001 -> court 1)
-  const specialMatch = pdfUrl.match(/\d{8}_\d{4}_(\d+)\.pdf$/i);
-  if (specialMatch) {
-    const code = specialMatch[1];
-    return code.length >= 4 ? code.substring(0, code.length - 3) || '1' : code;
-  }
-  
-  const courtMatch = pdfUrl.match(/court[_-]?(\d+)/i);
-  if (courtMatch) return courtMatch[1];
-  
-  return '1';
-}
-
-function parseCauseListContent(
-  content: string,
-  bench: string,
-  courtNo: string,
-  date: string,
-  listType: string
-): CauseListEntry[] {
-  const entries: CauseListEntry[] = [];
-  
-  // Clean HTML tags
-  const text = content
-    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/\s+/g, ' ');
-  
-  const lines = text.split(/[\n\r]+|(?=\d+\.\s)/);
-  
-  const casePattern = /([SDB]\.?[AB]?\.?(?:CWP|CIVIL|CRIMINAL|WP|SA|CA|MA|RA|SB|DB|REV|CMA|CR|CRL|MISC)[\/\s]*(?:No\.?)?\s*\d+[\/\-]\d{4})/gi;
-  const partyPattern = /([A-Za-z\s.&,]+?)\s+(?:Vs\.?|vs\.?|V\/s\.?|versus|V\.)\s+([A-Za-z\s.&,]+)/i;
-  
-  let itemCounter = 0;
-  let currentCase: Partial<CauseListEntry> | null = null;
-  
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (trimmed.length < 5) continue;
+    if (cells.length < 2) continue;
     
-    // Skip headers
-    if (/s\.?no|serial|case\s*number|advocate|hon.*ble/i.test(trimmed)) continue;
+    // Skip header rows
+    if (cells[0].toLowerCase().includes('sr') || 
+        cells[0].toLowerCase().includes('item') ||
+        cells[0].toLowerCase().includes('case no')) continue;
     
-    // Look for case numbers
-    casePattern.lastIndex = 0;
-    const caseMatch = trimmed.match(casePattern);
-    
-    if (caseMatch) {
-      // Save previous
-      if (currentCase?.case_number) {
-        entries.push({
-          item_no: currentCase.item_no || ++itemCounter,
-          case_number: currentCase.case_number,
-          petitioner: currentCase.petitioner || null,
-          respondent: currentCase.respondent || null,
-          petitioner_lawyer: currentCase.petitioner_lawyer || null,
-          respondent_lawyer: currentCase.respondent_lawyer || null,
-          court_room_no: courtNo,
-          court_location: bench,
-          list_type: listType,
-          date: date,
-          status: 'pending',
-        });
-      }
-      
-      // Check for item number
-      const itemMatch = trimmed.match(/^(\d+)[\.\)\s]/);
-      currentCase = {
-        item_no: itemMatch ? parseInt(itemMatch[1]) : ++itemCounter,
-        case_number: caseMatch[0].trim(),
-      };
-      
-      // Check for parties
-      const partyMatch = trimmed.match(partyPattern);
-      if (partyMatch) {
-        currentCase.petitioner = partyMatch[1].trim().substring(0, 200);
-        currentCase.respondent = partyMatch[2].trim().substring(0, 200);
-      }
-    } else if (currentCase) {
-      // Add parties if not found
-      if (!currentCase.petitioner) {
-        const partyMatch = trimmed.match(partyPattern);
-        if (partyMatch) {
-          currentCase.petitioner = partyMatch[1].trim().substring(0, 200);
-          currentCase.respondent = partyMatch[2].trim().substring(0, 200);
-        }
-      }
-      
-      // Look for advocates
-      const advMatch = trimmed.match(/(?:Adv\.?|Advocate)[:\s]*([A-Za-z\s.]+?)(?:,|$)/i);
-      if (advMatch && !currentCase.petitioner_lawyer) {
-        currentCase.petitioner_lawyer = advMatch[1].trim().substring(0, 200);
-      }
+    // Check for court number header (e.g., "Court No. 1")
+    const courtMatch = row.match(/Court\s*(?:No\.?)?\s*(\d+)/i);
+    if (courtMatch) {
+      currentCourtNo = courtMatch[1];
+      continue;
     }
-  }
-  
-  // Save last
-  if (currentCase?.case_number) {
+    
+    const itemNo = parseInt(cells[0]);
+    if (isNaN(itemNo) || itemNo <= 0) continue;
+    
+    const caseNumber = cells[1] || '';
+    if (!caseNumber || caseNumber.length < 3) continue;
+    
+    let petitioner = '';
+    let respondent = '';
+    let petitionerLawyer = '';
+    let respondentLawyer = '';
+    
+    // Party names (usually in 3rd cell)
+    const partyCell = cells[2] || '';
+    const vsMatch = partyCell.match(/(.+?)\s*(?:vs?\.?|v\/s|versus)\s*(.+)/i);
+    if (vsMatch) {
+      petitioner = vsMatch[1].trim().substring(0, 200);
+      respondent = vsMatch[2].trim().substring(0, 200);
+    } else if (partyCell) {
+      petitioner = partyCell.substring(0, 200);
+    }
+    
+    // Lawyers (usually in 4th and 5th cells)
+    if (cells.length > 3) petitionerLawyer = (cells[3] || '').substring(0, 100);
+    if (cells.length > 4) respondentLawyer = (cells[4] || '').substring(0, 100);
+    
     entries.push({
-      item_no: currentCase.item_no || ++itemCounter,
-      case_number: currentCase.case_number,
-      petitioner: currentCase.petitioner || null,
-      respondent: currentCase.respondent || null,
-      petitioner_lawyer: currentCase.petitioner_lawyer || null,
-      respondent_lawyer: currentCase.respondent_lawyer || null,
-      court_room_no: courtNo,
+      item_no: itemNo,
+      case_number: caseNumber,
+      petitioner: petitioner || null,
+      respondent: respondent || null,
+      petitioner_lawyer: petitionerLawyer || null,
+      respondent_lawyer: respondentLawyer || null,
+      court_room_no: currentCourtNo,
       court_location: bench,
       list_type: listType,
       date: date,
@@ -378,14 +402,19 @@ function parseCauseListContent(
     });
   }
   
-  console.log(`[scrape-causelist] Parsed ${entries.length} entries`);
   return entries;
 }
 
 // Log scraper run
-async function logScraperRun(supabase: any, log: ScraperLog): Promise<void> {
+async function logScraperRun(supabase: any, bench: string, status: string, casesFound: number, errorMessage: string | null, listType: string): Promise<void> {
   try {
-    await supabase.from('scraper_logs').insert(log);
+    await supabase.from('scraper_logs').insert({
+      bench,
+      status,
+      cases_found: casesFound,
+      error_message: errorMessage,
+      list_type: listType,
+    });
   } catch (err) {
     console.error('[scrape-causelist] Log error:', err);
   }
@@ -402,204 +431,73 @@ serve(async (req) => {
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
   const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-  const browserlessApiKey = Deno.env.get('BROWSERLESS_API_KEY');
-  const firecrawlApiKey = Deno.env.get('FIRECRAWL_API_KEY');
   const supabase = createClient(supabaseUrl, supabaseKey);
 
   try {
     const { 
-      action, 
-      bench = 'JAIPUR', 
+      action = 'scrape', 
+      bench = 'JODHPUR', 
       date, 
-      court_no = '1', 
-      list_type = 'DAILY' 
+      list_type = 'D',
     } = await req.json() as ScrapeRequest;
     
     const targetDate = date || getSmartTargetDate();
     
     console.log(`[scrape-causelist] ========================================`);
     console.log(`[scrape-causelist] Action: ${action}, Bench: ${bench}`);
-    console.log(`[scrape-causelist] Date: ${targetDate}`);
-    console.log(`[scrape-causelist] Browserless: ${browserlessApiKey ? '✓' : '✗'}`);
+    console.log(`[scrape-causelist] Date: ${targetDate}, List Type: ${list_type}`);
     console.log(`[scrape-causelist] ========================================`);
-    
-    const baseUrls: Record<string, string> = {
-      'JAIPUR': 'https://hcraj.nic.in/quick-causelist-jp/',
-      'JODHPUR': 'https://hcraj.nic.in/quick-causelist-jdp/',
-    };
-    
-    const targetUrl = baseUrls[bench];
-    
-    if (!targetUrl) {
-      return new Response(
-        JSON.stringify({ success: false, error: 'Invalid bench' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
-      );
-    }
 
-    if (!browserlessApiKey && !firecrawlApiKey) {
-      return new Response(
-        JSON.stringify({ success: false, error: 'No scraping API configured' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
-      );
-    }
+    // Scrape using HTTP-based approach (no Browserless needed)
+    const result = await scrapeWithHttp(
+      bench,
+      targetDate,
+      list_type,
+      supabaseUrl,
+      supabaseKey
+    );
 
-    let result: BrowserlessResult = { courts: [], entries: [], pdfLinks: [] };
-    let scrapeMethod = 'none';
-
-    // Try Browserless
-    if (browserlessApiKey) {
-      try {
-        result = await scrapeWithBrowserless(targetUrl, targetDate, bench, browserlessApiKey, 5);
-        scrapeMethod = 'browserless';
-      } catch (err) {
-        console.error(`[scrape-causelist] Browserless failed: ${err}`);
-      }
-    }
-
-    // Fallback to Firecrawl for court list only
-    if (result.courts.length === 0 && firecrawlApiKey) {
-      try {
-        console.log(`[scrape-causelist] Trying Firecrawl fallback`);
-        const fcResponse = await fetch('https://api.firecrawl.dev/v1/scrape', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${firecrawlApiKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            url: targetUrl,
-            formats: ['html'],
-            waitFor: 10000,
-          }),
-        });
-
-        if (fcResponse.ok) {
-          const fcData = await fcResponse.json();
-          const html = fcData.data?.html || '';
-          result.courts = parseCourtTableFromHtml(html, bench);
-          result.pdfLinks = extractPdfLinksFromHtml(html, targetUrl);
-          scrapeMethod = 'firecrawl';
-        }
-      } catch (err) {
-        console.error(`[scrape-causelist] Firecrawl failed: ${err}`);
-      }
-    }
-
-    // Store court metadata
-    if (result.courts.length > 0) {
-      console.log(`[scrape-causelist] Storing ${result.courts.length} courts`);
-      for (const court of result.courts) {
-        await supabase
-          .from('court_metadata')
-          .upsert({
-            bench: court.bench,
-            court_no: court.court_no,
-            judge_names: court.judge_names,
-            last_updated: new Date().toISOString(),
-          }, { onConflict: 'bench,court_no' });
-      }
-    }
-
-    console.log(`[scrape-causelist] Results: ${result.courts.length} courts, ${result.entries.length} entries`);
-
-    // Preview mode
-    if (action === 'preview') {
-      return new Response(
-        JSON.stringify({ 
-          success: true, 
-          entries: result.entries,
-          courts: result.courts,
-          pdf_links: result.pdfLinks,
-          target_date: targetDate,
-          scrape_method: scrapeMethod,
-          message: `Found ${result.courts.length} courts, ${result.entries.length} cases`
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // Insert entries
-    if (result.entries.length > 0) {
-      let inserted = 0, updated = 0, errors = 0;
+    // Store entries in database if scrape action
+    if (action === 'scrape' && result.success && result.entries.length > 0) {
+      console.log(`[scrape-causelist] Storing ${result.entries.length} entries`);
       
       for (const entry of result.entries) {
-        try {
-          const { data: existing } = await supabase
-            .from('daily_court_docket')
-            .select('id')
-            .eq('case_number', entry.case_number)
-            .eq('date', entry.date)
-            .eq('court_room_no', entry.court_room_no)
-            .single();
-          
-          if (existing) {
-            const { error } = await supabase
-              .from('daily_court_docket')
-              .update({
-                petitioner_lawyer: entry.petitioner_lawyer,
-                respondent_lawyer: entry.respondent_lawyer,
-                petitioner: entry.petitioner,
-                respondent: entry.respondent,
-                item_no: entry.item_no,
-              })
-              .eq('id', existing.id);
-            if (error) errors++; else updated++;
-          } else {
-            const { error } = await supabase.from('daily_court_docket').insert(entry);
-            if (error) errors++; else inserted++;
-          }
-        } catch { errors++; }
+        await supabase
+          .from('daily_court_docket')
+          .upsert(entry, { onConflict: 'case_number,date,court_room_no' });
       }
-      
-      await logScraperRun(supabase, {
-        bench,
-        status: errors === 0 ? 'success' : 'partial',
-        cases_found: result.entries.length,
-        error_message: errors > 0 ? `${errors} errors` : null,
-        list_type,
-        court_no,
-      });
-      
-      return new Response(
-        JSON.stringify({ 
-          success: true, 
-          entries_count: result.entries.length,
-          inserted, updated, errors,
-          courts_found: result.courts.length,
-          target_date: targetDate,
-          scrape_method: scrapeMethod,
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
     }
-    
-    await logScraperRun(supabase, {
+
+    // Log the scraper run
+    await logScraperRun(
+      supabase,
       bench,
-      status: result.courts.length > 0 ? 'warning' : 'failed',
-      cases_found: 0,
-      error_message: result.courts.length > 0 ? 'No case data in PDFs' : 'No data found',
-      list_type,
-      court_no,
-    });
-    
+      result.success ? 'success' : 'failed',
+      result.entries.length,
+      result.error || null,
+      list_type === 'D' ? 'DAILY' : 'SUPPLEMENTARY'
+    );
+
     return new Response(
-      JSON.stringify({ 
-        success: result.courts.length > 0, 
-        entries_count: 0,
-        courts_found: result.courts.length,
-        courts: result.courts,
-        target_date: targetDate,
-        scrape_method: scrapeMethod,
-        message: result.courts.length > 0 ? `Found ${result.courts.length} courts, PDFs not accessible` : 'No data found'
+      JSON.stringify({
+        success: result.success,
+        message: result.success 
+          ? `Found ${result.entries.length} cases` 
+          : result.error,
+        entries: result.entries,
+        captchaSolved: result.captchaSolution,
+        htmlPreview: result.rawHtml?.substring(0, 2000),
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
-    
+
   } catch (error) {
-    console.error('[scrape-causelist] Error:', error);
+    console.error('[scrape-causelist] Fatal error:', error);
     return new Response(
-      JSON.stringify({ success: false, error: error instanceof Error ? error.message : 'Unknown error' }),
+      JSON.stringify({ 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
     );
   }
