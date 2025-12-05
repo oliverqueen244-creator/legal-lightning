@@ -128,7 +128,7 @@ async function scrapeWithSingleSession(
   // 1. Extract CAPTCHA base64
   // 2. Call our solver endpoint
   // 3. Fill form with solution
-  // 4. Submit form
+  // 4. Submit form via JavaScript click (more reliable than Firecrawl click)
   const solveAndSubmitScript = `
     (function() {
       try {
@@ -167,9 +167,12 @@ async function scrapeWithSingleSession(
         const solution = result.solution;
         window.__captchaSolution = solution;
         
-        // Fill form
+        // Fill form fields
         const dateInput = document.getElementById('causelstdt');
-        if (dateInput) dateInput.value = '${date}';
+        if (dateInput) {
+          dateInput.value = '${date}';
+          dateInput.dispatchEvent(new Event('change', { bubbles: true }));
+        }
         
         const listTypeSelect = document.getElementById('causelisttype');
         if (listTypeSelect) {
@@ -178,12 +181,33 @@ async function scrapeWithSingleSession(
         }
         
         const formatRadio = document.getElementById('formatradio1');
-        if (formatRadio) formatRadio.checked = true;
+        if (formatRadio) {
+          formatRadio.checked = true;
+          formatRadio.dispatchEvent(new Event('change', { bubbles: true }));
+        }
         
         const captchaInput = document.getElementById('txtCaptcha');
-        if (captchaInput) captchaInput.value = solution;
+        if (captchaInput) {
+          captchaInput.value = solution;
+          captchaInput.dispatchEvent(new Event('input', { bubbles: true }));
+          captchaInput.dispatchEvent(new Event('change', { bubbles: true }));
+        }
         
         window.__formFilled = true;
+        window.__filledValues = {
+          date: dateInput ? dateInput.value : 'no dateInput',
+          listType: listTypeSelect ? listTypeSelect.value : 'no listType',
+          captcha: captchaInput ? captchaInput.value : 'no captchaInput'
+        };
+        
+        // Click the submit button directly from JavaScript
+        const submitBtn = document.getElementById('btnViewCauseList');
+        if (submitBtn) {
+          submitBtn.click();
+          window.__submitClicked = true;
+        } else {
+          window.__scraperError = 'Submit button not found';
+        }
         
       } catch (err) {
         window.__scraperError = 'Script error: ' + err.message;
@@ -205,9 +229,7 @@ async function scrapeWithSingleSession(
       actions: [
         { type: 'wait', milliseconds: 4000 }, // Wait for page to fully load
         { type: 'executeJavascript', script: solveAndSubmitScript },
-        { type: 'wait', milliseconds: 8000 }, // Wait for API call and form fill to complete
-        { type: 'click', selector: '#btnViewCauseList' },
-        { type: 'wait', milliseconds: 10000 }, // Wait for results to load
+        { type: 'wait', milliseconds: 15000 }, // Wait for form submission and page navigation
       ],
     }),
   });
