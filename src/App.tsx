@@ -9,6 +9,7 @@ import Auth from "./pages/Auth";
 import Admin from "./pages/Admin";
 import Documentation from "./pages/Documentation";
 import Onboarding from "./pages/Onboarding";
+import ScraperDocs from "./pages/ScraperDocs";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -28,6 +29,7 @@ const App = () => (
           <Route path="/auth" element={<Auth />} />
           <Route path="/onboarding" element={<Onboarding />} />
           <Route path="/docs" element={<Documentation />} />
+          <Route path="/scraper-docs" element={<ScraperDocs />} />
           <Route path="/admin" element={<Admin />} />
           <Route path="/war-room/:caseId" element={<WarRoom />} />
           <Route path="/control-deck/:caseId" element={<ControlDeck />} />

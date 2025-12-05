@@ -236,8 +236,8 @@ export default function Auth() {
         </CardContent>
       </Card>
 
-      {/* Documentation Link */}
-      <div className="mt-6 text-center">
+      {/* Documentation Links */}
+      <div className="mt-6 text-center space-y-2">
         <Link 
           to="/docs" 
           className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors group"
@@ -246,6 +246,16 @@ export default function Auth() {
           <span>View Documentation</span>
           <span className="text-xs text-muted-foreground/70">(Workflows, Features & Accessibility)</span>
         </Link>
+        <div>
+          <Link 
+            to="/scraper-docs" 
+            className="inline-flex items-center gap-2 text-sm text-amber-500/80 hover:text-amber-500 transition-colors group"
+          >
+            <AlertCircle className="h-4 w-4" aria-hidden="true" />
+            <span>Scraper Technical Documentation</span>
+            <span className="text-xs text-muted-foreground/70">(Error Analysis)</span>
+          </Link>
+        </div>
       </div>
     </div>
   );
