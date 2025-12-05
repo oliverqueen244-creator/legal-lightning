@@ -28,7 +28,11 @@ export interface DocketItem {
   case_number: string;
   petitioner_lawyer: string | null;
   respondent_lawyer: string | null;
+  petitioner: string | null;
+  respondent: string | null;
   matched_profile_id: string | null;
+  status: 'pending' | 'active' | 'done' | 'passover';
+  force_active: boolean;
   created_at: string;
 }
 
@@ -78,4 +82,23 @@ export interface MatchedCase {
   date: string;
   matched_as: 'petitioner' | 'respondent';
   alias_matched: string;
+}
+
+export interface CourtMetadata {
+  id: string;
+  bench: 'JAIPUR' | 'JODHPUR';
+  court_no: string;
+  judge_names: string | null;
+  last_updated: string;
+}
+
+export interface ScraperLog {
+  id: string;
+  bench: string;
+  run_at: string;
+  status: 'success' | 'partial' | 'failed' | 'warning';
+  cases_found: number;
+  error_message: string | null;
+  list_type: string;
+  court_no: string | null;
 }

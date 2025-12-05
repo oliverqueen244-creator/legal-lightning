@@ -1,32 +1,44 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Scale, Clock, AlertTriangle, ChevronRight, SkipForward, Coffee, Ban } from 'lucide-react';
+import { Scale, Clock, AlertTriangle, ChevronRight, SkipForward, Coffee, Ban, Zap, Play } from 'lucide-react';
 import type { DocketItem, LiveBoardCache, BoardStatus } from '@/types/database';
 import { cn } from '@/lib/utils';
 import type { AppRole } from '@/hooks/useAuth';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 interface DocketCardProps {
-  item: DocketItem;
+  item: DocketItem & { status?: string; force_active?: boolean };
   liveBoard?: LiveBoardCache;
   userRole?: AppRole | null;
+  onForceActive?: (itemId: string) => void;
 }
 
-export function DocketCard({ item, liveBoard, userRole }: DocketCardProps) {
+export function DocketCard({ item, liveBoard, userRole, onForceActive }: DocketCardProps) {
   const navigate = useNavigate();
+  const [isForcing, setIsForcing] = useState(false);
   
   const currentItem = liveBoard?.current_item ?? 0;
-  const status: BoardStatus = liveBoard?.status ?? 'hearing';
+  const boardStatus: BoardStatus = liveBoard?.status ?? 'hearing';
   const distance = item.item_no - currentItem;
-  const isPanic = distance > 0 && distance <= 5 && status === 'hearing';
-  const isRunning = distance <= 0 && status === 'hearing';
-  const isPassover = status === 'passover';
-  const isLunch = status === 'lunch';
-  const isAdjourned = status === 'adjourned';
+  
+  // Enhanced panic logic: Different thresholds for daily vs supplementary
   const isSupplementary = item.list_type === 'SUPPLEMENTARY';
+  const panicThreshold = isSupplementary ? 10 : 5;
+  
+  const isPanic = distance > 0 && distance <= panicThreshold && boardStatus === 'hearing';
+  const isRunning = (distance <= 0 && boardStatus === 'hearing') || item.force_active;
+  const isPassover = boardStatus === 'passover' || item.status === 'passover';
+  const isLunch = boardStatus === 'lunch';
+  const isAdjourned = boardStatus === 'adjourned';
+  const isDone = item.status === 'done';
 
   const getStatusText = () => {
+    if (item.force_active) return 'FORCED ACTIVE';
+    if (isDone) return 'COMPLETED';
     if (isPassover) return 'SKIPPED';
     if (isLunch) return 'LUNCH BREAK';
     if (isAdjourned) return 'ADJOURNED';
@@ -36,6 +48,7 @@ export function DocketCard({ item, liveBoard, userRole }: DocketCardProps) {
   };
 
   const getStatusIcon = () => {
+    if (item.force_active) return Zap;
     if (isPassover) return SkipForward;
     if (isLunch) return Coffee;
     if (isAdjourned) return Ban;
@@ -45,7 +58,6 @@ export function DocketCard({ item, liveBoard, userRole }: DocketCardProps) {
   const StatusIcon = getStatusIcon();
 
   const handleClick = () => {
-    // Senior goes to War Room, Junior/Clerk goes to Control Deck
     if (userRole === 'SENIOR' || userRole === 'ADMIN') {
       navigate(`/war-room/${item.id}`);
     } else {
@@ -60,17 +72,55 @@ export function DocketCard({ item, liveBoard, userRole }: DocketCardProps) {
     }
   };
 
+  // Force Active handler - allows manual override of scraper status
+  const handleForceActive = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    
+    if (isForcing) return;
+    setIsForcing(true);
+    
+    try {
+      const { error } = await supabase
+        .from('daily_court_docket')
+        .update({ 
+          force_active: true,
+          status: 'active'
+        })
+        .eq('id', item.id);
+      
+      if (error) throw error;
+      
+      toast.success('Case marked as active', {
+        description: 'Status override applied. The case is now in "Running" mode.',
+      });
+      
+      onForceActive?.(item.id);
+    } catch (err) {
+      console.error('Failed to force active:', err);
+      toast.error('Failed to update status');
+    } finally {
+      setIsForcing(false);
+    }
+  };
+
+  const canForceActive = (userRole === 'SENIOR' || userRole === 'ADMIN') && 
+    !isRunning && 
+    !isDone && 
+    !item.force_active;
+
   return (
     <Card
       className={cn(
         'court-card cursor-pointer border-2 transition-all duration-300 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none',
         isPanic && 'panic-pulse border-court-danger-light',
         isRunning && 'border-primary gold-glow',
+        item.force_active && 'border-primary/80 bg-primary/5',
         isPassover && 'card-passover border-muted',
         isLunch && 'border-court-warning/50 bg-court-warning/5',
         isAdjourned && 'border-muted/50 bg-muted/10 opacity-60',
-        isSupplementary && !isPanic && !isRunning && !isPassover && !isLunch && !isAdjourned && 'border-court-warning/50',
-        !isPanic && !isRunning && !isSupplementary && !isPassover && !isLunch && !isAdjourned && 'border-border hover:border-primary/50'
+        isDone && 'border-court-success/50 bg-court-success/5 opacity-70',
+        isSupplementary && !isPanic && !isRunning && !isPassover && !isLunch && !isAdjourned && !isDone && 'border-court-warning/50',
+        !isPanic && !isRunning && !isSupplementary && !isPassover && !isLunch && !isAdjourned && !isDone && 'border-border hover:border-primary/50'
       )}
       onClick={handleClick}
       onKeyDown={handleKeyDown}
@@ -84,6 +134,12 @@ export function DocketCard({ item, liveBoard, userRole }: DocketCardProps) {
             <div className="flex items-center gap-2 mb-2 flex-wrap">
               {isSupplementary && (
                 <Badge variant="supplementary">SUPPLEMENTARY</Badge>
+              )}
+              {item.force_active && (
+                <Badge className="flex items-center gap-1 bg-primary/20 text-primary border-primary/30">
+                  <Zap className="h-3 w-3" aria-hidden="true" />
+                  FORCED
+                </Badge>
               )}
               {isPassover && (
                 <Badge variant="secondary" className="flex items-center gap-1 bg-muted text-muted-foreground">
@@ -103,20 +159,25 @@ export function DocketCard({ item, liveBoard, userRole }: DocketCardProps) {
                   ADJOURNED
                 </Badge>
               )}
-              {isPanic && (
-                <Badge variant="danger" className="flex items-center gap-1" role="status" aria-live="polite">
-                  <AlertTriangle className="h-3 w-3" aria-hidden="true" />
-                  URGENT
+              {isDone && (
+                <Badge className="flex items-center gap-1 bg-court-success/20 text-court-success border-court-success/30">
+                  COMPLETED
                 </Badge>
               )}
-              {isRunning && (
+              {isPanic && !item.force_active && (
+                <Badge variant="danger" className="flex items-center gap-1" role="status" aria-live="polite">
+                  <AlertTriangle className="h-3 w-3" aria-hidden="true" />
+                  {isSupplementary ? 'URGENT (SUPP)' : 'URGENT'}
+                </Badge>
+              )}
+              {isRunning && !item.force_active && (
                 <Badge variant="running" role="status" aria-live="assertive">RUNNING NOW</Badge>
               )}
             </div>
             
             <h3 className={cn(
               'font-display text-lg font-semibold text-foreground truncate mb-1 tracking-wide',
-              isPassover && 'line-through opacity-60'
+              (isPassover || isDone) && 'line-through opacity-60'
             )}>
               {item.case_number}
             </h3>
@@ -140,15 +201,32 @@ export function DocketCard({ item, liveBoard, userRole }: DocketCardProps) {
             )}
           </div>
           
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            className="shrink-0 min-h-touch min-w-touch" 
-            aria-hidden="true" 
-            tabIndex={-1}
-          >
-            <ChevronRight className="h-5 w-5" />
-          </Button>
+          <div className="flex flex-col items-end gap-2">
+            {/* Force Active Button - Only for SENIOR/ADMIN */}
+            {canForceActive && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleForceActive}
+                disabled={isForcing}
+                className="text-xs border-primary/50 text-primary hover:bg-primary/10"
+                aria-label="Force this case to active status"
+              >
+                <Play className="h-3 w-3 mr-1" />
+                {isForcing ? 'Activating...' : 'Force Active'}
+              </Button>
+            )}
+            
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="shrink-0 min-h-touch min-w-touch" 
+              aria-hidden="true" 
+              tabIndex={-1}
+            >
+              <ChevronRight className="h-5 w-5" />
+            </Button>
+          </div>
         </div>
       </CardContent>
     </Card>
