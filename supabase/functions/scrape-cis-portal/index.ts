@@ -35,6 +35,14 @@ function parseCauseListHtml(html: string): CauseListEntry[] {
   
   console.log('Parsing response...');
   
+  // Debug: Check for key page elements
+  const hasDateField = html.includes('causelstdt');
+  const hasSubmitBtn = html.includes('btnViewCauseList');
+  const hasResultDiv = html.includes('grdCauseList') || html.includes('GridView');
+  const hasAlertMsg = html.match(/alert\(['"]([^'"]+)['"]\)/)?.[1];
+  
+  console.log(`Page check: dateField=${hasDateField}, submitBtn=${hasSubmitBtn}, resultDiv=${hasResultDiv}, alert=${hasAlertMsg || 'none'}`);
+  
   if (html.includes('Invalid Captcha') || html.includes('invalid captcha') || html.includes('Wrong Captcha') || html.includes('Incorrect Captcha')) {
     console.log('CAPTCHA validation failed');
     throw new Error('CAPTCHA_INVALID');
@@ -122,7 +130,7 @@ async function scrapeWithSingleSession(
   // 3. Fill form with solution
   // 4. Submit form
   const solveAndSubmitScript = `
-    (async function() {
+    (function() {
       try {
         // Get CAPTCHA image base64
         const captchaImg = document.getElementById('captcha');
@@ -139,24 +147,24 @@ async function scrapeWithSingleSession(
         
         window.__captchaExtracted = captchaBase64.substring(0, 100);
         
-        // Call our solver endpoint
-        const response = await fetch('${solverEndpoint}', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ image: captchaBase64 })
-        });
+        // Use synchronous XMLHttpRequest to call solver
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', '${solverEndpoint}', false); // false = synchronous
+        xhr.setRequestHeader('Content-Type', 'application/json');
+        xhr.send(JSON.stringify({ image: captchaBase64 }));
         
-        if (!response.ok) {
-          window.__scraperError = 'Solver API error: ' + response.status;
+        if (xhr.status !== 200) {
+          window.__scraperError = 'Solver API error: ' + xhr.status;
           return;
         }
         
-        const { solution, error } = await response.json();
-        if (error || !solution) {
-          window.__scraperError = 'Solver returned error: ' + (error || 'no solution');
+        const result = JSON.parse(xhr.responseText);
+        if (result.error || !result.solution) {
+          window.__scraperError = 'Solver returned error: ' + (result.error || 'no solution');
           return;
         }
         
+        const solution = result.solution;
         window.__captchaSolution = solution;
         
         // Fill form
