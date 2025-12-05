@@ -29,61 +29,77 @@ interface CauseListEntry {
   court_room_no: string;
 }
 
-// Use Firecrawl to load page and capture screenshot of CAPTCHA
-async function loadPageAndCaptureCaptcha(
-  baseUrl: string,
-  firecrawlApiKey: string
-): Promise<{ captchaBase64: string; screenshot: string } | null> {
-  console.log(`Loading CIS page with Firecrawl: ${baseUrl}`);
+// Fetch CIS page and extract cookies
+async function fetchCISPage(baseUrl: string): Promise<{ html: string; cookies: string }> {
+  console.log(`Fetching CIS page: ${baseUrl}`);
   
-  try {
-    const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${firecrawlApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        url: baseUrl,
-        formats: ['screenshot', 'html'],
-        waitFor: 5000
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Firecrawl error:', response.status, errorText);
-      return null;
+  const response = await fetch(baseUrl, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+      'Accept-Language': 'en-US,en;q=0.5',
     }
-
-    const data = await response.json();
-    const screenshot = data.data?.screenshot || '';
-    const html = data.data?.html || '';
-    
-    console.log(`Got screenshot (${screenshot?.length || 0} chars) and HTML (${html?.length || 0} chars)`);
-    
-    return { captchaBase64: screenshot, screenshot };
-  } catch (err) {
-    console.error('Firecrawl page load error:', err);
-    return null;
+  });
+  
+  if (!response.ok) {
+    throw new Error(`Failed to fetch CIS page: ${response.status}`);
   }
+  
+  const cookies = response.headers.get('set-cookie') || '';
+  const html = await response.text();
+  
+  console.log(`Got HTML (${html.length} chars), cookies: ${cookies ? 'yes' : 'no'}`);
+  
+  return { html, cookies };
 }
 
-// Solve CAPTCHA using Gemini Vision from full page screenshot
-async function solveCaptchaFromScreenshot(screenshotBase64: string): Promise<string> {
+// Extract base64 CAPTCHA from HTML
+function extractCaptchaBase64(html: string): string | null {
+  // Pattern 1: src="data:..." id="captcha"
+  const pattern1 = /src=["'](data:image\/[^"']+)["'][^>]*id=["']captcha["']/i;
+  const match1 = html.match(pattern1);
+  if (match1) {
+    console.log('Found CAPTCHA with pattern 1');
+    return match1[1];
+  }
+  
+  // Pattern 2: id="captcha" ... src="data:..."
+  const pattern2 = /id=["']captcha["'][^>]*src=["'](data:image\/[^"']+)["']/i;
+  const match2 = html.match(pattern2);
+  if (match2) {
+    console.log('Found CAPTCHA with pattern 2');
+    return match2[1];
+  }
+  
+  // Pattern 3: Generic img with captcha in any attribute
+  const pattern3 = /<img[^>]*captcha[^>]*src=["'](data:image\/[^"']+)["']/i;
+  const match3 = html.match(pattern3);
+  if (match3) {
+    console.log('Found CAPTCHA with pattern 3');
+    return match3[1];
+  }
+  
+  // Pattern 4: Look for any base64 image near captcha text
+  const pattern4 = /captcha[\s\S]{0,200}(data:image\/png;base64,[A-Za-z0-9+\/=]+)/i;
+  const match4 = html.match(pattern4);
+  if (match4) {
+    console.log('Found CAPTCHA with pattern 4');
+    return match4[1];
+  }
+  
+  console.log('Could not find CAPTCHA in HTML');
+  return null;
+}
+
+// Solve CAPTCHA using Gemini via Lovable AI
+async function solveCaptchaWithGemini(captchaBase64: string): Promise<string> {
   const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
   
   if (!LOVABLE_API_KEY) {
     throw new Error('LOVABLE_API_KEY is not configured');
   }
   
-  console.log('Sending page screenshot to Gemini for CAPTCHA solving...');
-  
-  // Clean up base64 if needed
-  let imageData = screenshotBase64;
-  if (!imageData.startsWith('data:')) {
-    imageData = `data:image/png;base64,${imageData}`;
-  }
+  console.log(`Sending CAPTCHA to Gemini (${captchaBase64.length} chars)...`);
   
   const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
     method: 'POST',
@@ -98,16 +114,14 @@ async function solveCaptchaFromScreenshot(screenshotBase64: string): Promise<str
         content: [
           {
             type: 'text',
-            text: `This is a screenshot of a court cause list form page. There is a CAPTCHA image near the bottom of the form, usually next to "Enter Verification Code" label. The CAPTCHA shows text characters that need to be entered to submit the form.
-
-Look at the CAPTCHA image in this screenshot and read the characters shown. The CAPTCHA typically contains 5-6 alphanumeric characters.
-
-Return ONLY the exact characters you see in the CAPTCHA, nothing else. No explanation, no quotes, just the characters.`
+            text: `This is a CAPTCHA image from a court website. Read the characters shown in this CAPTCHA image.
+The CAPTCHA typically contains 5-6 alphanumeric characters (letters and numbers).
+Return ONLY the exact characters you see, nothing else. No explanation, no quotes, no punctuation - just the characters.`
           },
           {
             type: 'image_url',
             image_url: {
-              url: imageData
+              url: captchaBase64
             }
           }
         ]
@@ -132,97 +146,58 @@ Return ONLY the exact characters you see in the CAPTCHA, nothing else. No explan
   const data = await response.json();
   const solution = data.choices?.[0]?.message?.content?.trim() || '';
   
-  // Clean up the solution - remove any quotes or extra text
-  const cleanSolution = solution.replace(/['"]/g, '').trim();
+  // Clean up the solution - remove any quotes, spaces, or extra text
+  const cleanSolution = solution.replace(/['".\s]/g, '').trim();
   
   console.log(`Gemini solved CAPTCHA: "${cleanSolution}"`);
   
   return cleanSolution;
 }
 
-// Use Firecrawl actions to fill form and submit
-async function submitFormWithFirecrawl(
+// Submit form via POST request
+async function submitCauseListForm(
   baseUrl: string,
+  cookies: string,
   date: string,
   listType: string,
-  captchaSolution: string,
-  firecrawlApiKey: string
+  captchaSolution: string
 ): Promise<string> {
-  console.log(`Submitting form via Firecrawl with date=${date}, listType=${listType}, captcha=${captchaSolution}`);
+  console.log(`Submitting form: date=${date}, listType=${listType}, captcha=${captchaSolution}`);
   
-  // Parse date (DD/MM/YYYY) to components
-  const [day, month, year] = date.split('/');
+  const formData = new URLSearchParams({
+    'causelstdt': date,
+    'causelisttype': listType,
+    'formatradio': '1', // HTML format
+    'txtCaptcha': captchaSolution
+  });
   
-  // Build JavaScript to fill and submit the form
-  const fillFormScript = `
-    // Set date
-    const dateInput = document.getElementById('causelstdt');
-    if (dateInput) {
-      dateInput.value = '${date}';
-    }
-    
-    // Set list type
-    const listTypeSelect = document.getElementById('causelisttype');
-    if (listTypeSelect) {
-      listTypeSelect.value = '${listType}';
-    }
-    
-    // Set format to HTML
-    const formatRadio = document.getElementById('formatradio1');
-    if (formatRadio) {
-      formatRadio.checked = true;
-    }
-    
-    // Set CAPTCHA
-    const captchaInput = document.getElementById('txtCaptcha');
-    if (captchaInput) {
-      captchaInput.value = '${captchaSolution}';
-    }
-    
-    // Trigger any change events
-    if (listTypeSelect) {
-      listTypeSelect.dispatchEvent(new Event('change', { bubbles: true }));
-    }
-  `;
+  const headers: Record<string, string> = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Content-Type': 'application/x-www-form-urlencoded',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+    'Accept-Language': 'en-US,en;q=0.5',
+    'Origin': baseUrl.replace(/\/causelists\/?$/, ''),
+    'Referer': baseUrl,
+  };
   
-  try {
-    const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${firecrawlApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        url: baseUrl,
-        formats: ['html', 'markdown'],
-        waitFor: 3000,
-        actions: [
-          { type: 'wait', milliseconds: 2000 },
-          { type: 'executeJavascript', script: fillFormScript },
-          { type: 'wait', milliseconds: 1000 },
-          { type: 'click', selector: '#btnViewCauseList' },
-          { type: 'wait', milliseconds: 5000 },
-        ],
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Firecrawl submit error:', response.status, errorText);
-      throw new Error(`Form submission failed: ${response.status}`);
-    }
-
-    const data = await response.json();
-    const html = data.data?.html || '';
-    const markdown = data.data?.markdown || '';
-    
-    console.log(`Form submitted, got HTML (${html.length} chars), markdown (${markdown.length} chars)`);
-    
-    return html || markdown;
-  } catch (err) {
-    console.error('Form submission error:', err);
-    throw err;
+  if (cookies) {
+    headers['Cookie'] = cookies;
   }
+  
+  const response = await fetch(baseUrl, {
+    method: 'POST',
+    headers,
+    body: formData.toString()
+  });
+  
+  if (!response.ok) {
+    throw new Error(`Form submission failed: ${response.status}`);
+  }
+  
+  const html = await response.text();
+  console.log(`Form response: ${html.length} chars`);
+  
+  return html;
 }
 
 // Parse cause list HTML to extract entries
@@ -232,7 +207,7 @@ function parseCauseListHtml(html: string): CauseListEntry[] {
   console.log('Parsing response...');
   
   // Check for error messages
-  if (html.includes('Invalid Captcha') || html.includes('invalid captcha') || html.includes('Wrong Captcha')) {
+  if (html.includes('Invalid Captcha') || html.includes('invalid captcha') || html.includes('Wrong Captcha') || html.includes('Incorrect Captcha')) {
     console.log('CAPTCHA validation failed');
     throw new Error('CAPTCHA_INVALID');
   }
@@ -242,30 +217,24 @@ function parseCauseListHtml(html: string): CauseListEntry[] {
     return [];
   }
   
-  // Try to find court-wise data in the response
-  // Pattern: Look for structured data with case numbers
-  
-  // Look for table rows with case data
+  // Parse table rows
   const tableRowPattern = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
-  const cellPattern = /<td[^>]*>([\s\S]*?)<\/td>/gi;
+  const rows = html.match(tableRowPattern) || [];
+  console.log(`Found ${rows.length} table rows`);
   
   let currentCourtNo = '1';
-  const courtPattern = /Court\s*(?:No\.?|Room)?\s*:?\s*(\d+)/gi;
   
-  // First, try to identify court sections
+  // Try to find court number patterns
+  const courtPattern = /Court\s*(?:No\.?|Room)?\s*:?\s*(\d+)/gi;
   let courtMatch;
   while ((courtMatch = courtPattern.exec(html)) !== null) {
     console.log(`Found court reference: ${courtMatch[0]}`);
   }
   
-  // Parse table rows
-  const rows = html.match(tableRowPattern) || [];
-  console.log(`Found ${rows.length} table rows`);
-  
   for (const row of rows) {
     const cells: string[] = [];
-    let cellMatch;
     const cellRegex = /<td[^>]*>([\s\S]*?)<\/td>/gi;
+    let cellMatch;
     
     while ((cellMatch = cellRegex.exec(row)) !== null) {
       const cellText = cellMatch[1]
@@ -326,16 +295,14 @@ function parseCauseListHtml(html: string): CauseListEntry[] {
     });
   }
   
-  // Also try to parse from markdown-like format
+  // Fallback: try to parse from numbered patterns
   if (entries.length === 0) {
-    // Look for numbered patterns like "1. CaseNumber - Parties"
     const numberedPattern = /^\s*(\d+)[\.\)]\s+([^\n]+)/gm;
     let match;
     while ((match = numberedPattern.exec(html)) !== null) {
       const itemNo = parseInt(match[1]);
       const content = match[2];
       
-      // Try to extract case number
       const caseMatch = content.match(/([A-Z]+[\/\-\s]*(?:No\.?)?\s*\d+[\/\-]\d+)/i);
       if (caseMatch && itemNo > 0) {
         entries.push({
@@ -367,50 +334,57 @@ async function scrapeCISPortal(request: ScrapeRequest): Promise<{
   error?: string;
   attempts: number;
   rawResponse?: string;
+  captchaExtracted?: boolean;
+  captchaSolution?: string;
 }> {
   const baseUrl = CIS_URLS[request.bench];
   const maxAttempts = 3;
-  
-  const FIRECRAWL_API_KEY = Deno.env.get('FIRECRAWL_API_KEY');
-  if (!FIRECRAWL_API_KEY) {
-    return {
-      success: false,
-      entries: [],
-      error: 'FIRECRAWL_API_KEY is not configured',
-      attempts: 0
-    };
-  }
   
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     console.log(`\n=== Attempt ${attempt}/${maxAttempts} for ${request.bench} ${request.list_type === 'D' ? 'Daily' : 'Supplementary'} ===`);
     
     try {
-      // Step 1: Load page and capture CAPTCHA via screenshot
-      const pageData = await loadPageAndCaptureCaptcha(baseUrl, FIRECRAWL_API_KEY);
+      // Step 1: Fetch the CIS page to get HTML with embedded CAPTCHA
+      const { html: pageHtml, cookies } = await fetchCISPage(baseUrl);
       
-      if (!pageData || !pageData.screenshot) {
-        console.log('Failed to load page or capture screenshot');
+      // Step 2: Extract base64 CAPTCHA from HTML
+      const captchaBase64 = extractCaptchaBase64(pageHtml);
+      
+      if (!captchaBase64) {
+        console.log('Failed to extract CAPTCHA from HTML');
+        if (request.test_mode) {
+          return {
+            success: false,
+            entries: [],
+            error: 'Could not extract CAPTCHA from page HTML',
+            attempts: attempt,
+            captchaExtracted: false,
+            rawResponse: pageHtml.substring(0, 3000)
+          };
+        }
         continue;
       }
       
-      // Step 2: Solve CAPTCHA with Gemini
-      const captchaSolution = await solveCaptchaFromScreenshot(pageData.screenshot);
+      console.log(`Extracted CAPTCHA base64 (${captchaBase64.length} chars)`);
       
-      if (!captchaSolution || captchaSolution.length < 3) {
+      // Step 3: Solve CAPTCHA with Gemini
+      const captchaSolution = await solveCaptchaWithGemini(captchaBase64);
+      
+      if (!captchaSolution || captchaSolution.length < 3 || captchaSolution.length > 10) {
         console.log(`Invalid CAPTCHA solution: "${captchaSolution}"`);
         continue;
       }
       
-      // Step 3: Submit form
-      const resultHtml = await submitFormWithFirecrawl(
+      // Step 4: Submit form with solved CAPTCHA
+      const resultHtml = await submitCauseListForm(
         baseUrl,
+        cookies,
         request.date,
         request.list_type,
-        captchaSolution,
-        FIRECRAWL_API_KEY
+        captchaSolution
       );
       
-      // Step 4: Parse results
+      // Step 5: Parse results
       try {
         const entries = parseCauseListHtml(resultHtml);
         
@@ -418,6 +392,8 @@ async function scrapeCISPortal(request: ScrapeRequest): Promise<{
           success: true,
           entries,
           attempts: attempt,
+          captchaExtracted: true,
+          captchaSolution: request.test_mode ? captchaSolution : undefined,
           rawResponse: request.test_mode ? resultHtml.substring(0, 5000) : undefined
         };
       } catch (parseError: unknown) {
@@ -550,6 +526,8 @@ serve(async (req) => {
         entries_count: result.entries.length,
         entries: test_mode ? result.entries : undefined,
         raw_response_preview: result.rawResponse,
+        captcha_extracted: result.captchaExtracted,
+        captcha_solution: result.captchaSolution,
         attempts: result.attempts
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

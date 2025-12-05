@@ -23,7 +23,9 @@ interface TestResult {
     respondent_lawyer: string;
     court_room_no: string;
   }>;
-  raw_html_preview?: string;
+  raw_response_preview?: string;
+  captcha_extracted?: boolean;
+  captcha_solution?: string;
   attempts: number;
 }
 
@@ -201,13 +203,25 @@ export function CISPortalTest() {
               </div>
             )}
 
-            {result.raw_html_preview && (
+            {/* CAPTCHA Debug Info */}
+            <div className="flex flex-wrap gap-2 text-xs">
+              <Badge variant={result.captcha_extracted ? "default" : "destructive"}>
+                CAPTCHA: {result.captcha_extracted ? 'Extracted' : 'Not Found'}
+              </Badge>
+              {result.captcha_solution && (
+                <Badge variant="outline">
+                  Solution: {result.captcha_solution}
+                </Badge>
+              )}
+            </div>
+
+            {result.raw_response_preview && (
               <details className="text-xs">
                 <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
                   Raw HTML Preview (first 5000 chars)
                 </summary>
                 <pre className="mt-2 p-2 bg-muted rounded-md overflow-auto max-h-40 whitespace-pre-wrap">
-                  {result.raw_html_preview}
+                  {result.raw_response_preview}
                 </pre>
               </details>
             )}
