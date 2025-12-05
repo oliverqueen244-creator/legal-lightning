@@ -91,8 +91,8 @@ async function scrapeWithBrowserless(
   };
 
   try {
-    // Step 1: Get main page HTML
-    console.log(`[scrape-causelist] Step 1: Getting main page`);
+    // Get the page - the website shows today's cause list by default
+    console.log(`[scrape-causelist] Getting page content`);
     const contentResponse = await fetch(`https://chrome.browserless.io/content?token=${browserlessApiKey}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -102,15 +102,31 @@ async function scrapeWithBrowserless(
           waitUntil: 'networkidle2',
           timeout: 30000,
         },
+        waitForSelector: {
+          selector: 'table',
+          timeout: 15000,
+        },
       }),
     });
 
     if (!contentResponse.ok) {
+      const errText = await contentResponse.text();
+      console.error(`[scrape-causelist] Content error: ${contentResponse.status} - ${errText}`);
       throw new Error(`Content request failed: ${contentResponse.status}`);
     }
 
     const html = await contentResponse.text();
     console.log(`[scrape-causelist] Got HTML: ${html.length} chars`);
+    
+    // Log sample of HTML to debug
+    const tableIndex = html.indexOf('<table');
+    if (tableIndex > -1) {
+      console.log(`[scrape-causelist] Table found at index ${tableIndex}`);
+      console.log(`[scrape-causelist] Table sample: ${html.substring(tableIndex, tableIndex + 500)}`);
+    } else {
+      console.log(`[scrape-causelist] No <table> found in HTML`);
+      console.log(`[scrape-causelist] HTML sample: ${html.substring(0, 1000)}`);
+    }
 
     // Parse courts from HTML
     result.courts = parseCourtTableFromHtml(html, bench);
