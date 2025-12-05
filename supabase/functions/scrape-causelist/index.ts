@@ -371,91 +371,185 @@ function parseHtmlTableContent(
   const entries: CauseListEntry[] = [];
   
   console.log(`[scrape-causelist] Parsing HTML table content...`);
+  console.log(`[scrape-causelist] HTML length: ${html.length}, Markdown length: ${markdown.length}`);
   
-  // Use markdown for easier parsing - look for table patterns
-  // Markdown tables look like: | Col1 | Col2 | Col3 |
-  const lines = markdown.split('\n');
+  // First try to parse HTML directly using regex to find table rows
+  // DataTables structure: <table id="causelist-table"><tbody><tr>...</tr></tbody></table>
   
+  // Look for court-specific tables
+  const courtTablePattern = /<h\d[^>]*>([^<]*Court[^<]*\d+[^<]*)<\/h\d>/gi;
   let currentCourtNo = '1';
   let itemCounter = 0;
   
-  // Look for court number headers like "Court No. 1" or "Court-1"
-  const courtNoPattern = /court[^\d]*(\d+)/i;
+  // Find all court headers
+  let courtMatch;
+  const courtPositions: { pos: number; courtNo: string }[] = [];
+  while ((courtMatch = courtTablePattern.exec(html)) !== null) {
+    const courtText = courtMatch[1];
+    const numMatch = courtText.match(/\d+/);
+    if (numMatch) {
+      courtPositions.push({ pos: courtMatch.index, courtNo: numMatch[0] });
+      console.log(`[scrape-causelist] Found court header at pos ${courtMatch.index}: Court ${numMatch[0]}`);
+    }
+  }
   
-  // Case number patterns
-  const casePatterns = [
-    /([SDB]\.?[AB]?\.?\s*(?:Civil|Crl|Criminal)?\.?\s*(?:CWP|Writ|WP|SA|CA|MA|RA|REV|CMA|Misc|Appeal)[\s./]*(?:No\.?)?\s*\d+[\/\-]\d{4})/gi,
-    /(\d+[\/\-]\d{4})/g, // Simple case number pattern
-  ];
+  // Try to extract table rows from HTML
+  // Pattern for table rows: <tr>...<td>data</td>...</tr>
+  const rowPattern = /<tr[^>]*>\s*((?:<td[^>]*>[\s\S]*?<\/td>\s*)+)\s*<\/tr>/gi;
+  let rowMatch;
+  let rowsFound = 0;
   
-  // Party pattern
-  const partyPattern = /([A-Za-z\s.&,]+?)\s+(?:Vs\.?|vs\.?|V\/s\.?|versus|V\.|-vs-)\s+([A-Za-z\s.&,]+)/i;
-  
-  for (const line of lines) {
-    const trimmedLine = line.trim();
-    if (!trimmedLine) continue;
+  while ((rowMatch = rowPattern.exec(html)) !== null) {
+    const rowContent = rowMatch[1];
+    rowsFound++;
     
-    // Check for court number in line
-    const courtMatch = trimmedLine.match(courtNoPattern);
-    if (courtMatch) {
-      currentCourtNo = courtMatch[1];
-      console.log(`[scrape-causelist] Found court: ${currentCourtNo}`);
+    // Determine which court this row belongs to
+    for (let i = courtPositions.length - 1; i >= 0; i--) {
+      if (rowMatch.index > courtPositions[i].pos) {
+        currentCourtNo = courtPositions[i].courtNo;
+        break;
+      }
+    }
+    
+    // Extract cell contents
+    const cellPattern = /<td[^>]*>([\s\S]*?)<\/td>/gi;
+    const cells: string[] = [];
+    let cellMatch;
+    while ((cellMatch = cellPattern.exec(rowContent)) !== null) {
+      // Clean HTML tags and whitespace
+      const cellText = cellMatch[1]
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/&nbsp;/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      cells.push(cellText);
     }
     
     // Skip header rows
-    if (trimmedLine.toLowerCase().includes('s.no') || 
-        trimmedLine.toLowerCase().includes('case no') ||
-        trimmedLine.includes('---') ||
-        trimmedLine.startsWith('|') && trimmedLine.toLowerCase().includes('petitioner')) {
+    if (cells.length === 0 || 
+        cells[0].toLowerCase().includes('s.no') ||
+        cells[0].toLowerCase().includes('sr.') ||
+        cells.some(c => c.toLowerCase().includes('case number'))) {
       continue;
     }
     
-    // Try to extract case number from line
-    for (const pattern of casePatterns) {
-      pattern.lastIndex = 0;
-      const match = pattern.exec(trimmedLine);
-      if (match) {
-        const caseNumber = match[1];
-        
-        // Extract item number from beginning of line
-        const itemMatch = trimmedLine.match(/^\|?\s*(\d+)\s*\|/);
-        const itemNo = itemMatch ? parseInt(itemMatch[1]) : ++itemCounter;
-        
-        // Try to find party names
-        const partyMatch = trimmedLine.match(partyPattern);
-        
-        // Look for advocate names
-        let petLawyer: string | null = null;
-        let respLawyer: string | null = null;
-        
-        // Split by pipes if it's a table row
-        const parts = trimmedLine.split('|').map(p => p.trim()).filter(p => p);
-        if (parts.length >= 4) {
-          // Typical table: | No | Case | Parties | Adv Pet | Adv Resp |
-          petLawyer = parts[3] || null;
-          respLawyer = parts[4] || null;
+    // Try to extract case information from cells
+    // Common formats:
+    // | S.No | Case No | Petitioner vs Respondent | Adv Pet | Adv Resp |
+    // | S.No | Court | Case No | Parties | Advocates |
+    
+    let itemNo = 0;
+    let caseNumber = '';
+    let petitioner: string | null = null;
+    let respondent: string | null = null;
+    let petLawyer: string | null = null;
+    let respLawyer: string | null = null;
+    
+    // Try to identify case number (contains / or - with 4-digit year)
+    const casePatterns = [
+      /([A-Z]{1,4}\.?\s*[A-Z]*\.?\s*(?:No\.?)?\s*\d+[\/\-]\d{4})/i,
+      /(\d+[\/\-]\d{4})/,
+    ];
+    
+    for (let i = 0; i < cells.length; i++) {
+      const cell = cells[i];
+      
+      // Check if first cell is item number
+      if (i === 0 && /^\d+$/.test(cell)) {
+        itemNo = parseInt(cell);
+        continue;
+      }
+      
+      // Try to find case number
+      if (!caseNumber) {
+        for (const pattern of casePatterns) {
+          const match = cell.match(pattern);
+          if (match) {
+            caseNumber = match[1].trim();
+            break;
+          }
         }
+      }
+      
+      // Try to find parties (contains "vs" or "v/s")
+      if (!petitioner && cell.toLowerCase().includes('vs')) {
+        const partyMatch = cell.match(/([^vs]+)\s*(?:vs\.?|v\/s\.?|versus)\s*(.+)/i);
+        if (partyMatch) {
+          petitioner = partyMatch[1].trim().substring(0, 200);
+          respondent = partyMatch[2].trim().substring(0, 200);
+        }
+      }
+    }
+    
+    // If we found a case number, add the entry
+    if (caseNumber) {
+      // Assign advocates from remaining cells
+      const advCells = cells.filter(c => 
+        !c.match(/^\d+$/) && 
+        !c.includes(caseNumber) && 
+        !c.toLowerCase().includes('vs')
+      );
+      if (advCells.length >= 1) petLawyer = advCells[0]?.substring(0, 200) || null;
+      if (advCells.length >= 2) respLawyer = advCells[1]?.substring(0, 200) || null;
+      
+      entries.push({
+        item_no: itemNo || ++itemCounter,
+        case_number: caseNumber,
+        petitioner: petitioner,
+        respondent: respondent,
+        petitioner_lawyer: petLawyer,
+        respondent_lawyer: respLawyer,
+        court_room_no: currentCourtNo,
+        court_location: courtLocation,
+        list_type: listType,
+        date: date,
+        status: 'pending',
+      });
+    }
+  }
+  
+  console.log(`[scrape-causelist] Found ${rowsFound} HTML rows, parsed ${entries.length} entries`);
+  
+  // If HTML parsing found nothing, try markdown
+  if (entries.length === 0 && markdown.length > 0) {
+    console.log(`[scrape-causelist] HTML parsing found 0, trying markdown...`);
+    const lines = markdown.split('\n');
+    
+    for (const line of lines) {
+      const trimmedLine = line.trim();
+      if (!trimmedLine || trimmedLine.includes('---')) continue;
+      
+      // Skip header rows
+      if (trimmedLine.toLowerCase().includes('s.no') || 
+          trimmedLine.toLowerCase().includes('case no')) {
+        continue;
+      }
+      
+      // Look for case numbers in markdown
+      const caseMatch = trimmedLine.match(/([A-Z]{1,4}\.?\s*[A-Z]*\.?\s*(?:No\.?)?\s*\d+[\/\-]\d{4})/i);
+      if (caseMatch) {
+        const parts = trimmedLine.split('|').map(p => p.trim()).filter(p => p);
+        const itemMatch = parts[0]?.match(/^\d+$/);
         
         entries.push({
-          item_no: itemNo,
-          case_number: caseNumber.trim(),
-          petitioner: partyMatch ? partyMatch[1].trim().substring(0, 100) : null,
-          respondent: partyMatch ? partyMatch[2].trim().substring(0, 100) : null,
-          petitioner_lawyer: petLawyer?.substring(0, 100) || null,
-          respondent_lawyer: respLawyer?.substring(0, 100) || null,
+          item_no: itemMatch ? parseInt(parts[0]) : ++itemCounter,
+          case_number: caseMatch[1].trim(),
+          petitioner: null,
+          respondent: null,
+          petitioner_lawyer: parts.length >= 4 ? parts[3] : null,
+          respondent_lawyer: parts.length >= 5 ? parts[4] : null,
           court_room_no: currentCourtNo,
           court_location: courtLocation,
           list_type: listType,
           date: date,
           status: 'pending',
         });
-        
-        break; // Found case in this line, move to next
       }
     }
+    
+    console.log(`[scrape-causelist] Markdown parsing found ${entries.length} entries`);
   }
   
-  console.log(`[scrape-causelist] Parsed ${entries.length} entries from HTML table`);
   return entries;
 }
 
@@ -528,7 +622,7 @@ async function submitFormAndGetPdfLinks(
   console.log(`[scrape-causelist] Method 2: Firecrawl with executeJavascript...`);
   
   try {
-    // Use executeJavascript to set form values (select action not supported)
+    // Use executeJavascript to set form values and submit
     const setFormScript = `
       document.getElementById('day').value = '${day}';
       document.getElementById('month').value = '${month}';
@@ -538,7 +632,7 @@ async function submitFormAndGetPdfLinks(
     
     const actions = [
       { type: 'executeJavascript', script: setFormScript },
-      { type: 'wait', milliseconds: 10000 }, // Wait for PDF generation
+      { type: 'wait', milliseconds: 15000 }, // Wait longer for table to load
     ];
     
     console.log(`[scrape-causelist] Firecrawl JS script: Setting day=${day}, month=${month}, year=${year}`);
@@ -552,7 +646,7 @@ async function submitFormAndGetPdfLinks(
       body: JSON.stringify({
         url: baseUrl,
         formats: ['markdown', 'links', 'html'],
-        waitFor: 5000,
+        waitFor: 8000,
         actions: actions,
       }),
     });
@@ -569,7 +663,11 @@ async function submitFormAndGetPdfLinks(
       lastMarkdownContent = markdown;
       
       console.log(`[scrape-causelist] Firecrawl HTML length: ${html.length} chars`);
+      console.log(`[scrape-causelist] Firecrawl markdown length: ${markdown.length} chars`);
       console.log(`[scrape-causelist] Firecrawl links count: ${links.length}`);
+      
+      // Log first 1000 chars of markdown for debugging
+      console.log(`[scrape-causelist] Markdown preview: ${markdown.substring(0, 1000).replace(/\n/g, ' ')}`);
       
       // Extract PDF links from both HTML and links array
       let pdfLinks = extractPdfLinksFromHtml(html, baseUrl);
@@ -587,10 +685,14 @@ async function submitFormAndGetPdfLinks(
         console.log(`[scrape-causelist] ✅ Got ${pdfLinks.length} PDF links from Firecrawl`);
         return { pdfLinks, htmlContent: html, markdownContent: markdown };
       } else {
-        console.log(`[scrape-causelist] No PDF links found in Firecrawl response`);
-        // Log HTML snippet for debugging
-        const snippet = html.substring(0, 500);
-        console.log(`[scrape-causelist] HTML snippet: ${snippet.replace(/\n/g, ' ').substring(0, 300)}...`);
+        console.log(`[scrape-causelist] No PDF links found - checking for table data...`);
+        // Log more HTML for debugging - look for table-related content
+        const tableCheck = html.includes('causelist-table') || html.includes('<table') || html.includes('<tr');
+        console.log(`[scrape-causelist] Has table elements: ${tableCheck}`);
+        
+        // Check if table has data rows
+        const trCount = (html.match(/<tr/gi) || []).length;
+        console.log(`[scrape-causelist] Table row count: ${trCount}`);
       }
     } else {
       const errorText = await firecrawlResponse.text();
