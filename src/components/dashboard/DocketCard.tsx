@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils';
 import type { AppRole } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { CaseTimeEstimatorCompact } from './CaseTimeEstimator';
 
 interface DocketCardProps {
   item: DocketItem & { status?: string; force_active?: boolean };
@@ -191,6 +192,10 @@ export function DocketCard({ item, liveBoard, userRole, onForceActive }: DocketC
                 <StatusIcon className="h-4 w-4" aria-hidden="true" />
                 {getStatusText()}
               </span>
+              {/* Time Estimator */}
+              {!isRunning && !isDone && !isPassover && liveBoard && (
+                <CaseTimeEstimatorCompact docketItem={item} liveBoard={liveBoard} />
+              )}
             </div>
             
             {item.respondent_lawyer && !isPassover && (

@@ -27,16 +27,21 @@ export function Header() {
   const { data: liveBoards } = useLiveBoard();
   const { data: docket } = useDocket();
   
+  // Parse user's selected benches (could be comma-separated)
+  const userBenches = profile?.bench?.split(',').map(b => b.trim().toUpperCase()) ?? [];
+  const displayBench = userBenches.length > 1 ? 'BOTH' : userBenches[0] || 'JODHPUR';
+  
   // Bench selection state - defaults to profile bench or JODHPUR
-  const [selectedBench, setSelectedBench] = useState<Bench>(
-    (profile?.bench as Bench) || 'JODHPUR'
+  const [selectedBench, setSelectedBench] = useState<Bench | 'BOTH'>(
+    displayBench as Bench | 'BOTH'
   );
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
 
   // Update selected bench when profile loads
   useEffect(() => {
     if (profile?.bench) {
-      setSelectedBench(profile.bench as Bench);
+      const benches = profile.bench.split(',').map(b => b.trim().toUpperCase());
+      setSelectedBench(benches.length > 1 ? 'BOTH' : benches[0] as Bench);
     }
   }, [profile?.bench]);
 
@@ -120,12 +125,26 @@ export function Header() {
           </div>
           
           <div className="flex items-center gap-4">
+            {/* Active Bench Indicator */}
+            <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 border border-primary/30">
+              <MapPin className="h-4 w-4 text-primary" />
+              <span className="text-sm font-medium text-foreground">
+                {selectedBench === 'BOTH' ? (
+                  <>
+                    <Badge variant="gold" className="mr-1">JAIPUR</Badge>
+                    <Badge variant="gold">JODHPUR</Badge>
+                  </>
+                ) : (
+                  <Badge variant="gold">{selectedBench}</Badge>
+                )}
+              </span>
+            </div>
+
             {/* Bench Selector */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className="hidden md:flex items-center gap-2">
-                  <MapPin className="h-4 w-4 text-primary" />
-                  <span>Connected to: <strong>{selectedBench}</strong></span>
+                <Button variant="outline" size="sm" className="hidden lg:flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">Switch Bench</span>
                   <ChevronDown className="h-4 w-4 text-muted-foreground" />
                 </Button>
               </DropdownMenuTrigger>
@@ -149,6 +168,17 @@ export function Header() {
                   <MapPin className="h-4 w-4 mr-2" />
                   Jodhpur Bench
                   {selectedBench === 'JODHPUR' && (
+                    <Badge variant="gold" className="ml-auto">Active</Badge>
+                  )}
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem 
+                  onClick={() => handleBenchChange('JAIPUR,JODHPUR' as Bench)}
+                  className={selectedBench === 'BOTH' ? 'bg-primary/10' : ''}
+                >
+                  <MapPin className="h-4 w-4 mr-2" />
+                  Both Benches
+                  {selectedBench === 'BOTH' && (
                     <Badge variant="gold" className="ml-auto">Active</Badge>
                   )}
                 </DropdownMenuItem>
