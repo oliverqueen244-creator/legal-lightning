@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { DocketCard } from '@/components/dashboard/DocketCard';
 import { LiveTicker } from '@/components/dashboard/LiveTicker';
 import { LiveCourtWidget } from '@/components/dashboard/LiveCourtWidget';
+import { CaseTimeEstimator } from '@/components/dashboard/CaseTimeEstimator';
 import { Header } from '@/components/layout/Header';
 import { AuthGuard } from '@/components/layout/AuthGuard';
 import { useDocket } from '@/hooks/useDocket';
@@ -185,6 +186,14 @@ export default function Dashboard() {
                     isSupplementary={activeTab === 'supplementary' || firstCase?.list_type === 'SUPPLEMENTARY'}
                   />
                 ) : null}
+
+                {/* Case Time Estimator - Shows estimated wait time for next case */}
+                {firstCase && primaryLiveBoard && (
+                  <CaseTimeEstimator 
+                    docketItem={firstCase} 
+                    liveBoard={primaryLiveBoard}
+                  />
+                )}
 
                 {/* Live Ticker */}
                 {liveBoardLoading ? (
