@@ -3,6 +3,7 @@ import { DocketCard } from '@/components/dashboard/DocketCard';
 import { LiveTicker } from '@/components/dashboard/LiveTicker';
 import { LiveCourtWidget } from '@/components/dashboard/LiveCourtWidget';
 import { CaseTimeEstimator } from '@/components/dashboard/CaseTimeEstimator';
+import { LawyerSearchPanel } from '@/components/dashboard/LawyerSearchPanel';
 import { Header } from '@/components/layout/Header';
 import { AuthGuard } from '@/components/layout/AuthGuard';
 import { useDocket } from '@/hooks/useDocket';
@@ -11,7 +12,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Scale, AlertCircle } from 'lucide-react';
+import { Scale, AlertCircle, Search } from 'lucide-react';
 import { LiveBoardSimulator } from '@/components/dashboard/LiveBoardSimulator';
 
 export default function Dashboard() {
@@ -69,23 +70,27 @@ export default function Dashboard() {
             {/* Left: Cause List with Tabs */}
             <div className="lg:col-span-2 space-y-6">
               <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-                <TabsList className="grid w-full grid-cols-2 mb-4">
+                <TabsList className="grid w-full grid-cols-3 mb-4">
                   <TabsTrigger value="daily" className="flex items-center gap-2">
                     <div className="h-2 w-2 rounded-full bg-primary" />
-                    Daily List
+                    Daily
                     <Badge variant="secondary" className="ml-1">
                       {dailyItems.length}
                     </Badge>
                   </TabsTrigger>
                   <TabsTrigger value="supplementary" className="flex items-center gap-2">
                     <div className="h-2 w-2 rounded-full bg-court-warning animate-pulse" />
-                    Supplementary
+                    Supp.
                     {supplementaryItems.length > 0 && (
                       <Badge variant="danger" className="ml-1 flex items-center gap-1">
                         <AlertCircle className="h-3 w-3" />
                         {supplementaryItems.length}
                       </Badge>
                     )}
+                  </TabsTrigger>
+                  <TabsTrigger value="search" className="flex items-center gap-2">
+                    <Search className="h-3 w-3" />
+                    Search
                   </TabsTrigger>
                 </TabsList>
 
@@ -165,6 +170,10 @@ export default function Dashboard() {
                       ))}
                     </div>
                   )}
+                </TabsContent>
+
+                <TabsContent value="search" className="mt-0">
+                  <LawyerSearchPanel />
                 </TabsContent>
               </Tabs>
             </div>
