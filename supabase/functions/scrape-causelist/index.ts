@@ -7,7 +7,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// CIS Portal URLs - these are the correct cause list URLs
+// CIS Portal URLs
 const CIS_URLS: Record<string, string> = {
   JAIPUR: 'https://hcraj.nic.in/cishcraj-jp/causelists/',
   JODHPUR: 'https://hcraj.nic.in/cishcraj-jdp/causelists/'
@@ -31,11 +31,11 @@ interface ScrapeRequest {
   action: 'scrape' | 'preview';
   bench?: 'JAIPUR' | 'JODHPUR';
   date?: string;
-  lawyer_name?: string;
-  list_type?: 'D' | 'S'; // D=Daily, S=Supplementary
+  list_type?: 'D' | 'S';
+  format?: 'html' | 'pdf';
 }
 
-// Smart date logic
+// Smart date logic - after 6PM IST, get tomorrow's date
 function getSmartTargetDate(): string {
   const now = new Date();
   const istOffset = 5.5 * 60 * 60 * 1000;
@@ -55,65 +55,6 @@ function getSmartTargetDate(): string {
 function formatDateForForm(dateStr: string): string {
   const [year, month, day] = dateStr.split('-');
   return `${day}/${month}/${year}`;
-}
-
-// Extract cookies from Set-Cookie headers
-function extractCookies(response: Response): string {
-  const cookies: string[] = [];
-  response.headers.forEach((value, key) => {
-    if (key.toLowerCase() === 'set-cookie') {
-      const cookiePart = value.split(';')[0];
-      cookies.push(cookiePart);
-    }
-  });
-  return cookies.join('; ');
-}
-
-// Extract ASP.NET hidden fields from HTML
-function extractAspNetFields(html: string): Record<string, string> {
-  const fields: Record<string, string> = {};
-  
-  const fieldNames = ['__VIEWSTATE', '__VIEWSTATEGENERATOR', '__EVENTVALIDATION', '__EVENTTARGET', '__EVENTARGUMENT'];
-  
-  for (const fieldName of fieldNames) {
-    const regex = new RegExp(`id="${fieldName}"[^>]*value="([^"]*)"`, 'i');
-    const match = html.match(regex);
-    if (match) {
-      fields[fieldName] = match[1];
-    }
-  }
-  
-  return fields;
-}
-
-// Extract CAPTCHA image as base64
-function extractCaptchaBase64(html: string): string | null {
-  // Pattern 1: img with src containing captcha
-  const imgPatterns = [
-    /src="(data:image\/[^"]+captcha[^"]+)"/i,
-    /src="([^"]*captcha[^"]*\.(?:png|jpg|jpeg|gif)[^"]*)"/i,
-    /src="(CaptchaImage\.axd[^"]*)"/i,
-    /src="([^"]*Captcha[^"]*\.axd[^"]*)"/i,
-  ];
-  
-  for (const pattern of imgPatterns) {
-    const match = html.match(pattern);
-    if (match) {
-      const src = match[1];
-      if (src.startsWith('data:')) {
-        return src;
-      }
-      // Return the relative URL for fetching
-      return src;
-    }
-  }
-  
-  // Pattern 2: Look for canvas or specific captcha element
-  if (html.includes('imgCaptcha') || html.includes('CaptchaImage')) {
-    console.log('[scrape-causelist] Found captcha reference in HTML');
-  }
-  
-  return null;
 }
 
 // Call solve-captcha function
@@ -144,173 +85,234 @@ async function solveCaptcha(imageData: string, supabaseUrl: string, supabaseKey:
   }
 }
 
-// Fetch CAPTCHA image and convert to base64
-async function fetchCaptchaImage(captchaUrl: string, baseUrl: string, cookies: string): Promise<string | null> {
+// Phase 1: Get page HTML and extract CAPTCHA using Browserless /content
+async function getPageWithCaptcha(
+  browserlessKey: string,
+  cisUrl: string
+): Promise<{ html: string; captchaBase64: string | null; error?: string }> {
+  console.log(`[scrape-causelist] Phase 1: Getting page with CAPTCHA from ${cisUrl}`);
+  
   try {
-    const fullUrl = captchaUrl.startsWith('http') ? captchaUrl : new URL(captchaUrl, baseUrl).toString();
-    console.log(`[scrape-causelist] Fetching CAPTCHA image: ${fullUrl}`);
-    
-    const response = await fetch(fullUrl, {
-      headers: {
-        'Cookie': cookies,
-        'Referer': baseUrl,
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-      }
+    const response = await fetch(`https://chrome.browserless.io/content?token=${browserlessKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        url: cisUrl,
+        waitForSelector: { selector: '#captcha', timeout: 15000 },
+        gotoOptions: { 
+          waitUntil: 'networkidle2',
+          timeout: 30000 
+        },
+      }),
     });
-    
+
     if (!response.ok) {
-      console.error(`[scrape-causelist] CAPTCHA image fetch failed: ${response.status}`);
-      return null;
+      const errorText = await response.text();
+      console.error(`[scrape-causelist] Browserless /content failed: ${response.status} - ${errorText}`);
+      return { html: '', captchaBase64: null, error: `Browserless error: ${response.status}` };
     }
+
+    const html = await response.text();
+    console.log(`[scrape-causelist] Got page HTML: ${html.length} chars`);
+
+    // Extract CAPTCHA base64 from <img id="captcha" src="data:image/...">
+    const captchaMatch = html.match(/<img[^>]*id=["']captcha["'][^>]*src=["']([^"']+)["']/i) ||
+                         html.match(/<img[^>]*src=["']([^"']+)["'][^>]*id=["']captcha["']/i);
     
-    const buffer = await response.arrayBuffer();
-    const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
-    const contentType = response.headers.get('content-type') || 'image/png';
-    return `data:${contentType};base64,${base64}`;
+    if (captchaMatch) {
+      const captchaSrc = captchaMatch[1];
+      console.log(`[scrape-causelist] Found CAPTCHA src: ${captchaSrc.substring(0, 100)}...`);
+      
+      if (captchaSrc.startsWith('data:image')) {
+        return { html, captchaBase64: captchaSrc };
+      }
+    }
+
+    // Try alternative patterns for PHP-based CAPTCHA
+    const altCaptchaMatch = html.match(/id=["']captcha["'][^>]*>/i);
+    if (altCaptchaMatch) {
+      console.log(`[scrape-causelist] Found captcha element but need to extract image differently`);
+    }
+
+    console.log(`[scrape-causelist] CAPTCHA extraction failed. HTML snippet: ${html.substring(0, 1500)}`);
+    return { html, captchaBase64: null, error: 'Could not extract CAPTCHA from page' };
+
   } catch (error) {
-    console.error('[scrape-causelist] CAPTCHA image fetch error:', error);
-    return null;
+    console.error(`[scrape-causelist] Phase 1 error:`, error);
+    return { html: '', captchaBase64: null, error: String(error) };
   }
 }
 
-// Main HTTP-based scraping function
-async function scrapeWithHttp(
-  bench: string,
-  targetDate: string,
+// Phase 2: Submit form and get HTML result using Browserless /function
+async function submitFormForHtml(
+  browserlessKey: string,
+  cisUrl: string,
+  formattedDate: string,
   listType: string,
-  supabaseUrl: string,
-  supabaseKey: string
-): Promise<{
-  success: boolean;
-  entries: CauseListEntry[];
-  error?: string;
-  captchaSolution?: string;
-  rawHtml?: string;
-}> {
-  const baseUrl = CIS_URLS[bench];
-  if (!baseUrl) {
-    return { success: false, entries: [], error: `Invalid bench: ${bench}` };
-  }
+  captchaSolution: string
+): Promise<{ html: string; success: boolean; error?: string }> {
+  console.log(`[scrape-causelist] Phase 2: Submitting form for HTML`);
+  console.log(`[scrape-causelist] Date: ${formattedDate}, ListType: ${listType}, CAPTCHA: ${captchaSolution}`);
 
-  const formattedDate = formatDateForForm(targetDate);
-  console.log(`[scrape-causelist] Starting HTTP scrape for ${bench}`);
-  console.log(`[scrape-causelist] URL: ${baseUrl}`);
-  console.log(`[scrape-causelist] Date: ${formattedDate}, List Type: ${listType}`);
+  const puppeteerCode = `
+    module.exports = async ({ page, context }) => {
+      const { url, date, listType, captcha } = context;
+      
+      await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
+      await page.waitForSelector('#captcha', { timeout: 10000 });
+      
+      // Select HTML format (radio button)
+      await page.click('#formatradio1');
+      
+      // Set date - clear and type
+      await page.evaluate((d) => {
+        const dateInput = document.getElementById('causelstdt');
+        if (dateInput) dateInput.value = d;
+      }, date);
+      
+      // Select list type
+      await page.select('#causelisttype', listType);
+      
+      // Enter CAPTCHA
+      await page.type('#txtCaptcha', captcha, { delay: 30 });
+      
+      // Click View Cause List button
+      await page.click('#btnViewCauseList');
+      
+      // Wait for response
+      await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 }).catch(() => {});
+      await new Promise(r => setTimeout(r, 2000));
+      
+      return await page.content();
+    };
+  `;
 
   try {
-    // Step 1: GET the initial page to get session cookie and CAPTCHA
-    console.log('[scrape-causelist] Step 1: Fetching initial page...');
-    const initialResponse = await fetch(baseUrl, {
-      method: 'GET',
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.5',
-      }
-    });
-
-    if (!initialResponse.ok) {
-      return { success: false, entries: [], error: `Initial page fetch failed: ${initialResponse.status}` };
-    }
-
-    const initialHtml = await initialResponse.text();
-    console.log(`[scrape-causelist] Initial page: ${initialHtml.length} chars`);
-
-    // Extract session cookies
-    const cookies = extractCookies(initialResponse);
-    console.log(`[scrape-causelist] Cookies: ${cookies.substring(0, 100)}...`);
-
-    // Extract ASP.NET hidden fields
-    const aspFields = extractAspNetFields(initialHtml);
-    console.log(`[scrape-causelist] ASP.NET fields: ${Object.keys(aspFields).join(', ')}`);
-
-    // Extract CAPTCHA image URL
-    const captchaSrc = extractCaptchaBase64(initialHtml);
-    if (!captchaSrc) {
-      console.log('[scrape-causelist] HTML preview:', initialHtml.substring(0, 2000));
-      return { success: false, entries: [], error: 'CAPTCHA image not found', rawHtml: initialHtml.substring(0, 5000) };
-    }
-
-    // Fetch CAPTCHA image if it's a URL
-    let captchaBase64: string | null;
-    if (captchaSrc.startsWith('data:')) {
-      captchaBase64 = captchaSrc;
-    } else {
-      captchaBase64 = await fetchCaptchaImage(captchaSrc, baseUrl, cookies);
-    }
-
-    if (!captchaBase64) {
-      return { success: false, entries: [], error: 'Failed to fetch CAPTCHA image' };
-    }
-
-    // Step 2: Solve CAPTCHA
-    console.log('[scrape-causelist] Step 2: Solving CAPTCHA...');
-    const captchaSolution = await solveCaptcha(captchaBase64, supabaseUrl, supabaseKey);
-    if (!captchaSolution) {
-      return { success: false, entries: [], error: 'Failed to solve CAPTCHA' };
-    }
-
-    // Step 3: Submit form with POST request
-    console.log('[scrape-causelist] Step 3: Submitting form...');
-    
-    const formData = new URLSearchParams();
-    
-    // Add ASP.NET fields
-    for (const [key, value] of Object.entries(aspFields)) {
-      formData.append(key, value);
-    }
-    
-    // Add form fields matching the CIS portal form
-    formData.append('causelstdt', formattedDate);
-    formData.append('causelisttype', listType);
-    formData.append('txtCaptcha', captchaSolution);
-    formData.append('formatradio', 'opthtml'); // HTML format
-    formData.append('__EVENTTARGET', 'btnViewCauseList');
-    formData.append('__EVENTARGUMENT', '');
-    
-    console.log(`[scrape-causelist] Form data: date=${formattedDate}, listType=${listType}, captcha=${captchaSolution}`);
-    
-    const submitResponse = await fetch(baseUrl, {
+    const response = await fetch(`https://chrome.browserless.io/function?token=${browserlessKey}`, {
       method: 'POST',
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.5',
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Cookie': cookies,
-        'Referer': baseUrl,
-        'Origin': new URL(baseUrl).origin,
-      },
-      body: formData.toString()
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        code: puppeteerCode,
+        context: {
+          url: cisUrl,
+          date: formattedDate,
+          listType: listType,
+          captcha: captchaSolution,
+        },
+      }),
     });
 
-    if (!submitResponse.ok) {
-      return { success: false, entries: [], error: `Form submission failed: ${submitResponse.status}`, captchaSolution };
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`[scrape-causelist] Browserless /function failed: ${response.status} - ${errorText}`);
+      return { html: '', success: false, error: `Browserless function error: ${response.status}` };
     }
 
-    const resultHtml = await submitResponse.text();
-    console.log(`[scrape-causelist] Result page: ${resultHtml.length} chars`);
-
-    // Check for common error messages
-    if (resultHtml.includes('Invalid Captcha') || resultHtml.includes('invalid captcha') || resultHtml.includes('Wrong Captcha')) {
-      return { success: false, entries: [], error: 'CAPTCHA validation failed - wrong solution', captchaSolution, rawHtml: resultHtml.substring(0, 2000) };
-    }
-
-    // Parse the result HTML for case entries
-    const entries = parseCauseListHtml(resultHtml, bench, targetDate, listType === 'D' ? 'DAILY' : 'SUPPLEMENTARY');
+    const html = await response.text();
+    console.log(`[scrape-causelist] Got result HTML: ${html.length} chars`);
     
-    console.log(`[scrape-causelist] Parsed ${entries.length} entries`);
+    // Check for CAPTCHA errors
+    if (html.toLowerCase().includes('invalid captcha') || html.toLowerCase().includes('wrong captcha')) {
+      return { html, success: false, error: 'Invalid CAPTCHA solution' };
+    }
 
-    return {
-      success: true,
-      entries,
-      captchaSolution,
-      rawHtml: resultHtml.substring(0, 5000),
+    return { html, success: true };
+
+  } catch (error) {
+    console.error(`[scrape-causelist] Phase 2 HTML error:`, error);
+    return { html: '', success: false, error: String(error) };
+  }
+}
+
+// Phase 2 (PDF): Submit form and download PDF using Browserless /download
+async function submitFormForPdf(
+  browserlessKey: string,
+  cisUrl: string,
+  formattedDate: string,
+  listType: string,
+  captchaSolution: string
+): Promise<{ pdfBuffer: ArrayBuffer | null; success: boolean; error?: string }> {
+  console.log(`[scrape-causelist] Phase 2: Submitting form for PDF download`);
+  console.log(`[scrape-causelist] Date: ${formattedDate}, ListType: ${listType}, CAPTCHA: ${captchaSolution}`);
+
+  const puppeteerCode = `
+    module.exports = async ({ page, context }) => {
+      const { url, date, listType, captcha } = context;
+      
+      await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
+      await page.waitForSelector('#captcha', { timeout: 10000 });
+      
+      // Select PDF format (radio button)
+      await page.click('#formatradio2');
+      
+      // Set date
+      await page.evaluate((d) => {
+        const dateInput = document.getElementById('causelstdt');
+        if (dateInput) dateInput.value = d;
+      }, date);
+      
+      // Select list type
+      await page.select('#causelisttype', listType);
+      
+      // Enter CAPTCHA
+      await page.type('#txtCaptcha', captcha, { delay: 30 });
+      
+      // Click Download Cause List button
+      await page.click('#btnSearchCauseList');
     };
+  `;
 
-  } catch (err) {
-    console.error(`[scrape-causelist] Error: ${err}`);
-    return { success: false, entries: [], error: String(err) };
+  try {
+    const response = await fetch(`https://chrome.browserless.io/download?token=${browserlessKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        code: puppeteerCode,
+        context: {
+          url: cisUrl,
+          date: formattedDate,
+          listType: listType,
+          captcha: captchaSolution,
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`[scrape-causelist] Browserless /download failed: ${response.status} - ${errorText}`);
+      
+      // Check if it's a CAPTCHA error
+      if (errorText.toLowerCase().includes('captcha')) {
+        return { pdfBuffer: null, success: false, error: 'Invalid CAPTCHA solution' };
+      }
+      
+      return { pdfBuffer: null, success: false, error: `Browserless download error: ${response.status}` };
+    }
+
+    const contentType = response.headers.get('content-type') || '';
+    console.log(`[scrape-causelist] Download response content-type: ${contentType}`);
+
+    if (contentType.includes('application/pdf') || contentType.includes('application/octet-stream')) {
+      const pdfBuffer = await response.arrayBuffer();
+      console.log(`[scrape-causelist] Got PDF: ${pdfBuffer.byteLength} bytes`);
+      return { pdfBuffer, success: true };
+    }
+
+    // If not a PDF, it might be an error page
+    const text = await response.text();
+    if (text.toLowerCase().includes('invalid captcha') || text.toLowerCase().includes('wrong captcha')) {
+      return { pdfBuffer: null, success: false, error: 'Invalid CAPTCHA solution' };
+    }
+    if (text.toLowerCase().includes('no record') || text.toLowerCase().includes('no data')) {
+      return { pdfBuffer: null, success: false, error: 'No records found for this date' };
+    }
+
+    console.log(`[scrape-causelist] Unexpected response: ${text.substring(0, 500)}`);
+    return { pdfBuffer: null, success: false, error: 'Unexpected response - no PDF received' };
+
+  } catch (error) {
+    console.error(`[scrape-causelist] Phase 2 PDF error:`, error);
+    return { pdfBuffer: null, success: false, error: String(error) };
   }
 }
 
@@ -318,7 +320,7 @@ async function scrapeWithHttp(
 function parseCauseListHtml(html: string, bench: string, date: string, listType: string): CauseListEntry[] {
   const entries: CauseListEntry[] = [];
   
-  console.log('[scrape-causelist] Parsing response...');
+  console.log('[scrape-causelist] Parsing HTML response...');
   
   // Check for no records
   if (html.includes('No Record Found') || html.includes('no record found') || html.includes('No Data')) {
@@ -355,7 +357,7 @@ function parseCauseListHtml(html: string, bench: string, date: string, listType:
         cells[0].toLowerCase().includes('item') ||
         cells[0].toLowerCase().includes('case no')) continue;
     
-    // Check for court number header (e.g., "Court No. 1")
+    // Check for court number header
     const courtMatch = row.match(/Court\s*(?:No\.?)?\s*(\d+)/i);
     if (courtMatch) {
       currentCourtNo = courtMatch[1];
@@ -405,8 +407,52 @@ function parseCauseListHtml(html: string, bench: string, date: string, listType:
   return entries;
 }
 
+// Upload PDF to Supabase Storage
+async function uploadPdfToStorage(
+  supabase: any,
+  pdfBuffer: ArrayBuffer,
+  bench: string,
+  date: string,
+  listType: string
+): Promise<{ publicUrl: string | null; filename: string; error?: string }> {
+  const filename = `${bench}_${date}_${listType}.pdf`;
+  console.log(`[scrape-causelist] Uploading PDF to storage: ${filename}`);
+  
+  try {
+    const { data, error } = await supabase.storage
+      .from('causelist-pdfs')
+      .upload(filename, pdfBuffer, {
+        contentType: 'application/pdf',
+        upsert: true,
+      });
+
+    if (error) {
+      console.error(`[scrape-causelist] Storage upload error:`, error);
+      return { publicUrl: null, filename, error: error.message };
+    }
+
+    const { data: urlData } = supabase.storage
+      .from('causelist-pdfs')
+      .getPublicUrl(filename);
+
+    console.log(`[scrape-causelist] PDF uploaded: ${urlData.publicUrl}`);
+    return { publicUrl: urlData.publicUrl, filename };
+
+  } catch (error) {
+    console.error(`[scrape-causelist] Storage upload exception:`, error);
+    return { publicUrl: null, filename, error: String(error) };
+  }
+}
+
 // Log scraper run
-async function logScraperRun(supabase: any, bench: string, status: string, casesFound: number, errorMessage: string | null, listType: string): Promise<void> {
+async function logScraperRun(
+  supabase: any, 
+  bench: string, 
+  status: string, 
+  casesFound: number, 
+  errorMessage: string | null, 
+  listType: string
+): Promise<void> {
   try {
     await supabase.from('scraper_logs').insert({
       bench,
@@ -420,6 +466,142 @@ async function logScraperRun(supabase: any, bench: string, status: string, cases
   }
 }
 
+// Main scraping function with retry logic
+async function scrapeWithBrowserless(
+  bench: string,
+  targetDate: string,
+  listType: string,
+  format: 'html' | 'pdf',
+  browserlessKey: string,
+  supabaseUrl: string,
+  supabaseKey: string,
+  supabase: any
+): Promise<{
+  success: boolean;
+  entries: CauseListEntry[];
+  pdfUrl?: string;
+  pdfFilename?: string;
+  error?: string;
+  attempts: number;
+  captchaSolution?: string;
+  rawHtml?: string;
+}> {
+  const cisUrl = CIS_URLS[bench];
+  if (!cisUrl) {
+    return { success: false, entries: [], error: `Invalid bench: ${bench}`, attempts: 0 };
+  }
+
+  const formattedDate = formatDateForForm(targetDate);
+  const maxAttempts = 3;
+  let attempts = 0;
+  let lastError = '';
+
+  while (attempts < maxAttempts) {
+    attempts++;
+    console.log(`[scrape-causelist] ========== Attempt ${attempts}/${maxAttempts} ==========`);
+
+    // Phase 1: Get CAPTCHA
+    const phase1 = await getPageWithCaptcha(browserlessKey, cisUrl);
+    if (phase1.error || !phase1.captchaBase64) {
+      lastError = phase1.error || 'Failed to get CAPTCHA';
+      console.log(`[scrape-causelist] Phase 1 failed: ${lastError}`);
+      continue;
+    }
+
+    // Solve CAPTCHA
+    const captchaSolution = await solveCaptcha(phase1.captchaBase64, supabaseUrl, supabaseKey);
+    if (!captchaSolution) {
+      lastError = 'Failed to solve CAPTCHA';
+      console.log(`[scrape-causelist] CAPTCHA solve failed`);
+      continue;
+    }
+
+    // Phase 2: Submit form
+    if (format === 'pdf') {
+      const phase2 = await submitFormForPdf(browserlessKey, cisUrl, formattedDate, listType, captchaSolution);
+      
+      if (phase2.error && phase2.error.includes('Invalid CAPTCHA')) {
+        lastError = phase2.error;
+        console.log(`[scrape-causelist] CAPTCHA was wrong, retrying...`);
+        continue;
+      }
+
+      if (!phase2.success || !phase2.pdfBuffer) {
+        lastError = phase2.error || 'Failed to download PDF';
+        console.log(`[scrape-causelist] Phase 2 PDF failed: ${lastError}`);
+        continue;
+      }
+
+      // Upload PDF to storage
+      const uploadResult = await uploadPdfToStorage(
+        supabase,
+        phase2.pdfBuffer,
+        bench,
+        targetDate,
+        listType === 'D' ? 'DAILY' : 'SUPPLEMENTARY'
+      );
+
+      if (uploadResult.error) {
+        return {
+          success: false,
+          entries: [],
+          error: `PDF upload failed: ${uploadResult.error}`,
+          attempts,
+          captchaSolution,
+        };
+      }
+
+      return {
+        success: true,
+        entries: [],
+        pdfUrl: uploadResult.publicUrl || undefined,
+        pdfFilename: uploadResult.filename,
+        attempts,
+        captchaSolution,
+      };
+
+    } else {
+      // HTML format
+      const phase2 = await submitFormForHtml(browserlessKey, cisUrl, formattedDate, listType, captchaSolution);
+      
+      if (phase2.error && phase2.error.includes('Invalid CAPTCHA')) {
+        lastError = phase2.error;
+        console.log(`[scrape-causelist] CAPTCHA was wrong, retrying...`);
+        continue;
+      }
+
+      if (!phase2.success) {
+        lastError = phase2.error || 'Failed to get HTML result';
+        console.log(`[scrape-causelist] Phase 2 HTML failed: ${lastError}`);
+        continue;
+      }
+
+      // Parse HTML for entries
+      const entries = parseCauseListHtml(
+        phase2.html,
+        bench,
+        targetDate,
+        listType === 'D' ? 'DAILY' : 'SUPPLEMENTARY'
+      );
+
+      return {
+        success: true,
+        entries,
+        attempts,
+        captchaSolution,
+        rawHtml: phase2.html.substring(0, 3000),
+      };
+    }
+  }
+
+  return {
+    success: false,
+    entries: [],
+    error: `Failed after ${maxAttempts} attempts. Last error: ${lastError}`,
+    attempts,
+  };
+}
+
 // ============================================================
 // MAIN HANDLER
 // ============================================================
@@ -431,6 +613,7 @@ serve(async (req) => {
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
   const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+  const browserlessKey = Deno.env.get('BROWSERLESS_API_KEY');
   const supabase = createClient(supabaseUrl, supabaseKey);
 
   try {
@@ -439,33 +622,61 @@ serve(async (req) => {
       bench = 'JODHPUR', 
       date, 
       list_type = 'D',
+      format = 'html',
     } = await req.json() as ScrapeRequest;
     
     const targetDate = date || getSmartTargetDate();
     
     console.log(`[scrape-causelist] ========================================`);
     console.log(`[scrape-causelist] Action: ${action}, Bench: ${bench}`);
-    console.log(`[scrape-causelist] Date: ${targetDate}, List Type: ${list_type}`);
+    console.log(`[scrape-causelist] Date: ${targetDate}, List Type: ${list_type}, Format: ${format}`);
     console.log(`[scrape-causelist] ========================================`);
 
-    // Scrape using HTTP-based approach (no Browserless needed)
-    const result = await scrapeWithHttp(
+    // Check for Browserless API key
+    if (!browserlessKey) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'BROWSERLESS_API_KEY not configured. Please add it in project secrets.',
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Scrape using Browserless
+    const result = await scrapeWithBrowserless(
       bench,
       targetDate,
       list_type,
+      format,
+      browserlessKey,
       supabaseUrl,
-      supabaseKey
+      supabaseKey,
+      supabase
     );
 
-    // Store entries in database if scrape action
+    // Store entries in database if scrape action and HTML format
     if (action === 'scrape' && result.success && result.entries.length > 0) {
       console.log(`[scrape-causelist] Storing ${result.entries.length} entries`);
       
+      let inserted = 0;
+      let updated = 0;
+      
       for (const entry of result.entries) {
-        await supabase
+        const { data, error } = await supabase
           .from('daily_court_docket')
-          .upsert(entry, { onConflict: 'case_number,date,court_room_no' });
+          .upsert(entry, { 
+            onConflict: 'case_number,date,court_room_no',
+            ignoreDuplicates: false 
+          })
+          .select();
+        
+        if (!error && data) {
+          inserted++;
+        }
       }
+      
+      console.log(`[scrape-causelist] Stored: ${inserted} entries`);
     }
 
     // Log the scraper run
@@ -481,12 +692,19 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: result.success,
+        format,
         message: result.success 
-          ? `Found ${result.entries.length} cases` 
+          ? format === 'pdf' 
+            ? `PDF downloaded and stored: ${result.pdfFilename}`
+            : `Found ${result.entries.length} cases` 
           : result.error,
         entries: result.entries,
-        captchaSolved: result.captchaSolution,
-        htmlPreview: result.rawHtml?.substring(0, 2000),
+        entries_count: result.entries.length,
+        pdf_url: result.pdfUrl,
+        pdf_filename: result.pdfFilename,
+        attempts: result.attempts,
+        captcha_solution: result.captchaSolution,
+        raw_content_preview: result.rawHtml,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
