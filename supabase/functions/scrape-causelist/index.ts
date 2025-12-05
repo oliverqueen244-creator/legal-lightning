@@ -85,9 +85,159 @@ async function solveCaptcha(imageData: string, supabaseUrl: string, supabaseKey:
   }
 }
 
-// Single-session scrape: Get CAPTCHA, solve it externally, then submit form - all in one browser context
-// Using Browserless /content with addScriptTag to capture final state
-async function scrapeInSingleSession(
+// Step 1: Get initial page - extract CAPTCHA and ASP.NET ViewState
+async function getInitialPage(
+  cisUrl: string,
+  browserlessKey: string
+): Promise<{ html: string; captchaImage: string | null; viewState: string | null; eventValidation: string | null; error?: string }> {
+  console.log(`[scrape-causelist] Getting initial page...`);
+  
+  // Script to extract CAPTCHA and ASP.NET hidden fields
+  const extractScript = `
+    (function() {
+      var captchaEl = document.querySelector('#captcha');
+      var viewStateEl = document.querySelector('#__VIEWSTATE');
+      var eventValidationEl = document.querySelector('#__EVENTVALIDATION');
+      
+      var marker = document.createElement('div');
+      marker.id = '__extracted_data__';
+      marker.setAttribute('data-captcha', captchaEl ? captchaEl.src : '');
+      marker.setAttribute('data-viewstate', viewStateEl ? viewStateEl.value : '');
+      marker.setAttribute('data-eventvalidation', eventValidationEl ? eventValidationEl.value : '');
+      document.body.appendChild(marker);
+    })();
+  `;
+  
+  const response = await fetch(`https://chrome.browserless.io/content?token=${browserlessKey}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      url: cisUrl,
+      gotoOptions: { waitUntil: 'networkidle2', timeout: 30000 },
+      waitForSelector: { selector: '#captcha', timeout: 20000 },
+      addScriptTag: [{ content: extractScript }],
+      waitForTimeout: 1000,
+    }),
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    console.error(`[scrape-causelist] Initial page failed: ${response.status} - ${error}`);
+    return { html: '', captchaImage: null, viewState: null, eventValidation: null, error: `Initial page failed: ${response.status}` };
+  }
+
+  const html = await response.text();
+  console.log(`[scrape-causelist] Got page: ${html.length} chars`);
+  
+  // Extract data from marker
+  const markerMatch = html.match(/id="__extracted_data__"[^>]*data-captcha="([^"]*)"[^>]*data-viewstate="([^"]*)"[^>]*data-eventvalidation="([^"]*)"/);
+  let captchaImage: string | null = null;
+  let viewState: string | null = null;
+  let eventValidation: string | null = null;
+  
+  if (markerMatch) {
+    captchaImage = markerMatch[1] || null;
+    viewState = markerMatch[2] || null;
+    eventValidation = markerMatch[3] || null;
+  }
+  
+  // Fallback: extract CAPTCHA from HTML directly
+  if (!captchaImage) {
+    const captchaMatch = html.match(/<img[^>]*src=["'](data:image\/[^"']+)["'][^>]*id=["']captcha["']/i) ||
+                         html.match(/<img[^>]*id=["']captcha["'][^>]*src=["'](data:image\/[^"']+)["']/i);
+    if (captchaMatch) {
+      captchaImage = captchaMatch[1];
+    }
+  }
+  
+  // Fallback: extract ViewState from HTML
+  if (!viewState) {
+    const vsMatch = html.match(/<input[^>]*id="__VIEWSTATE"[^>]*value="([^"]*)"/i) ||
+                    html.match(/<input[^>]*name="__VIEWSTATE"[^>]*value="([^"]*)"/i);
+    if (vsMatch) {
+      viewState = vsMatch[1];
+    }
+  }
+  
+  // Fallback: extract EventValidation from HTML
+  if (!eventValidation) {
+    const evMatch = html.match(/<input[^>]*id="__EVENTVALIDATION"[^>]*value="([^"]*)"/i) ||
+                    html.match(/<input[^>]*name="__EVENTVALIDATION"[^>]*value="([^"]*)"/i);
+    if (evMatch) {
+      eventValidation = evMatch[1];
+    }
+  }
+  
+  console.log(`[scrape-causelist] CAPTCHA: ${captchaImage ? 'found' : 'not found'}, ViewState: ${viewState ? viewState.length + ' chars' : 'not found'}, EventValidation: ${eventValidation ? eventValidation.length + ' chars' : 'not found'}`);
+  
+  return { html, captchaImage, viewState, eventValidation };
+}
+
+// Step 2: Submit form via direct POST with ViewState (ASP.NET stateless approach)
+async function submitFormViaPost(
+  cisUrl: string,
+  viewState: string,
+  eventValidation: string | null,
+  formattedDate: string,
+  listType: string,
+  captchaSolution: string,
+  lawyerName?: string
+): Promise<{ html: string; success: boolean; error?: string }> {
+  console.log(`[scrape-causelist] Submitting form via POST...`);
+  
+  // Build form data - this is what ASP.NET expects
+  const formData = new URLSearchParams();
+  formData.append('__VIEWSTATE', viewState);
+  if (eventValidation) {
+    formData.append('__EVENTVALIDATION', eventValidation);
+  }
+  formData.append('causelstdt', formattedDate);
+  formData.append('causelisttype', listType);
+  formData.append('txtCaptcha', captchaSolution);
+  formData.append('formatradio', 'formatradio1'); // HTML format
+  formData.append('btnSearchCauseList', 'Search');
+  if (lawyerName) {
+    formData.append('lawyername', lawyerName);
+  }
+  
+  console.log(`[scrape-causelist] POST data: date=${formattedDate}, type=${listType}, captcha=${captchaSolution}`);
+  
+  try {
+    const response = await fetch(cisUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5',
+        'Origin': new URL(cisUrl).origin,
+        'Referer': cisUrl,
+      },
+      body: formData.toString(),
+    });
+
+    if (!response.ok) {
+      console.error(`[scrape-causelist] POST failed: ${response.status}`);
+      return { html: '', success: false, error: `POST failed: ${response.status}` };
+    }
+
+    const html = await response.text();
+    console.log(`[scrape-causelist] Got POST response: ${html.length} chars`);
+    
+    // Check for errors
+    const lowerHtml = html.toLowerCase();
+    if (lowerHtml.includes('invalid captcha') || lowerHtml.includes('wrong captcha')) {
+      return { html, success: false, error: 'Invalid CAPTCHA' };
+    }
+    
+    return { html, success: true };
+  } catch (error) {
+    console.error(`[scrape-causelist] POST error:`, error);
+    return { html: '', success: false, error: `POST error: ${error}` };
+  }
+}
+
+// Main scrape function
+async function scrapeWithViewState(
   cisUrl: string,
   browserlessKey: string,
   formattedDate: string,
@@ -96,100 +246,43 @@ async function scrapeInSingleSession(
   supabaseUrl: string,
   supabaseKey: string
 ): Promise<{ html: string; success: boolean; captchaSolution?: string; error?: string }> {
-  console.log(`[scrape-causelist] Starting single-session scrape...`);
+  console.log(`[scrape-causelist] Starting ViewState-based scrape...`);
   
-  // Step 1: Get initial page with CAPTCHA
-  console.log(`[scrape-causelist] Step 1: Getting initial page with CAPTCHA`);
-  const initialResponse = await fetch(`https://chrome.browserless.io/content?token=${browserlessKey}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      url: cisUrl,
-      waitForSelector: { selector: '#captcha', timeout: 20000 },
-      gotoOptions: { waitUntil: 'networkidle2', timeout: 30000 },
-    }),
-  });
-
-  if (!initialResponse.ok) {
-    const error = await initialResponse.text();
-    console.error(`[scrape-causelist] Initial page failed: ${initialResponse.status} - ${error}`);
-    return { html: '', success: false, error: `Initial page failed: ${initialResponse.status}` };
-  }
-
-  const initialHtml = await initialResponse.text();
-  console.log(`[scrape-causelist] Got initial page: ${initialHtml.length} chars`);
+  // Step 1: Get initial page with CAPTCHA and ViewState
+  const initial = await getInitialPage(cisUrl, browserlessKey);
   
-  // Extract CAPTCHA
-  const captchaMatch = initialHtml.match(/<img[^>]*src=["'](data:image\/[^"']+)["'][^>]*id=["']captcha["']/i) ||
-                       initialHtml.match(/<img[^>]*id=["']captcha["'][^>]*src=["'](data:image\/[^"']+)["']/i);
-  
-  if (!captchaMatch) {
-    console.error(`[scrape-causelist] CAPTCHA not found in page`);
-    return { html: initialHtml, success: false, error: 'CAPTCHA not found' };
+  if (initial.error) {
+    return { html: '', success: false, error: initial.error };
   }
   
-  console.log(`[scrape-causelist] CAPTCHA extracted`);
+  if (!initial.captchaImage) {
+    console.error(`[scrape-causelist] CAPTCHA not found in initial page`);
+    return { html: initial.html, success: false, error: 'CAPTCHA image not found' };
+  }
+  
+  if (!initial.viewState) {
+    console.error(`[scrape-causelist] ViewState not found - cannot submit form`);
+    return { html: initial.html, success: false, error: 'ViewState not found' };
+  }
   
   // Step 2: Solve CAPTCHA
-  const captchaSolution = await solveCaptcha(captchaMatch[1], supabaseUrl, supabaseKey);
+  const captchaSolution = await solveCaptcha(initial.captchaImage, supabaseUrl, supabaseKey);
   if (!captchaSolution) {
     return { html: '', success: false, error: 'CAPTCHA solve failed' };
   }
   
-  // Step 3: Submit form with CAPTCHA
-  // Use /screenshot endpoint with html:true - it waits for page to fully render after scripts
-  console.log(`[scrape-causelist] Step 3: Submitting form...`);
+  // Step 3: Submit form via POST with ViewState
+  const result = await submitFormViaPost(
+    cisUrl,
+    initial.viewState,
+    initial.eventValidation,
+    formattedDate,
+    listType,
+    captchaSolution,
+    lawyerName
+  );
   
-  const formScript = `
-    (function() {
-      document.querySelector('#causelstdt').value = '${formattedDate}';
-      document.querySelector('#causelisttype').value = '${listType}';
-      ${lawyerName ? `document.querySelector('#lawyername').value = '${lawyerName}';` : ''}
-      document.querySelector('#formatradio1').checked = true;
-      document.querySelector('#txtCaptcha').value = '${captchaSolution}';
-      
-      // Trigger change events
-      document.querySelector('#causelisttype').dispatchEvent(new Event('change'));
-      
-      // Click search after a small delay
-      setTimeout(function() {
-        document.querySelector('#btnSearchCauseList').click();
-      }, 500);
-    })();
-  `;
-  
-  const submitResponse = await fetch(`https://chrome.browserless.io/screenshot?token=${browserlessKey}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      url: cisUrl,
-      options: { fullPage: true, type: 'png' },
-      gotoOptions: { waitUntil: 'networkidle2', timeout: 30000 },
-      waitForSelector: { selector: '#captcha', timeout: 20000 },
-      addScriptTag: [{ content: formScript }],
-      waitForTimeout: 10000, // Wait 10s for AJAX results
-      html: true, // Return HTML along with screenshot
-    }),
-  });
-
-  if (!submitResponse.ok) {
-    const error = await submitResponse.text();
-    console.error(`[scrape-causelist] Form submission failed: ${submitResponse.status} - ${error}`);
-    return { html: '', success: false, captchaSolution, error: `Form submission failed: ${submitResponse.status}` };
-  }
-
-  // Response is JSON with screenshot and html
-  const result = await submitResponse.json();
-  const resultHtml = result.html || '';
-  console.log(`[scrape-causelist] Got result: ${resultHtml.length} chars`);
-  
-  // Check for CAPTCHA errors
-  const lowerHtml = resultHtml.toLowerCase();
-  if (lowerHtml.includes('invalid captcha') || lowerHtml.includes('wrong captcha')) {
-    return { html: resultHtml, success: false, captchaSolution, error: 'Invalid CAPTCHA' };
-  }
-  
-  return { html: resultHtml, success: true, captchaSolution };
+  return { ...result, captchaSolution };
 }
 
 // Parse cause list HTML to extract entries
@@ -332,7 +425,7 @@ serve(async (req) => {
       );
     }
 
-    // Scrape
+    // Scrape with retries
     const maxAttempts = 2;
     let lastResult: { html: string; success: boolean; captchaSolution?: string; error?: string } = {
       html: '', success: false, error: 'No attempts made'
@@ -341,7 +434,7 @@ serve(async (req) => {
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       console.log(`[scrape-causelist] === Attempt ${attempt}/${maxAttempts} ===`);
       
-      lastResult = await scrapeInSingleSession(
+      lastResult = await scrapeWithViewState(
         cisUrl,
         browserlessKey,
         formattedDate,
