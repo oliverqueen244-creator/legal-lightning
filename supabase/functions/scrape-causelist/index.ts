@@ -128,8 +128,17 @@ async function scrapeWithBrowserQL(
         time
       }
       
-      waitForResults: waitForTimeout(time: 8000) {
+      # Wait for AJAX results - either a table appears or "No Record Found"
+      waitForAjax: waitForTimeout(time: 5000) {
         time
+      }
+      
+      # Try to wait for results table or message
+      waitForContent: evaluate(
+        content: "new Promise((resolve) => { const check = () => { const tables = document.querySelectorAll('table'); const noRecord = document.body.innerText.includes('No Record'); if (tables.length > 3 || noRecord) { resolve('found'); } else { setTimeout(check, 500); } }; check(); setTimeout(() => resolve('timeout'), 10000); })"
+      ) {
+        time
+        value
       }
       
       getHtml: html {
@@ -172,11 +181,11 @@ async function scrapeWithBrowserQL(
       return { html: '', success: false, error: `Invalid JSON response: ${responseText.substring(0, 100)}` };
     }
     
-    // Check for GraphQL errors
+    // Log errors but don't fail if we have data
     if (result.errors && result.errors.length > 0) {
       const errorMsg = result.errors.map((e: any) => e.message).join(', ');
-      console.error(`[scrape-causelist] BrowserQL errors: ${errorMsg}`);
-      return { html: '', success: false, error: `BrowserQL errors: ${errorMsg}` };
+      console.warn(`[scrape-causelist] BrowserQL warnings: ${errorMsg}`);
+      // Don't return early - check if we have usable data first
     }
     
     console.log(`[scrape-causelist] Response structure:`, JSON.stringify(Object.keys(result)));
@@ -185,11 +194,17 @@ async function scrapeWithBrowserQL(
     // Get CAPTCHA result
     const captchaResult = result.data?.solveCaptcha;
     const captchaSolved = captchaResult?.solved === true;
-    console.log(`[scrape-causelist] CAPTCHA found: ${captchaResult?.found}, solved: ${captchaSolved}`);
+    console.log(`[scrape-causelist] CAPTCHA found: ${captchaResult?.found}, solved: ${captchaSolved}, token: ${captchaResult?.token}`);
     
     // Get HTML from response
     const html = result.data?.getHtml?.html || '';
     console.log(`[scrape-causelist] Got HTML: ${html.length} chars`);
+    
+    // If we have no HTML and there were errors, then fail
+    if (!html && result.errors && result.errors.length > 0) {
+      const errorMsg = result.errors.map((e: any) => e.message).join(', ');
+      return { html: '', success: false, error: `BrowserQL errors: ${errorMsg}` };
+    }
     
     // Check for errors in HTML
     const lowerHtml = html.toLowerCase();
@@ -201,7 +216,8 @@ async function scrapeWithBrowserQL(
       return { html, success: true, captchaSolved, error: 'No records found for this date' };
     }
     
-    return { html, success: true, captchaSolved };
+    // Success if we have HTML (even with navigation timeout warnings)
+    return { html, success: html.length > 0, captchaSolved };
     
   } catch (error) {
     console.error(`[scrape-causelist] BrowserQL error:`, error);
