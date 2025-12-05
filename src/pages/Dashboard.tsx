@@ -16,14 +16,33 @@ import { LiveBoardSimulator } from '@/components/dashboard/LiveBoardSimulator';
 export default function Dashboard() {
   const { data: docket, isLoading: docketLoading, refetch } = useDocket();
   const { data: liveBoards, isLoading: liveBoardLoading } = useLiveBoard();
-  const { role } = useAuth();
+  const { role, profile } = useAuth();
   const [activeTab, setActiveTab] = useState('daily');
 
-  const supplementaryItems = docket?.filter((item) => item.list_type === 'SUPPLEMENTARY') ?? [];
-  const dailyItems = docket?.filter((item) => item.list_type === 'DAILY') ?? [];
+  // Get user's selected benches (could be "JAIPUR", "JODHPUR", or "JAIPUR,JODHPUR")
+  const userBenches = profile?.bench?.split(',').map(b => b.trim().toUpperCase()) ?? [];
+
+  // Filter live boards by user's selected bench(es)
+  const filteredLiveBoards = liveBoards?.filter((board) => {
+    if (userBenches.length === 0) return true; // Show all if no bench selected
+    return userBenches.some(bench => 
+      board.court_location?.toUpperCase().includes(bench)
+    );
+  }) ?? [];
+
+  // Filter docket items by user's selected bench(es)
+  const filteredDocket = docket?.filter((item) => {
+    if (userBenches.length === 0) return true;
+    return userBenches.some(bench => 
+      item.court_location?.toUpperCase().includes(bench)
+    );
+  }) ?? [];
+
+  const supplementaryItems = filteredDocket.filter((item) => item.list_type === 'SUPPLEMENTARY');
+  const dailyItems = filteredDocket.filter((item) => item.list_type === 'DAILY');
 
   const getLiveBoardForItem = (item: { court_location: string; court_room_no: string }) => {
-    return liveBoards?.find(
+    return filteredLiveBoards.find(
       (board) => board.court_location === item.court_location && board.court_no === item.court_room_no
     );
   };
@@ -31,7 +50,7 @@ export default function Dashboard() {
   // Get first case's live board for the widget based on active tab
   const activeItems = activeTab === 'supplementary' ? supplementaryItems : dailyItems;
   const firstCase = activeItems[0] || (activeTab === 'supplementary' ? dailyItems[0] : supplementaryItems[0]);
-  const primaryLiveBoard = firstCase ? getLiveBoardForItem(firstCase) : liveBoards?.[0];
+  const primaryLiveBoard = firstCase ? getLiveBoardForItem(firstCase) : filteredLiveBoards[0];
 
   // Handle Force Active callback to refetch data
   const handleForceActive = () => {
@@ -171,11 +190,11 @@ export default function Dashboard() {
                 {liveBoardLoading ? (
                   <Skeleton className="h-64 w-full rounded-lg" />
                 ) : (
-                  <LiveTicker liveBoards={liveBoards ?? []} />
+                  <LiveTicker liveBoards={filteredLiveBoards} />
                 )}
                 
                 {/* Live Board Simulator for testing */}
-                <LiveBoardSimulator liveBoards={liveBoards ?? []} />
+                <LiveBoardSimulator liveBoards={filteredLiveBoards} />
               </div>
             </div>
           </div>
