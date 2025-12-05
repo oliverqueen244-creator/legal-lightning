@@ -68,24 +68,38 @@ function getSmartTargetDate(): string {
 function parseCourtTable(markdown: string, bench: string): CourtMetadata[] {
   const courts: CourtMetadata[] = [];
   
-  console.log(`[scrape-causelist] Parsing court table from markdown...`);
+  console.log(`[scrape-causelist] Parsing court table from markdown (${markdown.length} chars)...`);
+  console.log(`[scrape-causelist] First 500 chars: ${markdown.substring(0, 500)}`);
   
-  // The markdown contains a table like:
-  // | Court No. | Hon'ble Judges | Causelist Type |
-  // | 1 | THE JUSTICE ACTING CHIEF JUSTICE... | DS |
+  // The markdown can be either:
+  // 1. Multi-line: | Court No. | Judges | Type |\n| 1 | JUSTICE... | DS |
+  // 2. Single-line: | Court No. | Judges | Type | | --- | --- | --- | | 1 | JUSTICE... | DS |
   
-  const lines = markdown.split('\n');
+  // Strategy: Normalize the markdown by inserting line breaks before row patterns
+  let normalizedMarkdown = markdown
+    .replace(/\|\s*\|\s*(?=\d)/g, '|\n|')  // Split before court numbers like "| | 1"
+    .replace(/\|\s*\|\s*(?=---)/g, '|\n|') // Split before separator row
+    .replace(/\|\s*\|\s*(?=Court)/gi, '|\n|') // Split before header
+    .replace(/\|\s+\|/g, '|\n|'); // General: split consecutive pipes with spaces
+  
+  const lines = normalizedMarkdown.split('\n');
+  console.log(`[scrape-causelist] Split into ${lines.length} lines after normalization`);
+  
   let inTable = false;
+  let headerFound = false;
   
   for (const line of lines) {
     const trimmed = line.trim();
     
     // Skip empty lines and separator rows
-    if (!trimmed || trimmed.includes('---')) continue;
+    if (!trimmed || trimmed.match(/^\|[\s\-:]+\|$/)) continue;
+    if (trimmed.includes('---') && !trimmed.match(/\d/)) continue;
     
-    // Detect table start
-    if (trimmed.includes('Court No.') || trimmed.includes('Hon\'ble')) {
+    // Detect table header
+    if (trimmed.toLowerCase().includes('court no') || trimmed.toLowerCase().includes('hon\'ble')) {
       inTable = true;
+      headerFound = true;
+      console.log(`[scrape-causelist] Found table header: ${trimmed.substring(0, 80)}...`);
       continue;
     }
     
@@ -94,19 +108,23 @@ function parseCourtTable(markdown: string, bench: string): CourtMetadata[] {
     // Parse table rows: | 1 | JUSTICE NAME | DS |
     const cells = trimmed.split('|').map(c => c.trim()).filter(c => c);
     
+    console.log(`[scrape-causelist] Row cells (${cells.length}): ${JSON.stringify(cells.slice(0, 3))}`);
+    
     if (cells.length >= 3) {
       const courtNo = cells[0];
       const judges = cells[1];
       const listType = cells[2];
       
       // Skip if court number is not numeric
-      if (!/^\d+$/.test(courtNo)) continue;
+      if (!/^\d+$/.test(courtNo)) {
+        console.log(`[scrape-causelist] Skipping non-numeric court: ${courtNo}`);
+        continue;
+      }
       
       // Normalize list type: D = DAILY, DS = DAILY_SUPPLEMENTARY, S = SUPPLEMENTARY
       let normalizedType = 'DAILY';
-      if (listType === 'DS') normalizedType = 'DAILY';
+      if (listType === 'DS' || listType === 'D') normalizedType = 'DAILY';
       else if (listType === 'S') normalizedType = 'SUPPLEMENTARY';
-      else if (listType === 'D') normalizedType = 'DAILY';
       
       courts.push({
         court_no: courtNo,
@@ -114,10 +132,39 @@ function parseCourtTable(markdown: string, bench: string): CourtMetadata[] {
         list_type: normalizedType,
         bench: bench,
       });
+      
+      console.log(`[scrape-causelist] ✅ Parsed court ${courtNo}: ${judges.substring(0, 40)}... (${listType})`);
     }
   }
   
-  console.log(`[scrape-causelist] Parsed ${courts.length} courts from table`);
+  // Fallback: Try to parse from the raw markdown if no courts found
+  if (courts.length === 0 && markdown.includes('|')) {
+    console.log(`[scrape-causelist] Fallback: Trying regex extraction...`);
+    
+    // Match pattern: | number | text | DS/D/S |
+    const rowPattern = /\|\s*(\d+)\s*\|\s*([^|]+)\s*\|\s*(DS?|S)\s*\|/g;
+    let match;
+    
+    while ((match = rowPattern.exec(markdown)) !== null) {
+      const courtNo = match[1];
+      const judges = match[2].trim();
+      const listType = match[3];
+      
+      let normalizedType = 'DAILY';
+      if (listType === 'S') normalizedType = 'SUPPLEMENTARY';
+      
+      courts.push({
+        court_no: courtNo,
+        judge_names: judges,
+        list_type: normalizedType,
+        bench: bench,
+      });
+      
+      console.log(`[scrape-causelist] ✅ Regex found court ${courtNo}: ${judges.substring(0, 40)}...`);
+    }
+  }
+  
+  console.log(`[scrape-causelist] ✅ Total parsed: ${courts.length} courts from table`);
   return courts;
 }
 
