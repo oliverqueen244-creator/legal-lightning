@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.data-validation]
 verify_jwt = false
+
+[functions.scrape-causelist]
+verify_jwt = false
