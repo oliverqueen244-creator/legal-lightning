@@ -1,4 +1,4 @@
-import { Scale, Calendar, MapPin, LogOut, User, Settings } from 'lucide-react';
+import { Scale, Calendar, MapPin, LogOut, User, Settings, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -108,6 +108,15 @@ export function Header() {
                     </DropdownMenuItem>
                   </>
                 )}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem 
+                  onClick={() => navigate('/documentation#download')} 
+                  className="min-h-touch"
+                  aria-label="Download complete portal source code"
+                >
+                  <Download className="h-4 w-4 mr-2" aria-hidden="true" />
+                  Download Source Code
+                </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleSignOut} className="text-destructive min-h-touch">
                   <LogOut className="h-4 w-4 mr-2" aria-hidden="true" />

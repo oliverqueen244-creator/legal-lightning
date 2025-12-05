@@ -5,7 +5,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { 
   ArrowLeft, Scale, Users, FileText, Bell, Shield, 
-  Keyboard, Eye, Monitor, Zap, Download
+  Keyboard, Eye, Monitor, Zap, Download, Github, Code, ExternalLink
 } from 'lucide-react';
 
 export default function Documentation() {
@@ -347,6 +347,92 @@ export default function Documentation() {
                   <li>Use Arguments tab to link arguments to PDF pages</li>
                   <li>Use Courts tab to configure live board status</li>
                 </ol>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Download Source Code */}
+          <Card className="mb-8" id="download">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Code className="h-5 w-5 text-primary" aria-hidden="true" />
+                Download Source Code
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <p className="text-muted-foreground">
+                Vakalat-OS is an open-source project. You can download the complete source code 
+                to customize, deploy on your own infrastructure, or contribute to development.
+              </p>
+              
+              <div className="grid gap-4 md:grid-cols-2">
+                <a 
+                  href="https://github.com/lovable-dev/vakalat-os/archive/refs/heads/main.zip"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-3 p-4 rounded-lg bg-primary/10 border border-primary/20 hover:bg-primary/20 transition-colors group"
+                >
+                  <Download className="h-8 w-8 text-primary" aria-hidden="true" />
+                  <div>
+                    <h4 className="font-semibold text-foreground group-hover:text-primary transition-colors">
+                      Download ZIP
+                    </h4>
+                    <p className="text-sm text-muted-foreground">
+                      Get the complete source code as a ZIP file
+                    </p>
+                  </div>
+                  <ExternalLink className="h-4 w-4 text-muted-foreground ml-auto" aria-hidden="true" />
+                </a>
+
+                <a 
+                  href="https://github.com/lovable-dev/vakalat-os"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-3 p-4 rounded-lg bg-card border border-border hover:border-primary/50 transition-colors group"
+                >
+                  <Github className="h-8 w-8 text-foreground" aria-hidden="true" />
+                  <div>
+                    <h4 className="font-semibold text-foreground group-hover:text-primary transition-colors">
+                      View on GitHub
+                    </h4>
+                    <p className="text-sm text-muted-foreground">
+                      Browse code, fork, and contribute
+                    </p>
+                  </div>
+                  <ExternalLink className="h-4 w-4 text-muted-foreground ml-auto" aria-hidden="true" />
+                </a>
+              </div>
+
+              <div className="p-4 rounded-lg bg-muted/30 border border-border">
+                <h4 className="font-semibold text-foreground mb-2">Quick Start</h4>
+                <div className="space-y-2 text-sm text-muted-foreground font-mono">
+                  <p className="flex items-center gap-2">
+                    <span className="text-primary">$</span>
+                    git clone https://github.com/lovable-dev/vakalat-os.git
+                  </p>
+                  <p className="flex items-center gap-2">
+                    <span className="text-primary">$</span>
+                    cd vakalat-os && npm install
+                  </p>
+                  <p className="flex items-center gap-2">
+                    <span className="text-primary">$</span>
+                    npm run dev
+                  </p>
+                </div>
+              </div>
+
+              <div>
+                <h4 className="font-semibold text-foreground mb-2">Tech Stack</h4>
+                <div className="flex flex-wrap gap-2">
+                  {['React', 'TypeScript', 'Tailwind CSS', 'Supabase', 'Vite', 'shadcn/ui'].map((tech) => (
+                    <span 
+                      key={tech}
+                      className="px-3 py-1 rounded-full text-sm bg-card border border-border text-muted-foreground"
+                    >
+                      {tech}
+                    </span>
+                  ))}
+                </div>
               </div>
             </CardContent>
           </Card>
