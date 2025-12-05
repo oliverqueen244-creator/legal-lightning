@@ -1,4 +1,5 @@
-import { Scale, Calendar, MapPin, LogOut, User, Settings, Download } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Scale, Calendar, MapPin, LogOut, User, Settings, Download, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -13,10 +14,53 @@ import { useAuth } from '@/hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { NetworkStatusPill } from './NetworkStatusPill';
+import { NotificationBell } from '@/components/notifications/NotificationBell';
+import { useLiveBoard } from '@/hooks/useLiveBoard';
+import { useDocket } from '@/hooks/useDocket';
+import { supabase } from '@/integrations/supabase/client';
+
+type Bench = 'JAIPUR' | 'JODHPUR';
 
 export function Header() {
   const { profile, role, isAdmin, signOut } = useAuth();
   const navigate = useNavigate();
+  const { data: liveBoards } = useLiveBoard();
+  const { data: docket } = useDocket();
+  
+  // Bench selection state - defaults to profile bench or JODHPUR
+  const [selectedBench, setSelectedBench] = useState<Bench>(
+    (profile?.bench as Bench) || 'JODHPUR'
+  );
+  const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
+
+  // Update selected bench when profile loads
+  useEffect(() => {
+    if (profile?.bench) {
+      setSelectedBench(profile.bench as Bench);
+    }
+  }, [profile?.bench]);
+
+  // Fetch last sync time
+  useEffect(() => {
+    const fetchSyncStatus = async () => {
+      const { data } = await supabase
+        .from('sync_status')
+        .select('last_sync_at')
+        .order('last_sync_at', { ascending: false })
+        .limit(1)
+        .single();
+      
+      if (data?.last_sync_at) {
+        setLastSyncTime(new Date(data.last_sync_at));
+      }
+    };
+    
+    fetchSyncStatus();
+    
+    // Refresh every minute
+    const interval = setInterval(fetchSyncStatus, 60000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleSignOut = async () => {
     const { error } = await signOut();
@@ -26,6 +70,37 @@ export function Header() {
       toast.success('Signed out successfully');
       navigate('/auth');
     }
+  };
+
+  const handleBenchChange = async (bench: Bench) => {
+    setSelectedBench(bench);
+    
+    // Update profile if user has permission
+    if (profile?.id) {
+      await supabase
+        .from('profiles')
+        .update({ bench })
+        .eq('id', profile.id);
+    }
+    
+    toast.success(`Switched to ${bench} Bench`);
+  };
+
+  // Format last sync time
+  const formatLastSync = () => {
+    if (!lastSyncTime) return 'Never';
+    
+    const now = new Date();
+    const diffMs = now.getTime() - lastSyncTime.getTime();
+    const diffMins = Math.floor(diffMs / (1000 * 60));
+    
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins} min${diffMins !== 1 ? 's' : ''} ago`;
+    
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
+    
+    return lastSyncTime.toLocaleDateString('en-IN');
   };
 
   return (
@@ -45,24 +120,68 @@ export function Header() {
           </div>
           
           <div className="flex items-center gap-4">
+            {/* Bench Selector */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="hidden md:flex items-center gap-2">
+                  <MapPin className="h-4 w-4 text-primary" />
+                  <span>Connected to: <strong>{selectedBench}</strong></span>
+                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="glass-card">
+                <DropdownMenuLabel>Select Bench</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem 
+                  onClick={() => handleBenchChange('JAIPUR')}
+                  className={selectedBench === 'JAIPUR' ? 'bg-primary/10' : ''}
+                >
+                  <MapPin className="h-4 w-4 mr-2" />
+                  Jaipur Bench
+                  {selectedBench === 'JAIPUR' && (
+                    <Badge variant="gold" className="ml-auto">Active</Badge>
+                  )}
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  onClick={() => handleBenchChange('JODHPUR')}
+                  className={selectedBench === 'JODHPUR' ? 'bg-primary/10' : ''}
+                >
+                  <MapPin className="h-4 w-4 mr-2" />
+                  Jodhpur Bench
+                  {selectedBench === 'JODHPUR' && (
+                    <Badge variant="gold" className="ml-auto">Active</Badge>
+                  )}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {/* Last Sync Time */}
+            <div className="hidden lg:flex items-center gap-2 text-xs text-muted-foreground">
+              <span>Last Synced:</span>
+              <Badge variant="secondary" className="font-mono">
+                {formatLastSync()}
+              </Badge>
+            </div>
+
             {/* Network Status Pill */}
             <NetworkStatusPill />
+
+            {/* Notification Bell */}
+            <NotificationBell 
+              liveBoards={liveBoards ?? []} 
+              userCases={docket ?? []} 
+            />
 
             <div className="hidden md:flex items-center gap-4 text-sm text-muted-foreground">
               <span className="flex items-center gap-1">
                 <Calendar className="h-4 w-4" aria-hidden="true" />
                 <time dateTime={new Date().toISOString().split('T')[0]}>
                   {new Date().toLocaleDateString('en-IN', {
-                    weekday: 'long',
+                    weekday: 'short',
                     day: 'numeric',
-                    month: 'long',
-                    year: 'numeric',
+                    month: 'short',
                   })}
                 </time>
-              </span>
-              <span className="flex items-center gap-1">
-                <MapPin className="h-4 w-4" aria-hidden="true" />
-                Jodhpur Bench
               </span>
             </div>
 
@@ -98,6 +217,9 @@ export function Header() {
                 </DropdownMenuItem>
                 <DropdownMenuItem className="text-muted-foreground text-xs">
                   Role: {role}
+                </DropdownMenuItem>
+                <DropdownMenuItem className="text-muted-foreground text-xs">
+                  Bench: {selectedBench}
                 </DropdownMenuItem>
                 {isAdmin && (
                   <>

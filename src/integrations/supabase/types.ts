@@ -81,6 +81,30 @@ export type Database = {
           },
         ]
       }
+      court_metadata: {
+        Row: {
+          bench: string
+          court_no: string
+          id: string
+          judge_names: string | null
+          last_updated: string | null
+        }
+        Insert: {
+          bench: string
+          court_no: string
+          id?: string
+          judge_names?: string | null
+          last_updated?: string | null
+        }
+        Update: {
+          bench?: string
+          court_no?: string
+          id?: string
+          judge_names?: string | null
+          last_updated?: string | null
+        }
+        Relationships: []
+      }
       daily_court_docket: {
         Row: {
           case_number: string | null
@@ -88,12 +112,16 @@ export type Database = {
           court_room_no: string | null
           created_at: string | null
           date: string
+          force_active: boolean | null
           id: string
           item_no: number | null
           list_type: string | null
           matched_profile_id: string | null
+          petitioner: string | null
           petitioner_lawyer: string | null
+          respondent: string | null
           respondent_lawyer: string | null
+          status: string | null
         }
         Insert: {
           case_number?: string | null
@@ -101,12 +129,16 @@ export type Database = {
           court_room_no?: string | null
           created_at?: string | null
           date?: string
+          force_active?: boolean | null
           id?: string
           item_no?: number | null
           list_type?: string | null
           matched_profile_id?: string | null
+          petitioner?: string | null
           petitioner_lawyer?: string | null
+          respondent?: string | null
           respondent_lawyer?: string | null
+          status?: string | null
         }
         Update: {
           case_number?: string | null
@@ -114,12 +146,16 @@ export type Database = {
           court_room_no?: string | null
           created_at?: string | null
           date?: string
+          force_active?: boolean | null
           id?: string
           item_no?: number | null
           list_type?: string | null
           matched_profile_id?: string | null
+          petitioner?: string | null
           petitioner_lawyer?: string | null
+          respondent?: string | null
           respondent_lawyer?: string | null
+          status?: string | null
         }
         Relationships: [
           {
@@ -336,6 +372,39 @@ export type Database = {
           onboarding_completed?: boolean | null
           role?: string | null
           whatsapp_number?: string | null
+        }
+        Relationships: []
+      }
+      scraper_logs: {
+        Row: {
+          bench: string
+          cases_found: number | null
+          court_no: string | null
+          error_message: string | null
+          id: string
+          list_type: string | null
+          run_at: string | null
+          status: string
+        }
+        Insert: {
+          bench: string
+          cases_found?: number | null
+          court_no?: string | null
+          error_message?: string | null
+          id?: string
+          list_type?: string | null
+          run_at?: string | null
+          status: string
+        }
+        Update: {
+          bench?: string
+          cases_found?: number | null
+          court_no?: string | null
+          error_message?: string | null
+          id?: string
+          list_type?: string | null
+          run_at?: string | null
+          status?: string
         }
         Relationships: []
       }

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
-import { Gavel, Clock, Coffee, SkipForward, Ban } from 'lucide-react';
+import { Gavel, Clock, Coffee, SkipForward, Ban, AlertTriangle } from 'lucide-react';
 import type { BoardStatus, LiveBoardCache } from '@/types/database';
 import { SyncStatusBadge, SyncTimestamp } from './SyncStatusBadge';
 import { useCourtSyncHealth } from '@/hooks/useSyncHealth';
@@ -12,6 +12,7 @@ interface LiveCourtWidgetProps {
   status?: BoardStatus;
   courtLocation?: string;
   liveBoard?: LiveBoardCache;
+  isSupplementary?: boolean;
 }
 
 export function LiveCourtWidget({
@@ -21,6 +22,7 @@ export function LiveCourtWidget({
   status = 'hearing',
   courtLocation = 'Jodhpur Bench',
   liveBoard,
+  isSupplementary = false,
 }: LiveCourtWidgetProps) {
   const [displayedItem, setDisplayedItem] = useState(currentItem);
   const [isAnimating, setIsAnimating] = useState(false);
@@ -40,8 +42,12 @@ export function LiveCourtWidget({
   }, [currentItem, displayedItem]);
 
   const distance = myItemNumber ? myItemNumber - currentItem : null;
-  const isPanic = distance !== null && distance > 0 && distance < 5;
+  
+  // Enhanced panic logic: Different thresholds for daily vs supplementary
+  const panicThreshold = isSupplementary ? 10 : 5;
+  const isPanic = distance !== null && distance > 0 && distance <= panicThreshold;
   const isMyTurn = distance === 0;
+  const isCritical = distance !== null && distance > 0 && distance <= 3;
 
   const getStatusConfig = () => {
     switch (status) {
@@ -84,6 +90,7 @@ export function LiveCourtWidget({
       className={`
         glass-card p-6 md:p-8 relative overflow-hidden
         ${isPanic ? 'panic-pulse border-court-danger-light' : ''}
+        ${isCritical ? 'border-2 border-court-danger-light' : ''}
         ${isMyTurn ? 'gold-glow border-primary' : ''}
         ${status === 'passover' ? 'card-passover' : ''}
         ${statusConfig.bgClass} ${statusConfig.borderClass}
@@ -129,6 +136,11 @@ export function LiveCourtWidget({
               size="sm"
               showLabel={true}
             />
+            {isSupplementary && (
+              <Badge variant="supplementary" className="text-xs">
+                SUPPLEMENTARY
+              </Badge>
+            )}
             <Badge 
               variant={status === 'hearing' ? 'default' : 'secondary'}
               className={`
@@ -169,7 +181,9 @@ export function LiveCourtWidget({
         <div 
           className={`
             mt-4 p-4 rounded-lg text-center relative z-10
-            ${isPanic ? 'bg-court-danger/20 border border-court-danger-light/30' : 'bg-secondary/50'}
+            ${isCritical ? 'bg-court-danger/30 border-2 border-court-danger-light/50' : ''}
+            ${isPanic && !isCritical ? 'bg-court-danger/20 border border-court-danger-light/30' : ''}
+            ${!isPanic && !isMyTurn ? 'bg-secondary/50' : ''}
             ${isMyTurn ? 'bg-primary/20 border border-primary/30' : ''}
           `}
         >
@@ -180,13 +194,22 @@ export function LiveCourtWidget({
             </div>
           ) : distance && distance > 0 ? (
             <div className="flex items-center justify-center gap-2">
-              <Clock className="h-4 w-4 text-muted-foreground" />
+              {isCritical ? (
+                <AlertTriangle className="h-5 w-5 text-court-danger-light animate-pulse" />
+              ) : (
+                <Clock className="h-4 w-4 text-muted-foreground" />
+              )}
               <span className={`font-medium ${isPanic ? 'text-court-danger-light' : 'text-muted-foreground'}`}>
                 Your case (#{myItemNumber}) is{' '}
-                <span className={`font-bold ${isPanic ? 'text-court-danger-light' : 'text-primary'}`}>
+                <span className={`font-bold ${isPanic ? 'text-court-danger-light text-xl' : 'text-primary'}`}>
                   {distance}
                 </span>
                 {' '}item{distance !== 1 ? 's' : ''} away
+                {isSupplementary && isPanic && (
+                  <span className="block text-xs mt-1 text-court-warning">
+                    ⚡ Supplementary lists move faster!
+                  </span>
+                )}
               </span>
             </div>
           ) : (
