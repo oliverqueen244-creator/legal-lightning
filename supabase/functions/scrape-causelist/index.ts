@@ -359,43 +359,75 @@ async function submitFormAndGetPdfLinks(
   targetDate: string,
   firecrawlApiKey: string
 ): Promise<string[]> {
-  const [year, month, day] = targetDate.split('-');
+  // Parse date parts as integers to remove zero-padding
+  // "2025-12-05" -> day="5", month="12", year="2025"
+  const dateParts = targetDate.split('-');
+  const year = dateParts[0];
+  const month = String(parseInt(dateParts[1], 10)); // "12" stays "12"
+  const day = String(parseInt(dateParts[2], 10));   // "05" becomes "5"
   
-  console.log(`[scrape-causelist] Submitting form for date: ${day}/${month}/${year}`);
+  console.log(`[scrape-causelist] ==========================================`);
+  console.log(`[scrape-causelist] Form submission for date: ${day}/${month}/${year}`);
+  console.log(`[scrape-causelist] Target URL: ${baseUrl}`);
+  console.log(`[scrape-causelist] ==========================================`);
   
   // Method 1: Try direct POST with form data
   try {
+    console.log(`[scrape-causelist] Method 1: Direct POST...`);
     const formData = new URLSearchParams({
       day: day,
       month: month,
       year: year,
     });
     
+    console.log(`[scrape-causelist] POST body: ${formData.toString()}`);
+    
     const postResponse = await fetch(baseUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
       },
       body: formData.toString(),
     });
     
+    console.log(`[scrape-causelist] POST response status: ${postResponse.status}`);
+    
     if (postResponse.ok) {
       const html = await postResponse.text();
+      console.log(`[scrape-causelist] POST HTML length: ${html.length} chars`);
+      
+      // Log a snippet of the response to debug
+      const snippet = html.substring(0, 500);
+      console.log(`[scrape-causelist] HTML snippet: ${snippet.replace(/\n/g, ' ').substring(0, 200)}...`);
+      
       const pdfLinks = extractPdfLinksFromHtml(html, baseUrl);
       if (pdfLinks.length > 0) {
-        console.log(`[scrape-causelist] Got ${pdfLinks.length} PDF links from POST`);
+        console.log(`[scrape-causelist] ✅ Got ${pdfLinks.length} PDF links from POST`);
         return pdfLinks;
+      } else {
+        console.log(`[scrape-causelist] No PDF links found in POST response`);
       }
     }
   } catch (err) {
-    console.log(`[scrape-causelist] Direct POST failed: ${err}`);
+    console.log(`[scrape-causelist] ❌ Direct POST failed: ${err}`);
   }
   
   // Method 2: Use Firecrawl with actions to fill and submit form
-  console.log(`[scrape-causelist] Trying Firecrawl with form actions...`);
+  console.log(`[scrape-causelist] Method 2: Firecrawl with form actions...`);
   
   try {
+    const actions = [
+      { type: 'select', selector: '#day', value: day },
+      { type: 'select', selector: '#month', value: month },
+      { type: 'select', selector: '#year', value: year },
+      { type: 'click', selector: 'button[type="submit"]' },
+      { type: 'wait', milliseconds: 8000 }, // Increased wait for PDF generation
+    ];
+    
+    console.log(`[scrape-causelist] Firecrawl actions:`, JSON.stringify(actions));
+    
     const firecrawlResponse = await fetch('https://api.firecrawl.dev/v1/scrape', {
       method: 'POST',
       headers: {
@@ -406,20 +438,19 @@ async function submitFormAndGetPdfLinks(
         url: baseUrl,
         formats: ['markdown', 'links', 'html'],
         waitFor: 5000,
-        actions: [
-          { type: 'select', selector: 'select[name="day"], #day', value: day },
-          { type: 'select', selector: 'select[name="month"], #month', value: month },
-          { type: 'select', selector: 'select[name="year"], #year', value: year },
-          { type: 'click', selector: 'input[type="submit"], button[type="submit"], .submit-btn' },
-          { type: 'wait', milliseconds: 5000 },
-        ],
+        actions: actions,
       }),
     });
+    
+    console.log(`[scrape-causelist] Firecrawl response status: ${firecrawlResponse.status}`);
     
     if (firecrawlResponse.ok) {
       const data = await firecrawlResponse.json();
       const html = data.data?.html || '';
       const links = data.data?.links || [];
+      
+      console.log(`[scrape-causelist] Firecrawl HTML length: ${html.length} chars`);
+      console.log(`[scrape-causelist] Firecrawl links count: ${links.length}`);
       
       // Extract PDF links from both HTML and links array
       let pdfLinks = extractPdfLinksFromHtml(html, baseUrl);
@@ -429,19 +460,42 @@ async function submitFormAndGetPdfLinks(
         link.toLowerCase().endsWith('.pdf')
       );
       
+      console.log(`[scrape-causelist] PDFs from HTML: ${pdfLinks.length}, PDFs from links: ${linksPdfs.length}`);
+      
       pdfLinks = [...new Set([...pdfLinks, ...linksPdfs])];
       
-      console.log(`[scrape-causelist] Got ${pdfLinks.length} PDF links from Firecrawl actions`);
-      return pdfLinks;
+      if (pdfLinks.length > 0) {
+        console.log(`[scrape-causelist] ✅ Got ${pdfLinks.length} PDF links from Firecrawl actions`);
+        return pdfLinks;
+      } else {
+        console.log(`[scrape-causelist] No PDF links found in Firecrawl response`);
+        // Log HTML snippet for debugging
+        const snippet = html.substring(0, 300);
+        console.log(`[scrape-causelist] HTML snippet: ${snippet.replace(/\n/g, ' ').substring(0, 200)}...`);
+      }
+    } else {
+      const errorText = await firecrawlResponse.text();
+      console.log(`[scrape-causelist] Firecrawl error: ${errorText}`);
     }
   } catch (err) {
-    console.log(`[scrape-causelist] Firecrawl actions failed: ${err}`);
+    console.log(`[scrape-causelist] ❌ Firecrawl actions failed: ${err}`);
   }
   
-  // Method 3: Fallback - just scrape the page for any PDF links
-  console.log(`[scrape-causelist] Fallback: scraping page for any PDF links...`);
+  // Method 3: Try constructing PDF URLs directly based on known patterns
+  console.log(`[scrape-causelist] Method 3: Trying direct PDF URL construction...`);
   
   try {
+    // Known URL patterns for Rajasthan HC cause lists
+    const pdfBaseUrl = baseUrl.replace(/\/$/, '');
+    const possiblePatterns = [
+      `${pdfBaseUrl}/pdfs/${year}${month.padStart(2, '0')}${day.padStart(2, '0')}/`,
+      `${pdfBaseUrl}/pdf/${day}${month}${year}/`,
+      `${pdfBaseUrl}/${day}-${month}-${year}/`,
+    ];
+    
+    console.log(`[scrape-causelist] Checking URL patterns:`, possiblePatterns);
+    
+    // First, just try scraping the base page without form submission
     const firecrawlResponse = await fetch('https://api.firecrawl.dev/v1/scrape', {
       method: 'POST',
       headers: {
@@ -460,6 +514,8 @@ async function submitFormAndGetPdfLinks(
       const html = data.data?.html || '';
       const links = data.data?.links || [];
       
+      console.log(`[scrape-causelist] Fallback HTML length: ${html.length} chars`);
+      
       let pdfLinks = extractPdfLinksFromHtml(html, baseUrl);
       const linksPdfs = links.filter((link: string) => 
         link.toLowerCase().endsWith('.pdf')
@@ -467,13 +523,16 @@ async function submitFormAndGetPdfLinks(
       
       pdfLinks = [...new Set([...pdfLinks, ...linksPdfs])];
       
-      console.log(`[scrape-causelist] Fallback got ${pdfLinks.length} PDF links`);
-      return pdfLinks;
+      if (pdfLinks.length > 0) {
+        console.log(`[scrape-causelist] ✅ Fallback got ${pdfLinks.length} PDF links`);
+        return pdfLinks;
+      }
     }
   } catch (err) {
-    console.log(`[scrape-causelist] Fallback scrape failed: ${err}`);
+    console.log(`[scrape-causelist] ❌ Fallback scrape failed: ${err}`);
   }
   
+  console.log(`[scrape-causelist] ⚠️ All methods failed to find PDF links`);
   return [];
 }
 

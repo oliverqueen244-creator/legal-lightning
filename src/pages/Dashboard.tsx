@@ -4,6 +4,7 @@ import { LiveTicker } from '@/components/dashboard/LiveTicker';
 import { LiveCourtWidget } from '@/components/dashboard/LiveCourtWidget';
 import { CaseTimeEstimator } from '@/components/dashboard/CaseTimeEstimator';
 import { LawyerSearchPanel } from '@/components/dashboard/LawyerSearchPanel';
+import { ScraperStatusWidget } from '@/components/dashboard/ScraperStatusWidget';
 import { Header } from '@/components/layout/Header';
 import { AuthGuard } from '@/components/layout/AuthGuard';
 import { useDocket } from '@/hooks/useDocket';
@@ -68,7 +69,13 @@ export default function Dashboard() {
         <main className="container mx-auto px-4 py-6">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Left: Cause List with Tabs */}
-            <div className="lg:col-span-2 space-y-6">
+            <div className="lg:col-span-2 space-y-4">
+              {/* Scraper Status Widget with Manual Refresh */}
+              <ScraperStatusWidget 
+                bench={profile?.bench || undefined} 
+                onRefreshComplete={refetch}
+              />
+              
               <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
                 <TabsList className="grid w-full grid-cols-3 mb-4">
                   <TabsTrigger value="daily" className="flex items-center gap-2">

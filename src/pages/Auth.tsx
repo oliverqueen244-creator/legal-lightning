@@ -14,8 +14,9 @@ export default function Auth() {
   const navigate = useNavigate();
   const { signIn, signUp, isAuthenticated, profile, loading, user } = useAuth();
   
-  // Trigger scraper when user logs in
-  useScrapeOnLogin(user?.id);
+  // Only trigger scraper when user is fully authenticated (not during initial load)
+  // This prevents React queue errors during render
+  useScrapeOnLogin(isAuthenticated && !loading ? user?.id : undefined);
   
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
