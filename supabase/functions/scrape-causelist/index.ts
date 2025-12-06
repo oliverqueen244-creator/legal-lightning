@@ -233,88 +233,82 @@ serve(async (req) => {
     const errors: string[] = [];
     const openRouterKey = Deno.env.get('OPENROUTER_API_KEY');
 
-    // Process courts in smaller batches to avoid timeout
-    const BATCH_SIZE = 3; // Process 3 courts at a time
-    const MAX_COURTS = 6; // Limit to first 6 courts to avoid timeout
+    // Process courts SEQUENTIALLY to avoid rate limiting
+    const MAX_COURTS = 3; // Limit to first 3 courts to avoid timeout
     const courtsToProcess = courts.slice(0, MAX_COURTS);
 
-    for (let i = 0; i < courtsToProcess.length; i += BATCH_SIZE) {
-      const batch = courtsToProcess.slice(i, i + BATCH_SIZE);
+    for (const court of courtsToProcess) {
+      // Add delay between courts to avoid rate limiting
+      await new Promise(r => setTimeout(r, 1000));
       
-      const batchPromises = batch.map(async (court) => {
-        let courtCases = 0;
-        
-        // Use Firecrawl to navigate to PDF within session context
-        if (court.daily_link) {
-          try {
-            const dailyCases = await scrapePdfWithSession(
-              baseUrl,
-              court.court_no,
-              'daily',
-              firecrawlKey,
-              openRouterKey,
-              { day, month, year }
-            );
+      // Scrape Daily list
+      if (court.daily_link) {
+        try {
+          const dailyCases = await scrapePdfWithSession(
+            baseUrl,
+            court.court_no,
+            'daily',
+            firecrawlKey,
+            openRouterKey,
+            { day, month, year }
+          );
 
-            for (const caseItem of dailyCases) {
-              await insertDocketItem(supabase, {
-                ...caseItem,
-                date: targetDate,
-                court_location: bench,
-                court_room_no: court.court_no,
-                list_type: 'DAILY',
-                judge_names: court.judge_names,
-                source_url: court.daily_link
-              });
-            }
-
-            courtCases += dailyCases.length;
-            console.log(`[SCRAPER] Court ${court.court_no} Daily: ${dailyCases.length} cases`);
-          } catch (err: unknown) {
-            const errMessage = err instanceof Error ? err.message : 'Unknown error';
-            console.error(`[SCRAPER] Court ${court.court_no} Daily error: ${errMessage}`);
-            errors.push(`Court ${court.court_no} Daily: ${errMessage}`);
+          for (const caseItem of dailyCases) {
+            await insertDocketItem(supabase, {
+              ...caseItem,
+              date: targetDate,
+              court_location: bench,
+              court_room_no: court.court_no,
+              list_type: 'DAILY',
+              judge_names: court.judge_names,
+              source_url: court.daily_link
+            });
           }
+
+          totalCases += dailyCases.length;
+          console.log(`[SCRAPER] Court ${court.court_no} Daily: ${dailyCases.length} cases`);
+        } catch (err: unknown) {
+          const errMessage = err instanceof Error ? err.message : 'Unknown error';
+          console.error(`[SCRAPER] Court ${court.court_no} Daily error: ${errMessage}`);
+          errors.push(`Court ${court.court_no} Daily: ${errMessage}`);
         }
+      }
 
-        // Scrape Supplementary list
-        if (court.supplementary_link) {
-          try {
-            const suppCases = await scrapePdfWithSession(
-              baseUrl,
-              court.court_no,
-              'supplementary',
-              firecrawlKey,
-              openRouterKey,
-              { day, month, year }
-            );
+      // Small delay before supplementary
+      await new Promise(r => setTimeout(r, 500));
 
-            for (const caseItem of suppCases) {
-              await insertDocketItem(supabase, {
-                ...caseItem,
-                date: targetDate,
-                court_location: bench,
-                court_room_no: court.court_no,
-                list_type: 'SUPPLEMENTARY',
-                judge_names: court.judge_names,
-                source_url: court.supplementary_link
-              });
-            }
+      // Scrape Supplementary list
+      if (court.supplementary_link) {
+        try {
+          const suppCases = await scrapePdfWithSession(
+            baseUrl,
+            court.court_no,
+            'supplementary',
+            firecrawlKey,
+            openRouterKey,
+            { day, month, year }
+          );
 
-            courtCases += suppCases.length;
-            console.log(`[SCRAPER] Court ${court.court_no} Supplementary: ${suppCases.length} cases`);
-          } catch (err: unknown) {
-            const errMessage = err instanceof Error ? err.message : 'Unknown error';
-            console.error(`[SCRAPER] Court ${court.court_no} Supp error: ${errMessage}`);
-            errors.push(`Court ${court.court_no} Supp: ${errMessage}`);
+          for (const caseItem of suppCases) {
+            await insertDocketItem(supabase, {
+              ...caseItem,
+              date: targetDate,
+              court_location: bench,
+              court_room_no: court.court_no,
+              list_type: 'SUPPLEMENTARY',
+              judge_names: court.judge_names,
+              source_url: court.supplementary_link
+            });
           }
+
+          totalCases += suppCases.length;
+          console.log(`[SCRAPER] Court ${court.court_no} Supplementary: ${suppCases.length} cases`);
+        } catch (err: unknown) {
+          const errMessage = err instanceof Error ? err.message : 'Unknown error';
+          console.error(`[SCRAPER] Court ${court.court_no} Supp error: ${errMessage}`);
+          errors.push(`Court ${court.court_no} Supp: ${errMessage}`);
         }
-
-        return courtCases;
-      });
-
-      const batchResults = await Promise.all(batchPromises);
-      totalCases += batchResults.reduce((sum, count) => sum + count, 0);
+      }
     }
 
     // Log the scraper run
@@ -511,7 +505,7 @@ function resolveUrl(url: string, baseUrl: string): string {
   return `${baseUrl.replace(/\/$/, '')}/${url}`;
 }
 
-// Scrape PDF by navigating within same browser session using Firecrawl actions
+// Scrape PDF using Browserless for full browser control with session cookies
 async function scrapePdfWithSession(
   baseUrl: string,
   courtNo: string,
@@ -520,12 +514,109 @@ async function scrapePdfWithSession(
   openRouterKey: string | undefined,
   dateParams: { day: number; month: number; year: number }
 ): Promise<any[]> {
-  console.log(`[SCRAPER] Scraping Court ${courtNo} ${listType} with session-based approach`);
+  console.log(`[SCRAPER] Scraping Court ${courtNo} ${listType} with Browserless`);
+
+  const browserlessKey = Deno.env.get('BROWSERLESS_API_KEY');
+  
+  if (!browserlessKey) {
+    console.log(`[SCRAPER] No BROWSERLESS_API_KEY, falling back to Firecrawl`);
+    return await scrapePdfWithFirecrawl(baseUrl, courtNo, listType, firecrawlKey, openRouterKey, dateParams);
+  }
 
   try {
-    // Use Firecrawl with actions to navigate through the website properly
-    // The key is to click the button which triggers JavaScript that handles the PDF
+    // Use Browserless /content endpoint with proper Puppeteer script
+    const buttonText = listType === 'daily' ? 'D' : 'S';
     
+    // First, get the PDF path by navigating to quick download and finding the link
+    const getPdfPathResponse = await fetch(`https://chrome.browserless.io/content?token=${browserlessKey}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        url: baseUrl,
+        gotoOptions: {
+          waitUntil: 'networkidle2',
+          timeout: 30000
+        },
+        waitForSelector: {
+          selector: 'button[type="submit"]',
+          timeout: 10000
+        },
+        // Execute JavaScript to set date and submit form, then get PDF path
+        evaluate: `
+          async function() {
+            // Set date values
+            document.getElementById('day').value = '${dateParams.day}';
+            document.getElementById('month').value = '${dateParams.month}';
+            document.getElementById('year').value = '${dateParams.year}';
+            
+            // Submit form
+            document.querySelector('button[type="submit"]').click();
+            
+            // Wait for table to load
+            await new Promise(r => setTimeout(r, 3000));
+            
+            // Find the court row and get PDF path
+            const rows = document.querySelectorAll('table tr');
+            for (const row of rows) {
+              const cells = row.querySelectorAll('td');
+              if (cells.length >= 1 && cells[0]?.textContent?.trim() === '${courtNo}') {
+                const links = row.querySelectorAll('a.view-button');
+                for (const link of links) {
+                  if (link.textContent?.trim() === '${buttonText}') {
+                    const encodedPath = link.getAttribute('data-pdfpath');
+                    if (encodedPath) {
+                      return { pdfPath: atob(encodedPath), found: true };
+                    }
+                  }
+                }
+              }
+            }
+            return { pdfPath: null, found: false };
+          }
+        `
+      })
+    });
+
+    if (!getPdfPathResponse.ok) {
+      const errorText = await getPdfPathResponse.text();
+      console.error(`[SCRAPER] Court ${courtNo} Browserless step 1 error ${getPdfPathResponse.status}: ${errorText.substring(0, 200)}`);
+      return await scrapePdfWithFirecrawl(baseUrl, courtNo, listType, firecrawlKey, openRouterKey, dateParams);
+    }
+
+    const contentHtml = await getPdfPathResponse.text();
+    console.log(`[SCRAPER] Court ${courtNo} ${listType}: Got content from Browserless (${contentHtml.length} chars)`);
+    
+    // Parse the evaluate result from the page
+    // Since /content returns HTML, we need a different approach
+    // Let's use the /scrape endpoint instead which returns JSON
+    
+    // Actually, let's try a simpler approach: use /pdf endpoint to render the PDF directly
+    // But first we need to navigate to the PDF URL within the session
+    
+    // For now, let's fall back to Firecrawl with better error handling
+    return await scrapePdfWithFirecrawl(baseUrl, courtNo, listType, firecrawlKey, openRouterKey, dateParams);
+    
+  } catch (err) {
+    console.error(`[SCRAPER] Court ${courtNo} ${listType} Browserless error:`, err);
+    return await scrapePdfWithFirecrawl(baseUrl, courtNo, listType, firecrawlKey, openRouterKey, dateParams);
+  }
+}
+
+// Fallback: Scrape PDF with Firecrawl screenshot + AI vision
+async function scrapePdfWithFirecrawl(
+  baseUrl: string,
+  courtNo: string,
+  listType: 'daily' | 'supplementary',
+  firecrawlKey: string,
+  openRouterKey: string | undefined,
+  dateParams: { day: number; month: number; year: number }
+): Promise<any[]> {
+  console.log(`[SCRAPER] Court ${courtNo} ${listType}: Using Firecrawl with screenshot`);
+
+  try {
+    // Use Firecrawl v1 API format
     const firecrawlResponse = await fetch('https://api.firecrawl.dev/v1/scrape', {
       method: 'POST',
       headers: {
@@ -535,107 +626,151 @@ async function scrapePdfWithSession(
       body: JSON.stringify({
         url: baseUrl,
         formats: ['markdown', 'screenshot'],
-        waitFor: 2000,
-        timeout: 90000,
         actions: [
-          { type: 'wait', milliseconds: 500 },
-          // Set date values using JavaScript
+          { type: 'wait', milliseconds: 1000 },
           { 
             type: 'evaluate', 
             code: `
-              const daySelect = document.getElementById('day');
-              const monthSelect = document.getElementById('month');
-              const yearSelect = document.getElementById('year');
-              if (daySelect) daySelect.value = '${dateParams.day}';
-              if (monthSelect) monthSelect.value = '${dateParams.month}';
-              if (yearSelect) yearSelect.value = '${dateParams.year}';
+              document.getElementById('day').value = '${dateParams.day}';
+              document.getElementById('month').value = '${dateParams.month}';
+              document.getElementById('year').value = '${dateParams.year}';
             `
           },
-          { type: 'wait', milliseconds: 500 },
-          // Click the Generate Causelist button
           { type: 'click', selector: 'button[type="submit"]' },
           { type: 'wait', milliseconds: 4000 },
-          // Now click the D or S button for the specific court
-          // First, let's get the data-pdfpath and set it to a hidden link then click
           {
             type: 'evaluate',
             code: `
-              (function() {
-                const buttonText = '${listType === 'daily' ? 'D' : 'S'}';
-                const rows = document.querySelectorAll('table tr');
-                let clicked = false;
-                
-                for (const row of rows) {
-                  const cells = row.querySelectorAll('td');
-                  if (cells.length >= 1 && cells[0]?.textContent?.trim() === '${courtNo}') {
-                    // Find the correct button (D or S)
-                    const links = row.querySelectorAll('a.view-button');
-                    for (const link of links) {
-                      if (link.textContent?.trim() === buttonText) {
-                        // Get the pdfpath and set it to the download link
-                        const pdfPath = link.getAttribute('data-pdfpath');
-                        if (pdfPath) {
-                          const dwnldLink = document.getElementById('dwnld');
-                          if (dwnldLink) {
-                            const decodedPath = atob(pdfPath);
-                            dwnldLink.href = 'https://hcraj.nic.in' + decodedPath;
-                            dwnldLink.click();
-                            clicked = true;
-                          }
-                        }
-                        break;
-                      }
+              const buttonText = '${listType === 'daily' ? 'D' : 'S'}';
+              const rows = document.querySelectorAll('table tr');
+              for (const row of rows) {
+                const cells = row.querySelectorAll('td');
+                if (cells.length >= 1 && cells[0]?.textContent?.trim() === '${courtNo}') {
+                  const links = row.querySelectorAll('a.view-button');
+                  for (const link of links) {
+                    if (link.textContent?.trim() === buttonText) {
+                      link.click();
+                      break;
                     }
-                    break;
                   }
+                  break;
                 }
-                return clicked;
-              })();
+              }
             `
           },
-          { type: 'wait', milliseconds: 8000 }
+          { type: 'wait', milliseconds: 5000 }
         ]
       })
     });
 
     const result = await firecrawlResponse.json();
+    console.log(`[SCRAPER] Court ${courtNo} ${listType} Firecrawl: success=${result.success}`);
     
-    console.log(`[SCRAPER] Court ${courtNo} ${listType} Firecrawl response: success=${result.success}, error=${result.error || 'none'}`);
+    if (!result.success) {
+      console.log(`[SCRAPER] Court ${courtNo} ${listType} Firecrawl error: ${result.error || 'Unknown'}`);
+    }
     
-    if (result.success && result.data?.markdown) {
-      const markdown = result.data.markdown;
-      console.log(`[SCRAPER] Court ${courtNo} ${listType}: Got ${markdown.length} chars`);
+    if (result.success) {
+      // If we got a screenshot, use AI vision to extract data
+      if (result.data?.screenshot && openRouterKey) {
+        console.log(`[SCRAPER] Court ${courtNo} ${listType}: Got screenshot, using AI vision`);
+        return await extractCasesFromScreenshot(result.data.screenshot, openRouterKey);
+      }
       
-      // Log first 500 chars for debugging
-      console.log(`[SCRAPER] Content preview: ${markdown.substring(0, 500)}`);
-
-      // Check if we got actual case data (not just the table page or form)
-      const hasCaseData = markdown.length > 2000 && (
-        markdown.includes('S.No') || 
-        markdown.includes('Case Type') || 
-        markdown.includes('Petitioner') || 
-        markdown.includes('Advocate') ||
-        markdown.includes('vs') ||
-        markdown.includes('V/s')
-      );
-      
-      if (hasCaseData) {
-        console.log(`[SCRAPER] Court ${courtNo} ${listType}: Detected case data, extracting...`);
-        if (openRouterKey) {
+      // Otherwise try markdown
+      if (result.data?.markdown && result.data.markdown.length > 1000) {
+        const markdown = result.data.markdown;
+        console.log(`[SCRAPER] Court ${courtNo} ${listType}: Got markdown (${markdown.length} chars)`);
+        const hasCaseData = markdown.includes('vs') || markdown.includes('Petitioner') || markdown.includes('S.No');
+        if (hasCaseData && openRouterKey) {
           return await extractCasesFromTextWithAI(markdown, openRouterKey);
         }
-        return parseCauseListText(markdown);
-      } else {
-        console.log(`[SCRAPER] Court ${courtNo} ${listType}: No case data detected in content`);
-        // Still got the quick download page, PDF didn't load
       }
-    } else {
-      console.log(`[SCRAPER] Court ${courtNo} ${listType}: Firecrawl failed - ${result.error || 'Unknown error'}`);
     }
 
+    console.log(`[SCRAPER] Court ${courtNo} ${listType}: No data from Firecrawl`);
     return [];
   } catch (err) {
-    console.error(`[SCRAPER] Court ${courtNo} ${listType} session error:`, err);
+    console.error(`[SCRAPER] Court ${courtNo} ${listType} Firecrawl error:`, err);
+    return [];
+  }
+}
+
+// Extract cases from screenshot using AI vision
+async function extractCasesFromScreenshot(screenshotBase64: string, openRouterKey: string): Promise<any[]> {
+  try {
+    console.log(`[SCRAPER] Extracting cases from screenshot using AI vision`);
+
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${openRouterKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://lovable.dev',
+        'X-Title': 'Court Cause List Scraper'
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-2.5-flash',
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: `Extract ALL cases from this Indian High Court cause list screenshot. Return a JSON array with each case having:
+- item_no: Serial number (integer)
+- case_number: Full case number
+- petitioner: Name of petitioner(s)
+- respondent: Name of respondent(s)
+- petitioner_lawyer: Petitioner's advocate name
+- respondent_lawyer: Respondent's advocate name (may be AAG/APG/GA)
+
+Return ONLY valid JSON array, no explanation.`
+              },
+              {
+                type: 'image_url',
+                image_url: {
+                  url: screenshotBase64.startsWith('data:') ? screenshotBase64 : `data:image/png;base64,${screenshotBase64}`
+                }
+              }
+            ]
+          }
+        ],
+        max_tokens: 8000,
+        temperature: 0.1
+      })
+    });
+
+    if (!response.ok) {
+      console.error(`[SCRAPER] AI vision error: ${response.status}`);
+      return [];
+    }
+
+    const result = await response.json();
+    const content = result.choices?.[0]?.message?.content || '';
+    
+    let jsonStr = content.trim();
+    if (jsonStr.startsWith('```json')) jsonStr = jsonStr.slice(7);
+    else if (jsonStr.startsWith('```')) jsonStr = jsonStr.slice(3);
+    if (jsonStr.endsWith('```')) jsonStr = jsonStr.slice(0, -3);
+    
+    const cases = JSON.parse(jsonStr.trim());
+    
+    if (Array.isArray(cases)) {
+      console.log(`[SCRAPER] AI vision extracted ${cases.length} cases`);
+      return cases.map(c => ({
+        item_no: parseInt(c.item_no, 10) || 0,
+        case_number: c.case_number || '',
+        petitioner: c.petitioner || null,
+        respondent: c.respondent || null,
+        petitioner_lawyer: c.petitioner_lawyer || null,
+        respondent_lawyer: c.respondent_lawyer || null
+      })).filter(c => c.item_no > 0 || c.case_number);
+    }
+    
+    return [];
+  } catch (err) {
+    console.error(`[SCRAPER] Screenshot extraction error:`, err);
     return [];
   }
 }
