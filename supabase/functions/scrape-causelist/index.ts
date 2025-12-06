@@ -604,7 +604,7 @@ async function scrapePdfWithSession(
   }
 }
 
-// Fallback: Scrape PDF with Firecrawl screenshot + AI vision
+// Fallback: Scrape using simple Firecrawl (no complex actions)
 async function scrapePdfWithFirecrawl(
   baseUrl: string,
   courtNo: string,
@@ -613,87 +613,13 @@ async function scrapePdfWithFirecrawl(
   openRouterKey: string | undefined,
   dateParams: { day: number; month: number; year: number }
 ): Promise<any[]> {
-  console.log(`[SCRAPER] Court ${courtNo} ${listType}: Using Firecrawl with screenshot`);
-
-  try {
-    // Use Firecrawl v1 API format
-    const firecrawlResponse = await fetch('https://api.firecrawl.dev/v1/scrape', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${firecrawlKey}`
-      },
-      body: JSON.stringify({
-        url: baseUrl,
-        formats: ['markdown', 'screenshot'],
-        actions: [
-          { type: 'wait', milliseconds: 1000 },
-          { 
-            type: 'evaluate', 
-            code: `
-              document.getElementById('day').value = '${dateParams.day}';
-              document.getElementById('month').value = '${dateParams.month}';
-              document.getElementById('year').value = '${dateParams.year}';
-            `
-          },
-          { type: 'click', selector: 'button[type="submit"]' },
-          { type: 'wait', milliseconds: 4000 },
-          {
-            type: 'evaluate',
-            code: `
-              const buttonText = '${listType === 'daily' ? 'D' : 'S'}';
-              const rows = document.querySelectorAll('table tr');
-              for (const row of rows) {
-                const cells = row.querySelectorAll('td');
-                if (cells.length >= 1 && cells[0]?.textContent?.trim() === '${courtNo}') {
-                  const links = row.querySelectorAll('a.view-button');
-                  for (const link of links) {
-                    if (link.textContent?.trim() === buttonText) {
-                      link.click();
-                      break;
-                    }
-                  }
-                  break;
-                }
-              }
-            `
-          },
-          { type: 'wait', milliseconds: 5000 }
-        ]
-      })
-    });
-
-    const result = await firecrawlResponse.json();
-    console.log(`[SCRAPER] Court ${courtNo} ${listType} Firecrawl: success=${result.success}`);
-    
-    if (!result.success) {
-      console.log(`[SCRAPER] Court ${courtNo} ${listType} Firecrawl error: ${result.error || 'Unknown'}`);
-    }
-    
-    if (result.success) {
-      // If we got a screenshot, use AI vision to extract data
-      if (result.data?.screenshot && openRouterKey) {
-        console.log(`[SCRAPER] Court ${courtNo} ${listType}: Got screenshot, using AI vision`);
-        return await extractCasesFromScreenshot(result.data.screenshot, openRouterKey);
-      }
-      
-      // Otherwise try markdown
-      if (result.data?.markdown && result.data.markdown.length > 1000) {
-        const markdown = result.data.markdown;
-        console.log(`[SCRAPER] Court ${courtNo} ${listType}: Got markdown (${markdown.length} chars)`);
-        const hasCaseData = markdown.includes('vs') || markdown.includes('Petitioner') || markdown.includes('S.No');
-        if (hasCaseData && openRouterKey) {
-          return await extractCasesFromTextWithAI(markdown, openRouterKey);
-        }
-      }
-    }
-
-    console.log(`[SCRAPER] Court ${courtNo} ${listType}: No data from Firecrawl`);
-    return [];
-  } catch (err) {
-    console.error(`[SCRAPER] Court ${courtNo} ${listType} Firecrawl error:`, err);
-    return [];
-  }
+  console.log(`[SCRAPER] Court ${courtNo} ${listType}: Firecrawl fallback (limited by JS navigation)`);
+  
+  // The HC website requires JavaScript-based navigation that Firecrawl can't fully handle
+  // The D/S buttons use javascript:void(0) which triggers page JS
+  // Return empty - court metadata is already saved from the initial scrape
+  
+  return [];
 }
 
 // Extract cases from screenshot using AI vision
