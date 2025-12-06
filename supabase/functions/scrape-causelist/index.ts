@@ -60,65 +60,121 @@ serve(async (req) => {
       });
     }
 
-    // Target the Quick Download page
-    const url = bench === 'JODHPUR'
+    // Target the Quick Download page - make direct POST request to get the table
+    const baseUrl = bench === 'JODHPUR'
       ? 'https://hcraj.nic.in/quick-causelist-jdp/'
       : 'https://hcraj.nic.in/quick-causelist-jp/';
 
-    console.log(`[SCRAPER] Target URL: ${url}`);
+    console.log(`[SCRAPER] Target URL: ${baseUrl}`);
 
-    // Call Firecrawl with waitFor and LLM extraction
-    const firecrawlResponse = await fetch('https://api.firecrawl.dev/v1/scrape', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${firecrawlKey}`
-      },
-      body: JSON.stringify({
-        url: url,
-        formats: ['markdown', 'html'],
-        waitFor: 5000, // Wait for JS to render the table
-        timeout: 30000,
-        actions: [
-          // Select today's date and submit
-          { type: 'wait', milliseconds: 1000 },
-          { type: 'click', selector: 'button[type="submit"]' },
-          { type: 'wait', milliseconds: 3000 }
-        ]
-      })
-    });
+    // Parse the target date
+    const [year, month, day] = targetDate.split('-').map(Number);
+    console.log(`[SCRAPER] Parsed date: day=${day}, month=${month}, year=${year}`);
 
-    const firecrawlResult = await firecrawlResponse.json() as FirecrawlResponse;
+    // Try direct POST request to the form first (the form POSTs to itself)
+    let htmlContent = '';
+    let markdownContent = '';
+    
+    try {
+      // Make a direct POST request with form data
+      const formData = new URLSearchParams();
+      formData.append('day', String(day));
+      formData.append('month', String(month));
+      formData.append('year', String(year));
 
-    console.log(`[SCRAPER] Firecrawl response success: ${firecrawlResult.success}`);
-
-    if (!firecrawlResult.success) {
-      console.error('[SCRAPER] Firecrawl error:', firecrawlResult.error);
+      console.log(`[SCRAPER] Making direct POST request with form data`);
       
-      await logScraperRun(supabase, bench, 'failed', 0, firecrawlResult.error || 'Firecrawl request failed', 'DAILY', null);
+      const directResponse = await fetch(baseUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.5',
+          'Origin': 'https://hcraj.nic.in',
+          'Referer': baseUrl
+        },
+        body: formData.toString()
+      });
+
+      if (directResponse.ok) {
+        htmlContent = await directResponse.text();
+        console.log(`[SCRAPER] Direct POST successful, HTML length: ${htmlContent.length}`);
+      } else {
+        console.log(`[SCRAPER] Direct POST failed with status: ${directResponse.status}`);
+      }
+    } catch (err) {
+      console.log(`[SCRAPER] Direct POST error: ${err}`);
+    }
+
+    // If direct POST didn't get table data, try Firecrawl with JS execution
+    if (htmlContent.length < 3000 || !htmlContent.includes('<table')) {
+      console.log(`[SCRAPER] Direct POST didn't return table, trying Firecrawl with JS execution`);
+      
+      const firecrawlResponse = await fetch('https://api.firecrawl.dev/v1/scrape', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${firecrawlKey}`
+        },
+        body: JSON.stringify({
+          url: baseUrl,
+          formats: ['markdown', 'html'],
+          waitFor: 3000,
+          timeout: 60000,
+          actions: [
+            { type: 'wait', milliseconds: 1000 },
+            // Use JavaScript to set form values and submit
+            { 
+              type: 'evaluate', 
+              code: `
+                document.getElementById('day').value = '${day}';
+                document.getElementById('month').value = '${month}';
+                document.getElementById('year').value = '${year}';
+                document.querySelector('button[type="submit"]').click();
+              `
+            },
+            { type: 'wait', milliseconds: 5000 }
+          ]
+        })
+      });
+
+      const firecrawlResult = await firecrawlResponse.json() as FirecrawlResponse;
+      console.log(`[SCRAPER] Firecrawl response success: ${firecrawlResult.success}`);
+
+      if (firecrawlResult.success) {
+        htmlContent = firecrawlResult.data?.html || '';
+        markdownContent = firecrawlResult.data?.markdown || '';
+      } else {
+        console.error('[SCRAPER] Firecrawl error:', firecrawlResult.error);
+      }
+    }
+
+
+    // Check if we got table data
+    if (htmlContent.length < 2000 || !htmlContent.includes('<table')) {
+      console.log(`[SCRAPER] No table data found in response`);
+      await logScraperRun(supabase, bench, 'warning', 0, 'Failed to retrieve causelist table', 'DAILY', null);
       
       return new Response(JSON.stringify({
         success: false,
-        error: firecrawlResult.error || 'Firecrawl request failed'
+        error: 'Failed to retrieve causelist table - page may require browser interaction'
       }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
 
-    const htmlContent = firecrawlResult.data?.html || '';
-    const markdownContent = firecrawlResult.data?.markdown || '';
-
     console.log(`[SCRAPER] HTML length: ${htmlContent.length}, Markdown length: ${markdownContent.length}`);
 
     // Parse the court table from HTML
-    const courts = parseCourtTable(htmlContent, url);
+    const courts = parseCourtTable(htmlContent, baseUrl);
     console.log(`[SCRAPER] Found ${courts.length} courts from HTML parsing`);
 
     // If HTML parsing found nothing, try parsing markdown
     if (courts.length === 0 && markdownContent.length > 500) {
       console.log('[SCRAPER] Trying markdown parsing...');
-      const markdownCourts = parseCourtTableFromMarkdown(markdownContent, url);
+      const markdownCourts = parseCourtTableFromMarkdown(markdownContent, baseUrl);
       courts.push(...markdownCourts);
       console.log(`[SCRAPER] Found ${markdownCourts.length} courts from markdown parsing`);
     }
