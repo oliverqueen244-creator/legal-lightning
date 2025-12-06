@@ -2588,6 +2588,512 @@ if (req.method === 'OPTIONS') {
             </CardContent>
           </Card>
 
+          {/* Scraper Troubleshooting & Error Documentation */}
+          <Card className="mb-8">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-primary" aria-hidden="true" />
+                Causelist Scraper - Error Documentation & Attempted Approaches
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-8">
+              <p className="text-muted-foreground">
+                This section documents all the approaches attempted to scrape court causelists 
+                from the Rajasthan High Court website, including the errors encountered and 
+                the technical challenges that prevented successful PDF extraction.
+              </p>
+
+              {/* Current Status Summary */}
+              <div className="p-4 rounded-lg bg-primary/10 border border-primary/20">
+                <h4 className="font-semibold text-foreground mb-3">Current Status Summary</h4>
+                <div className="grid gap-2 text-sm">
+                  <div className="flex items-center gap-2">
+                    <span className="w-3 h-3 rounded-full bg-green-500"></span>
+                    <span className="text-foreground">Working:</span>
+                    <span className="text-muted-foreground">Court metadata & judge names extraction (20 courts)</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-3 h-3 rounded-full bg-red-500"></span>
+                    <span className="text-foreground">Blocked:</span>
+                    <span className="text-muted-foreground">PDF case data extraction (requires session-based browser automation)</span>
+                  </div>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Approach 1: Direct PDF URL Fetch */}
+              <div>
+                <h3 className="font-semibold text-foreground mb-3 flex items-center gap-2">
+                  <span className="px-2 py-1 rounded bg-red-500/20 text-red-400 text-xs">FAILED</span>
+                  Approach 1: Direct PDF URL Fetch
+                </h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Attempted to construct and fetch PDF URLs directly from the server.
+                </p>
+                <div className="p-4 rounded bg-muted/30 border border-border font-mono text-xs overflow-x-auto">
+                  <pre className="text-muted-foreground whitespace-pre">
+{`┌──────────────────────────────────────────────────────────────────────────┐
+│                    APPROACH 1: DIRECT PDF URL FETCH                       │
+└──────────────────────────────────────────────────────────────────────────┘
+
+    ┌─────────────┐
+    │  Edge Func  │
+    └──────┬──────┘
+           │
+           ▼
+    ┌─────────────────────────────────────────────────────────────────────┐
+    │  Constructed URL Pattern:                                           │
+    │  https://hcraj.nic.in/hcraj/daily-causelist/jaipur/JAIPUR_1_D.pdf   │
+    │  https://hcraj.nic.in/hcraj/Causelist_Display.php?court_id=1&...    │
+    └──────────────────────────────┬──────────────────────────────────────┘
+                                   │
+                                   ▼
+    ┌─────────────────────────────────────────────────────────────────────┐
+    │  HTTP Request (fetch)                                               │
+    │  Headers: User-Agent, Referer, Accept                               │
+    └──────────────────────────────┬──────────────────────────────────────┘
+                                   │
+                                   ▼
+                    ┌──────────────────────────────┐
+                    │     ❌ ERROR RESPONSE        │
+                    ├──────────────────────────────┤
+                    │  Status: 200 (misleading)    │
+                    │  Content: HTML "Access       │
+                    │  Denied" page                │
+                    │                              │
+                    │  Reason: Server requires     │
+                    │  valid session cookie from   │
+                    │  prior page navigation       │
+                    └──────────────────────────────┘
+
+ERROR: "Access Denied" - Server blocks direct URL access without session`}
+                  </pre>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Approach 2: Base64 Path Decoding */}
+              <div>
+                <h3 className="font-semibold text-foreground mb-3 flex items-center gap-2">
+                  <span className="px-2 py-1 rounded bg-red-500/20 text-red-400 text-xs">FAILED</span>
+                  Approach 2: Base64 data-pdfpath Decoding
+                </h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Decoded the base64-encoded PDF paths from button data attributes.
+                </p>
+                <div className="p-4 rounded bg-muted/30 border border-border font-mono text-xs overflow-x-auto">
+                  <pre className="text-muted-foreground whitespace-pre">
+{`┌──────────────────────────────────────────────────────────────────────────┐
+│                 APPROACH 2: BASE64 PATH DECODING                          │
+└──────────────────────────────────────────────────────────────────────────┘
+
+    ┌─────────────────────────────────────────────────────────────────────┐
+    │  Step 1: Scrape Quick Download Page HTML                            │
+    └──────────────────────────────┬──────────────────────────────────────┘
+                                   │
+                                   ▼
+    ┌─────────────────────────────────────────────────────────────────────┐
+    │  Step 2: Extract Button Attributes                                  │
+    │                                                                     │
+    │  <a class="view-button" href="javascript:void(0)"                   │
+    │     data-pdfpath="base64_encoded_path_here">D</a>                   │
+    │                                                                     │
+    │  Found: data-pdfpath="L2NhdXNlbGlzdC9qYWlwdXIvMjAyNS8xMi8wNi8x..."  │
+    └──────────────────────────────┬──────────────────────────────────────┘
+                                   │
+                                   ▼
+    ┌─────────────────────────────────────────────────────────────────────┐
+    │  Step 3: Base64 Decode                                              │
+    │                                                                     │
+    │  atob("L2NhdXNlbGlzdC9qYWlwdXIvMjAyNS8xMi8wNi8xX0QucGRm")          │
+    │  = "/causelist/jaipur/2025/12/06/1_D.pdf"                          │
+    └──────────────────────────────┬──────────────────────────────────────┘
+                                   │
+                                   ▼
+    ┌─────────────────────────────────────────────────────────────────────┐
+    │  Step 4: Construct Full URL & Fetch                                 │
+    │  URL: https://hcraj.nic.in/causelist/jaipur/2025/12/06/1_D.pdf     │
+    └──────────────────────────────┬──────────────────────────────────────┘
+                                   │
+                                   ▼
+                    ┌──────────────────────────────┐
+                    │     ❌ ERROR RESPONSE        │
+                    ├──────────────────────────────┤
+                    │  Same "Access Denied"        │
+                    │                              │
+                    │  The decoded path is valid   │
+                    │  but server still requires   │
+                    │  session authentication      │
+                    └──────────────────────────────┘
+
+ERROR: Session validation blocks even decoded direct paths`}
+                  </pre>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Approach 3: Firecrawl with Actions */}
+              <div>
+                <h3 className="font-semibold text-foreground mb-3 flex items-center gap-2">
+                  <span className="px-2 py-1 rounded bg-red-500/20 text-red-400 text-xs">FAILED</span>
+                  Approach 3: Firecrawl with Browser Actions
+                </h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Used Firecrawl's browser actions to simulate user interactions.
+                </p>
+                <div className="p-4 rounded bg-muted/30 border border-border font-mono text-xs overflow-x-auto">
+                  <pre className="text-muted-foreground whitespace-pre">
+{`┌──────────────────────────────────────────────────────────────────────────┐
+│               APPROACH 3: FIRECRAWL WITH ACTIONS                          │
+└──────────────────────────────────────────────────────────────────────────┘
+
+    ┌─────────────────────────────────────────────────────────────────────┐
+    │  Firecrawl v1 API Request                                           │
+    │                                                                     │
+    │  POST https://api.firecrawl.dev/v1/scrape                          │
+    │  {                                                                  │
+    │    url: "https://hcraj.nic.in/quick-causelist-jp",                 │
+    │    formats: ["markdown", "screenshot"],                             │
+    │    actions: [                                                       │
+    │      { type: "wait", milliseconds: 1000 },                         │
+    │      { type: "select", selector: "#day", value: "6" },             │
+    │      { type: "select", selector: "#month", value: "12" },          │
+    │      { type: "click", selector: "button[type=submit]" },           │
+    │      { type: "wait", milliseconds: 4000 },                         │
+    │      { type: "click", selector: ".view-button" }                   │
+    │    ]                                                                │
+    │  }                                                                  │
+    └──────────────────────────────┬──────────────────────────────────────┘
+                                   │
+                    ┌──────────────┴──────────────┐
+                    │                             │
+                    ▼                             ▼
+    ┌─────────────────────────┐    ┌─────────────────────────┐
+    │  ❌ ERROR 1             │    │  ❌ ERROR 2             │
+    ├─────────────────────────┤    ├─────────────────────────┤
+    │  "Unrecognized key      │    │  "Element not found"    │
+    │   in body"              │    │                         │
+    │                         │    │  Actions like "select"  │
+    │  The "evaluate" action  │    │  and "evaluate" are not │
+    │  is not supported in    │    │  valid Firecrawl v1     │
+    │  Firecrawl v1 API       │    │  action types           │
+    └─────────────────────────┘    └─────────────────────────┘
+                                   
+                                   │
+                                   ▼
+    ┌─────────────────────────────────────────────────────────────────────┐
+    │  CORE LIMITATION:                                                   │
+    │                                                                     │
+    │  The D/S buttons use: href="javascript:void(0)"                    │
+    │  They trigger client-side JS that:                                  │
+    │  1. Reads data-pdfpath attribute                                   │
+    │  2. Decodes Base64                                                  │
+    │  3. Uses XMLHttpRequest with session cookies                        │
+    │  4. Loads PDF in iframe/new tab                                     │
+    │                                                                     │
+    │  Firecrawl actions cannot replicate this JS execution              │
+    └─────────────────────────────────────────────────────────────────────┘
+
+ERROR: Firecrawl actions limited, cannot execute custom JS`}
+                  </pre>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Approach 4: Firecrawl with Screenshot + AI Vision */}
+              <div>
+                <h3 className="font-semibold text-foreground mb-3 flex items-center gap-2">
+                  <span className="px-2 py-1 rounded bg-yellow-500/20 text-yellow-400 text-xs">PARTIAL</span>
+                  Approach 4: Firecrawl Screenshot + Gemini Vision
+                </h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Attempted to take screenshots and use AI vision to extract case data.
+                </p>
+                <div className="p-4 rounded bg-muted/30 border border-border font-mono text-xs overflow-x-auto">
+                  <pre className="text-muted-foreground whitespace-pre">
+{`┌──────────────────────────────────────────────────────────────────────────┐
+│            APPROACH 4: SCREENSHOT + AI VISION EXTRACTION                  │
+└──────────────────────────────────────────────────────────────────────────┘
+
+    ┌─────────────────────────────────────────────────────────────────────┐
+    │  Step 1: Firecrawl scrape with formats: ["screenshot"]              │
+    └──────────────────────────────┬──────────────────────────────────────┘
+                                   │
+                                   ▼
+    ┌─────────────────────────────────────────────────────────────────────┐
+    │  Step 2: Get base64 screenshot of page                              │
+    │  ✅ Successfully captures Quick Download landing page               │
+    └──────────────────────────────┬──────────────────────────────────────┘
+                                   │
+                                   ▼
+    ┌─────────────────────────────────────────────────────────────────────┐
+    │  Step 3: Send to Gemini Vision API                                  │
+    │                                                                     │
+    │  Prompt: "Extract all case data from this causelist image..."      │
+    │  Image: base64 screenshot                                          │
+    └──────────────────────────────┬──────────────────────────────────────┘
+                                   │
+                    ┌──────────────┴──────────────┐
+                    │                             │
+                    ▼                             ▼
+    ┌─────────────────────────┐    ┌─────────────────────────┐
+    │  ⚠️ LIMITATION          │    │  ✅ WORKS FOR          │
+    ├─────────────────────────┤    ├─────────────────────────┤
+    │  Screenshot shows       │    │  Court metadata table   │
+    │  landing page, NOT      │    │  • Court numbers        │
+    │  the PDF content        │    │  • Judge names          │
+    │                         │    │  • D/S button presence  │
+    │  Cannot navigate to     │    │                         │
+    │  click buttons via      │    │  Successfully extracted │
+    │  screenshot alone       │    │  20 courts with judges  │
+    └─────────────────────────┘    └─────────────────────────┘
+
+PARTIAL: Extracts court metadata, but NOT PDF case data`}
+                  </pre>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Approach 5: Browserless.io */}
+              <div>
+                <h3 className="font-semibold text-foreground mb-3 flex items-center gap-2">
+                  <span className="px-2 py-1 rounded bg-red-500/20 text-red-400 text-xs">FAILED</span>
+                  Approach 5: Browserless.io Headless Chrome
+                </h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Attempted to use Browserless for full Puppeteer-like browser control.
+                </p>
+                <div className="p-4 rounded bg-muted/30 border border-border font-mono text-xs overflow-x-auto">
+                  <pre className="text-muted-foreground whitespace-pre">
+{`┌──────────────────────────────────────────────────────────────────────────┐
+│              APPROACH 5: BROWSERLESS.IO HEADLESS CHROME                   │
+└──────────────────────────────────────────────────────────────────────────┘
+
+    ┌─────────────────────────────────────────────────────────────────────┐
+    │  Browserless /scrape Endpoint                                       │
+    │                                                                     │
+    │  POST https://chrome.browserless.io/scrape                         │
+    │  Authorization: Basic <BROWSERLESS_API_KEY>                        │
+    │  {                                                                  │
+    │    url: "https://hcraj.nic.in/quick-causelist-jp",                 │
+    │    gotoOptions: { waitUntil: "networkidle0" },                     │
+    │    elements: [{ selector: ".view-button", ... }],                  │
+    │    evaluate: "async () => { /* click buttons, get PDF */ }"        │
+    │  }                                                                  │
+    └──────────────────────────────┬──────────────────────────────────────┘
+                                   │
+                    ┌──────────────┴──────────────┐
+                    │                             │
+                    ▼                             ▼
+    ┌─────────────────────────┐    ┌─────────────────────────┐
+    │  ❌ ERROR 1             │    │  ❌ ERROR 2             │
+    ├─────────────────────────┤    ├─────────────────────────┤
+    │  "require is not        │    │  HTTP 429               │
+    │   defined"              │    │  "Too Many Requests"    │
+    │                         │    │                         │
+    │  Browserless v2 API     │    │  Rate limiting on       │
+    │  format differs from    │    │  free tier when         │
+    │  older Puppeteer        │    │  processing multiple    │
+    │  connect style          │    │  courts sequentially    │
+    └─────────────────────────┘    └─────────────────────────┘
+
+    ┌─────────────────────────────────────────────────────────────────────┐
+    │  ADDITIONAL CHALLENGES:                                             │
+    │                                                                     │
+    │  1. Browserless free tier has strict rate limits                   │
+    │  2. API format changed between v1 and v2                           │
+    │  3. Edge function environment doesn't support require()            │
+    │  4. Would need proper Puppeteer script format                      │
+    └─────────────────────────────────────────────────────────────────────┘
+
+ERROR: API format issues and rate limiting`}
+                  </pre>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Root Cause Analysis */}
+              <div>
+                <h3 className="font-semibold text-foreground mb-3 flex items-center gap-2">
+                  <Lock className="h-4 w-4 text-red-400" />
+                  Root Cause Analysis
+                </h3>
+                <div className="p-4 rounded bg-muted/30 border border-border font-mono text-xs overflow-x-auto">
+                  <pre className="text-muted-foreground whitespace-pre">
+{`┌──────────────────────────────────────────────────────────────────────────┐
+│                      ROOT CAUSE: WEBSITE ARCHITECTURE                     │
+└──────────────────────────────────────────────────────────────────────────┘
+
+    WEBSITE SECURITY LAYERS:
+    ═══════════════════════
+
+    ┌─────────────────────────────────────────────────────────────────────┐
+    │  LAYER 1: Session-Based Access Control                              │
+    │                                                                     │
+    │  • PHP session required for all PDF access                          │
+    │  • Session created on initial page load                            │
+    │  • Session ID stored in cookies                                     │
+    │  • All subsequent requests validated against session                │
+    └─────────────────────────────────────────────────────────────────────┘
+                                   │
+                                   ▼
+    ┌─────────────────────────────────────────────────────────────────────┐
+    │  LAYER 2: JavaScript-Only Navigation                                │
+    │                                                                     │
+    │  Button HTML: <a href="javascript:void(0)"                         │
+    │                  data-pdfpath="base64_encoded_path"                │
+    │                  onclick="loadPdf(this)">D</a>                     │
+    │                                                                     │
+    │  The loadPdf() function:                                            │
+    │  1. Decodes base64 path                                            │
+    │  2. Makes XHR request WITH session cookies                         │
+    │  3. Receives PDF blob                                              │
+    │  4. Opens in viewer/iframe                                         │
+    └─────────────────────────────────────────────────────────────────────┘
+                                   │
+                                   ▼
+    ┌─────────────────────────────────────────────────────────────────────┐
+    │  LAYER 3: Server-Side Validation                                    │
+    │                                                                     │
+    │  • Checks Referer header                                            │
+    │  • Validates session cookie                                         │
+    │  • Verifies request came from their domain                         │
+    │  • Returns "Access Denied" HTML for invalid requests               │
+    └─────────────────────────────────────────────────────────────────────┘
+
+    WHY SCRAPING FAILS:
+    ═══════════════════
+
+    ┌────────────────────────┐
+    │ Direct URL Fetch       │────► No session cookie ────► Access Denied
+    └────────────────────────┘
+
+    ┌────────────────────────┐
+    │ Firecrawl Actions      │────► Cannot execute custom JS ────► No PDF
+    └────────────────────────┘
+
+    ┌────────────────────────┐
+    │ API-based scraping     │────► No browser context ────► No cookies
+    └────────────────────────┘
+
+    WHAT WOULD WORK:
+    ════════════════
+
+    ┌────────────────────────┐     ┌────────────────────────┐
+    │ Full Puppeteer         │────►│ Maintain browser       │────► ✅
+    │ (self-hosted)          │     │ session + cookies      │
+    └────────────────────────┘     └────────────────────────┘
+
+    ┌────────────────────────┐     ┌────────────────────────┐
+    │ Manual PDF Upload      │────►│ User downloads PDF,    │────► ✅
+    │ Feature                │     │ uploads to system      │
+    └────────────────────────┘     └────────────────────────┘`}
+                  </pre>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* What's Working */}
+              <div>
+                <h3 className="font-semibold text-foreground mb-3 flex items-center gap-2">
+                  <span className="px-2 py-1 rounded bg-green-500/20 text-green-400 text-xs">SUCCESS</span>
+                  What's Currently Working
+                </h3>
+                <div className="p-4 rounded bg-muted/30 border border-border font-mono text-xs overflow-x-auto">
+                  <pre className="text-muted-foreground whitespace-pre">
+{`┌──────────────────────────────────────────────────────────────────────────┐
+│                        SUCCESSFUL FUNCTIONALITY                           │
+└──────────────────────────────────────────────────────────────────────────┘
+
+    ┌─────────────────────────────────────────────────────────────────────┐
+    │  ✅ COURT METADATA EXTRACTION                                       │
+    │                                                                     │
+    │  Source: Quick Download Page HTML Table                             │
+    │  Method: Firecrawl markdown scrape + regex parsing                 │
+    │                                                                     │
+    │  Extracted Data:                                                    │
+    │  ┌───────────┬─────────────────────────────────────────────────┐   │
+    │  │ Court No  │ Judge Names                                      │   │
+    │  ├───────────┼─────────────────────────────────────────────────┤   │
+    │  │ 1         │ HON'BLE MR. JUSTICE MANINDRA MOHAN SHRIVASTAVA  │   │
+    │  │ 2         │ HON'BLE MR. JUSTICE PUSHPENDRA SINGH BHATI      │   │
+    │  │ 3         │ HON'BLE MR. JUSTICE INDERJEET SINGH,            │   │
+    │  │           │ MR. JUSTICE RAVI CHIRANIA                        │   │
+    │  │ 4         │ HON'BLE MR. JUSTICE ARUN MONGA,                  │   │
+    │  │           │ MR. JUSTICE SUDESH BANSAL                        │   │
+    │  │ ...       │ (20 courts total)                                │   │
+    │  └───────────┴─────────────────────────────────────────────────┘   │
+    │                                                                     │
+    │  Storage: court_metadata table in Supabase                         │
+    │  Refresh: Every 30 minutes via useScrapeOnLogin hook               │
+    └─────────────────────────────────────────────────────────────────────┘
+
+    ┌─────────────────────────────────────────────────────────────────────┐
+    │  ✅ CAUSELIST TYPE DETECTION                                        │
+    │                                                                     │
+    │  Detects which courts have:                                         │
+    │  • [D] Daily Cause List - Regular matters                          │
+    │  • [S] Supplementary List - Urgent/New matters                     │
+    │                                                                     │
+    │  Example: Court 4 has both D and S, Court 6 has only D             │
+    └─────────────────────────────────────────────────────────────────────┘
+
+    ┌─────────────────────────────────────────────────────────────────────┐
+    │  ✅ AUTO-SCRAPE ON LOGIN                                            │
+    │                                                                     │
+    │  Trigger: User login event                                          │
+    │  Interval: Every 30 minutes while logged in                        │
+    │  Benches: JAIPUR and JODHPUR                                       │
+    │  Hook: useScrapeOnLogin.ts                                         │
+    └─────────────────────────────────────────────────────────────────────┘`}
+                  </pre>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Recommended Solutions */}
+              <div>
+                <h3 className="font-semibold text-foreground mb-3">Recommended Solutions</h3>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="p-4 rounded-lg bg-card border border-border">
+                    <h4 className="font-semibold text-foreground mb-2 flex items-center gap-2">
+                      <Upload className="h-4 w-4 text-primary" />
+                      Option 1: Manual PDF Upload
+                    </h4>
+                    <p className="text-sm text-muted-foreground">
+                      Build a feature where users can manually download PDFs from the HC website 
+                      and upload them to Vakalat-OS. AI vision (Gemini) extracts case data.
+                    </p>
+                    <div className="mt-2 text-xs text-green-400">
+                      ✅ Feasible with current tech stack
+                    </div>
+                  </div>
+                  <div className="p-4 rounded-lg bg-card border border-border">
+                    <h4 className="font-semibold text-foreground mb-2 flex items-center gap-2">
+                      <Server className="h-4 w-4 text-primary" />
+                      Option 2: Self-Hosted Puppeteer
+                    </h4>
+                    <p className="text-sm text-muted-foreground">
+                      Deploy a self-hosted Puppeteer instance that can maintain browser sessions 
+                      and execute JavaScript to navigate and download PDFs.
+                    </p>
+                    <div className="mt-2 text-xs text-yellow-400">
+                      ⚠️ Requires additional infrastructure
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Footer */}
           <div className="text-center py-8 text-muted-foreground text-sm">
             <p>Vakalat-OS v1.0 | Rajasthan High Court Dashboard</p>
