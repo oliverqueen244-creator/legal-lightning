@@ -8,23 +8,26 @@ const corsHeaders = {
 
 interface ScrapeRequest {
   bench: 'JAIPUR' | 'JODHPUR';
-  date?: string; // Format: YYYY-MM-DD
+  date?: string;
 }
 
-interface CourtInfo {
+interface CourtData {
   court_no: string;
-  sitting_judges: string;
+  judge_names: string;
   daily_link: string | null;
   supplementary_link: string | null;
 }
 
-interface CaseItem {
-  item_no: number;
-  case_number: string;
-  petitioner: string | null;
-  respondent: string | null;
-  petitioner_lawyer: string | null;
-  respondent_lawyer: string | null;
+interface FirecrawlResponse {
+  success: boolean;
+  data?: {
+    llm_extraction?: {
+      courts?: CourtData[];
+    };
+    markdown?: string;
+    html?: string;
+  };
+  error?: string;
 }
 
 serve(async (req) => {
@@ -33,119 +36,104 @@ serve(async (req) => {
   }
 
   const startTime = Date.now();
-  
+
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const browserlessKey = Deno.env.get('BROWSERLESS_API_KEY');
-    
+    const firecrawlKey = Deno.env.get('FIRECRAWL_API_KEY');
+
     const supabase = createClient(supabaseUrl, supabaseKey);
-    
+
     const { bench, date } = await req.json() as ScrapeRequest;
     const targetDate = date || new Date().toISOString().split('T')[0];
-    
+
     console.log(`[SCRAPER] Starting scrape for ${bench} bench, date: ${targetDate}`);
-    
-    // Determine target URL based on bench
-    const baseUrl = bench === 'JODHPUR' 
-      ? 'https://hcraj.nic.in/quick-causelist-jdp/'
-      : 'https://hcraj.nic.in/quick-causelist-jp/';
-    
-    console.log(`[SCRAPER] Target URL: ${baseUrl}`);
-    
-    if (!browserlessKey) {
-      console.error('[SCRAPER] No BROWSERLESS_API_KEY configured');
+
+    if (!firecrawlKey) {
+      console.error('[SCRAPER] No FIRECRAWL_API_KEY configured');
       return new Response(JSON.stringify({
         success: false,
-        error: 'BROWSERLESS_API_KEY not configured'
-      }), { 
+        error: 'FIRECRAWL_API_KEY not configured'
+      }), {
         status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
-    
-    // Parse date for form submission
-    const [year, month, day] = targetDate.split('-');
-    
-    // Use BrowserQL to interact with the form
-    const bqlQuery = `
-      mutation ScrapeQuickCauselist {
-        goto(url: "${baseUrl}", waitUntil: networkIdle) {
-          status
-          time
-        }
-        
-        selectDay: select(selector: "#day", value: "${parseInt(day)}") {
-          value
-        }
-        
-        selectMonth: select(selector: "#month", value: "${parseInt(month)}") {
-          value
-        }
-        
-        selectYear: select(selector: "#year", value: "${year}") {
-          value
-        }
-        
-        waitAfterSelect: wait(time: 500) {
-          time
-        }
-        
-        submitForm: click(selector: "button[type='submit']") {
-          time
-        }
-        
-        waitForResults: waitForSelector(selector: "table", timeout: 10000) {
-          time
-        }
-        
-        getHtml: html {
-          html
-        }
-      }
-    `;
-    
-    console.log('[SCRAPER] Executing BrowserQL query...');
-    console.log('[SCRAPER] Date params:', { day: parseInt(day), month: parseInt(month), year });
-    
-    const bqlEndpoint = `https://chrome.browserless.io/chromium/bql?token=${browserlessKey}`;
-    
-    const bqlResponse = await fetch(bqlEndpoint, {
+
+    // Target the Quick Download page
+    const url = bench === 'JODHPUR'
+      ? 'https://hcraj.nic.in/quick-causelist-jdp/'
+      : 'https://hcraj.nic.in/quick-causelist-jp/';
+
+    console.log(`[SCRAPER] Target URL: ${url}`);
+
+    // Call Firecrawl with waitFor and LLM extraction
+    const firecrawlResponse = await fetch('https://api.firecrawl.dev/v1/scrape', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query: bqlQuery })
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${firecrawlKey}`
+      },
+      body: JSON.stringify({
+        url: url,
+        formats: ['markdown', 'html'],
+        waitFor: 5000, // Wait for JS to render the table
+        timeout: 30000,
+        actions: [
+          // Select today's date and submit
+          { type: 'wait', milliseconds: 1000 },
+          { type: 'click', selector: 'button[type="submit"]' },
+          { type: 'wait', milliseconds: 3000 }
+        ]
+      })
     });
-    
-    if (!bqlResponse.ok) {
-      const errorText = await bqlResponse.text();
-      console.error('[SCRAPER] BrowserQL error:', errorText);
-      throw new Error(`BrowserQL request failed: ${bqlResponse.status}`);
+
+    const firecrawlResult = await firecrawlResponse.json() as FirecrawlResponse;
+
+    console.log(`[SCRAPER] Firecrawl response success: ${firecrawlResult.success}`);
+
+    if (!firecrawlResult.success) {
+      console.error('[SCRAPER] Firecrawl error:', firecrawlResult.error);
+      
+      await logScraperRun(supabase, bench, 'failed', 0, firecrawlResult.error || 'Firecrawl request failed', 'DAILY', null);
+      
+      return new Response(JSON.stringify({
+        success: false,
+        error: firecrawlResult.error || 'Firecrawl request failed'
+      }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
     }
-    
-    const bqlResult = await bqlResponse.json();
-    console.log('[SCRAPER] BrowserQL response:', JSON.stringify(bqlResult).substring(0, 1000));
-    
-    // Check for errors
-    if (bqlResult.errors) {
-      console.error('[SCRAPER] BrowserQL errors:', JSON.stringify(bqlResult.errors));
-    }
-    
-    const htmlContent = bqlResult?.data?.getHtml?.html || '';
-    console.log(`[SCRAPER] HTML content length: ${htmlContent.length}`);
-    
-    if (htmlContent.length < 1000 && htmlContent.length > 0) {
-      console.log('[SCRAPER] HTML preview:', htmlContent.substring(0, 500));
-    }
-    
+
+    const htmlContent = firecrawlResult.data?.html || '';
+    const markdownContent = firecrawlResult.data?.markdown || '';
+
+    console.log(`[SCRAPER] HTML length: ${htmlContent.length}, Markdown length: ${markdownContent.length}`);
+
     // Parse the court table from HTML
-    const courts = parseCourtTable(htmlContent, baseUrl);
-    console.log(`[SCRAPER] Found ${courts.length} courts`);
-    
+    const courts = parseCourtTable(htmlContent, url);
+    console.log(`[SCRAPER] Found ${courts.length} courts from HTML parsing`);
+
+    // If HTML parsing found nothing, try parsing markdown
+    if (courts.length === 0 && markdownContent.length > 500) {
+      console.log('[SCRAPER] Trying markdown parsing...');
+      const markdownCourts = parseCourtTableFromMarkdown(markdownContent, url);
+      courts.push(...markdownCourts);
+      console.log(`[SCRAPER] Found ${markdownCourts.length} courts from markdown parsing`);
+    }
+
     if (courts.length === 0) {
-      // Check if there's a "no data" message
-      if (htmlContent.includes('No Causelist') || htmlContent.includes('No data') || htmlContent.length < 2000) {
+      // Check if page indicates no data
+      const noDataIndicators = ['No Causelist', 'No data', 'No record', 'Holiday'];
+      const hasNoData = noDataIndicators.some(indicator => 
+        htmlContent.toLowerCase().includes(indicator.toLowerCase()) ||
+        markdownContent.toLowerCase().includes(indicator.toLowerCase())
+      );
+
+      if (hasNoData || (htmlContent.length < 2000 && markdownContent.length < 500)) {
         await logScraperRun(supabase, bench, 'warning', 0, 'No causelist available for this date', 'DAILY', null);
-        
+
         return new Response(JSON.stringify({
           success: true,
           message: 'No causelist available for this date',
@@ -153,42 +141,43 @@ serve(async (req) => {
           cases_found: 0
         }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
-      
-      // Log for debugging
-      console.log('[SCRAPER] HTML sample:', htmlContent.substring(0, 2000));
+
+      // Log a sample for debugging
+      console.log('[SCRAPER] HTML sample:', htmlContent.substring(0, 1500));
+      console.log('[SCRAPER] Markdown sample:', markdownContent.substring(0, 1500));
     }
-    
-    // Step 3: Upsert court metadata
+
+    // Upsert court metadata
     for (const court of courts) {
       const { error: upsertError } = await supabase
         .from('court_metadata')
         .upsert({
           bench,
           court_no: court.court_no,
-          sitting_judges: court.sitting_judges,
+          sitting_judges: court.judge_names,
           last_updated: new Date().toISOString()
-        }, { 
+        }, {
           onConflict: 'bench,court_no',
-          ignoreDuplicates: false 
+          ignoreDuplicates: false
         });
-      
+
       if (upsertError) {
         console.error(`[SCRAPER] Error upserting court ${court.court_no}:`, upsertError);
       }
     }
-    
+
     console.log(`[SCRAPER] Updated court_metadata for ${courts.length} courts`);
-    
-    // Step 4: Deep scrape each cause list link
+
+    // Deep scrape each cause list link
     let totalCases = 0;
     const errors: string[] = [];
-    
+
     for (const court of courts) {
       // Scrape Daily list
       if (court.daily_link) {
         try {
-          const dailyCases = await scrapeCauseListPdf(court.daily_link, browserlessKey);
-          
+          const dailyCases = await scrapeCauseListPage(court.daily_link, firecrawlKey);
+
           for (const caseItem of dailyCases) {
             await insertDocketItem(supabase, {
               ...caseItem,
@@ -196,11 +185,11 @@ serve(async (req) => {
               court_location: bench,
               court_room_no: court.court_no,
               list_type: 'DAILY',
-              judge_names: court.sitting_judges,
+              judge_names: court.judge_names,
               source_url: court.daily_link
             });
           }
-          
+
           totalCases += dailyCases.length;
           console.log(`[SCRAPER] Court ${court.court_no} Daily: ${dailyCases.length} cases`);
         } catch (err: unknown) {
@@ -210,12 +199,12 @@ serve(async (req) => {
           errors.push(errMsg);
         }
       }
-      
+
       // Scrape Supplementary list
       if (court.supplementary_link) {
         try {
-          const suppCases = await scrapeCauseListPdf(court.supplementary_link, browserlessKey);
-          
+          const suppCases = await scrapeCauseListPage(court.supplementary_link, firecrawlKey);
+
           for (const caseItem of suppCases) {
             await insertDocketItem(supabase, {
               ...caseItem,
@@ -223,11 +212,11 @@ serve(async (req) => {
               court_location: bench,
               court_room_no: court.court_no,
               list_type: 'SUPPLEMENTARY',
-              judge_names: court.sitting_judges,
+              judge_names: court.judge_names,
               source_url: court.supplementary_link
             });
           }
-          
+
           totalCases += suppCases.length;
           console.log(`[SCRAPER] Court ${court.court_no} Supplementary: ${suppCases.length} cases`);
         } catch (err: unknown) {
@@ -238,22 +227,22 @@ serve(async (req) => {
         }
       }
     }
-    
-    // Step 5: Log the scraper run
-    const status = errors.length > 0 ? (totalCases > 0 ? 'partial' : 'failed') : 'success';
+
+    // Log the scraper run
+    const status = courts.length === 0 ? 'warning' : (errors.length > 0 ? (totalCases > 0 ? 'partial' : 'failed') : 'success');
     await logScraperRun(
-      supabase, 
-      bench, 
-      status, 
-      totalCases, 
+      supabase,
+      bench,
+      status,
+      totalCases,
       errors.length > 0 ? errors.join('; ') : null,
       'DAILY',
       null
     );
-    
+
     const duration = Date.now() - startTime;
-    console.log(`[SCRAPER] Completed in ${duration}ms. Status: ${status}, Cases: ${totalCases}`);
-    
+    console.log(`[SCRAPER] Completed in ${duration}ms. Status: ${status}, Courts: ${courts.length}, Cases: ${totalCases}`);
+
     return new Response(JSON.stringify({
       success: true,
       bench,
@@ -263,120 +252,162 @@ serve(async (req) => {
       status,
       errors: errors.length > 0 ? errors : undefined,
       duration_ms: duration
-    }), { 
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+    }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
-    
+
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     console.error('[SCRAPER] Fatal error:', errorMessage);
-    
+
     return new Response(JSON.stringify({
       success: false,
       error: errorMessage
-    }), { 
+    }), {
       status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
   }
 });
 
-// Parse the court table from the Quick Download result page
-function parseCourtTable(html: string, baseUrl: string): CourtInfo[] {
-  const courts: CourtInfo[] = [];
-  
-  // Look for table with court data
-  // Expected structure: Court No | Judge Name | D (daily) | S (supplementary)
-  
-  // Find all table rows
+// Parse court table from HTML
+function parseCourtTable(html: string, baseUrl: string): CourtData[] {
+  const courts: CourtData[] = [];
+
+  // Find table rows
   const tableRowRegex = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
   const rows = html.match(tableRowRegex) || [];
-  
+
   console.log(`[SCRAPER] Found ${rows.length} table rows`);
-  
+
   for (const row of rows) {
     // Skip header rows
     if (row.includes('<th') || row.toLowerCase().includes('court no')) continue;
-    
+
     // Extract cells
     const cellRegex = /<td[^>]*>([\s\S]*?)<\/td>/gi;
     const cells: string[] = [];
     let match;
-    
+
     while ((match = cellRegex.exec(row)) !== null) {
       cells.push(match[1].trim());
     }
-    
+
     if (cells.length >= 2) {
       // Extract court number
       const courtNoMatch = cells[0].match(/(\d+)/);
       const court_no = courtNoMatch ? courtNoMatch[1] : '';
-      
-      // Extract judge names (clean HTML tags)
-      const sitting_judges = cells[1]
+
+      // Extract judge names
+      const judge_names = cells[1]
         .replace(/<[^>]*>/g, '')
         .replace(/&nbsp;/g, ' ')
         .replace(/\s+/g, ' ')
         .trim();
-      
-      if (!court_no || !sitting_judges) continue;
-      
-      // Extract PDF links
+
+      if (!court_no || !judge_names) continue;
+
+      // Extract PDF links from the row
       let daily_link: string | null = null;
       let supplementary_link: string | null = null;
-      
-      // Look for links in the row
-      const linkRegex = /href=["']([^"']+\.pdf[^"']*)["']/gi;
-      let linkMatch;
+
+      // Find all href links
+      const linkRegex = /href=["']([^"']+)["']/gi;
       const links: string[] = [];
-      
+      let linkMatch;
+
       while ((linkMatch = linkRegex.exec(row)) !== null) {
         links.push(resolveUrl(linkMatch[1], baseUrl));
       }
-      
-      // Also check for D and S buttons/links
-      if (row.match(/>\s*D\s*</i) || row.toLowerCase().includes('daily')) {
-        const dLinkMatch = row.match(/href=["']([^"']*)['""][^>]*>[\s]*D[\s]*</i);
-        if (dLinkMatch) {
-          daily_link = resolveUrl(dLinkMatch[1], baseUrl);
-        } else if (links.length > 0) {
-          daily_link = links[0];
-        }
+
+      // Check for D (Daily) and S (Supplementary) links
+      if (row.match(/>[\s]*D[\s]*</i)) {
+        const dMatch = row.match(/href=["']([^"']*?)["'][^>]*>[\s]*D[\s]*</i);
+        if (dMatch) daily_link = resolveUrl(dMatch[1], baseUrl);
       }
-      
-      if (row.match(/>\s*S\s*</i) || row.toLowerCase().includes('supp')) {
-        const sLinkMatch = row.match(/href=["']([^"']*)['""][^>]*>[\s]*S[\s]*</i);
-        if (sLinkMatch) {
-          supplementary_link = resolveUrl(sLinkMatch[1], baseUrl);
-        } else if (links.length > 1) {
-          supplementary_link = links[1];
-        }
+
+      if (row.match(/>[\s]*S[\s]*</i)) {
+        const sMatch = row.match(/href=["']([^"']*?)["'][^>]*>[\s]*S[\s]*</i);
+        if (sMatch) supplementary_link = resolveUrl(sMatch[1], baseUrl);
       }
-      
-      // If we found links but couldn't categorize, assign first to daily
-      if (!daily_link && !supplementary_link && links.length > 0) {
-        daily_link = links[0];
-        if (links.length > 1) {
-          supplementary_link = links[1];
-        }
+
+      // Fallback: use links in order
+      if (!daily_link && links.length > 0) {
+        daily_link = links.find(l => l.includes('.pdf') || l.includes('daily')) || links[0];
       }
-      
+      if (!supplementary_link && links.length > 1) {
+        supplementary_link = links.find(l => l.includes('supp')) || links[1];
+      }
+
       courts.push({
         court_no,
-        sitting_judges,
+        judge_names,
         daily_link,
         supplementary_link
       });
-      
-      console.log(`[SCRAPER] Court ${court_no}: ${sitting_judges.substring(0, 50)}... D:${!!daily_link} S:${!!supplementary_link}`);
+
+      console.log(`[SCRAPER] Court ${court_no}: ${judge_names.substring(0, 40)}... D:${!!daily_link} S:${!!supplementary_link}`);
     }
   }
-  
+
+  return courts;
+}
+
+// Parse court table from markdown
+function parseCourtTableFromMarkdown(markdown: string, baseUrl: string): CourtData[] {
+  const courts: CourtData[] = [];
+
+  // Look for table rows in markdown format
+  // Pattern: | Court No | Judge Name | D | S |
+  const lines = markdown.split('\n');
+
+  for (const line of lines) {
+    if (!line.includes('|')) continue;
+
+    const cells = line.split('|').map(c => c.trim()).filter(c => c);
+
+    if (cells.length >= 2) {
+      const courtNoMatch = cells[0].match(/(\d+)/);
+      if (!courtNoMatch) continue;
+
+      const court_no = courtNoMatch[1];
+      const judge_names = cells[1].replace(/\*+/g, '').trim();
+
+      if (!judge_names || judge_names.toLowerCase().includes('judge')) continue;
+
+      // Extract links from markdown
+      let daily_link: string | null = null;
+      let supplementary_link: string | null = null;
+
+      const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
+      let linkMatch;
+
+      while ((linkMatch = linkRegex.exec(line)) !== null) {
+        const linkText = linkMatch[1];
+        const linkUrl = resolveUrl(linkMatch[2], baseUrl);
+
+        if (linkText.toUpperCase() === 'D' || linkText.toLowerCase().includes('daily')) {
+          daily_link = linkUrl;
+        } else if (linkText.toUpperCase() === 'S' || linkText.toLowerCase().includes('supp')) {
+          supplementary_link = linkUrl;
+        }
+      }
+
+      courts.push({
+        court_no,
+        judge_names,
+        daily_link,
+        supplementary_link
+      });
+    }
+  }
+
   return courts;
 }
 
 // Resolve relative URLs
 function resolveUrl(url: string, baseUrl: string): string {
+  if (!url) return '';
   if (url.startsWith('http')) return url;
   if (url.startsWith('/')) {
     const base = new URL(baseUrl);
@@ -385,59 +416,51 @@ function resolveUrl(url: string, baseUrl: string): string {
   return `${baseUrl.replace(/\/$/, '')}/${url}`;
 }
 
-// Scrape a cause list PDF using Browserless
-async function scrapeCauseListPdf(
-  url: string, 
-  browserlessKey: string
-): Promise<CaseItem[]> {
+// Scrape a cause list page
+async function scrapeCauseListPage(url: string, firecrawlKey: string): Promise<any[]> {
   console.log(`[SCRAPER] Fetching cause list: ${url}`);
-  
-  // For PDFs, we'll use a simple fetch and try to extract text
-  // If it's an HTML page, parse directly
-  
-  try {
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-      }
-    });
-    
-    const contentType = response.headers.get('content-type') || '';
-    
-    if (contentType.includes('text/html')) {
-      const html = await response.text();
-      return parseCauseListHtml(html);
-    } else if (contentType.includes('pdf')) {
-      // For PDFs, we'll need to use Browserless to render or convert
-      // For now, return empty and log
-      console.log(`[SCRAPER] PDF detected, skipping for now: ${url}`);
-      return [];
-    } else {
-      console.log(`[SCRAPER] Unknown content type: ${contentType}`);
-      return [];
-    }
-  } catch (error) {
-    console.error(`[SCRAPER] Error fetching ${url}:`, error);
-    return [];
+
+  const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${firecrawlKey}`
+    },
+    body: JSON.stringify({
+      url,
+      formats: ['markdown', 'html'],
+      waitFor: 3000,
+      timeout: 20000
+    })
+  });
+
+  const result = await response.json();
+
+  if (!result.success) {
+    throw new Error(result.error || 'Failed to scrape cause list');
   }
+
+  const html = result.data?.html || '';
+  const markdown = result.data?.markdown || '';
+
+  return parseCauseListContent(html, markdown);
 }
 
-// Parse cause list HTML to extract cases
-function parseCauseListHtml(html: string): CaseItem[] {
-  const cases: CaseItem[] = [];
-  
-  // Find table rows with case data
+// Parse cause list content
+function parseCauseListContent(html: string, markdown: string): any[] {
+  const cases: any[] = [];
+
+  // Try HTML parsing first
   const tableRowRegex = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
   const rows = html.match(tableRowRegex) || [];
-  
+
   for (const row of rows) {
-    // Skip header rows
     if (row.includes('<th')) continue;
-    
+
     const cellRegex = /<td[^>]*>([\s\S]*?)<\/td>/gi;
     const cells: string[] = [];
     let match;
-    
+
     while ((match = cellRegex.exec(row)) !== null) {
       cells.push(
         match[1]
@@ -447,33 +470,29 @@ function parseCauseListHtml(html: string): CaseItem[] {
           .trim()
       );
     }
-    
+
     if (cells.length >= 3) {
-      // Try to extract item number from first cell
       const itemNoMatch = cells[0].match(/(\d+)/);
       const item_no = itemNoMatch ? parseInt(itemNoMatch[1], 10) : 0;
-      
+
       if (item_no === 0) continue;
-      
+
       const case_number = cells[1] || '';
-      
-      // Parse parties (usually "Petitioner Vs. Respondent")
       const partiesText = cells[2] || '';
       const partiesSplit = partiesText.split(/\s+vs\.?\s+/i);
       const petitioner = partiesSplit[0]?.trim() || null;
       const respondent = partiesSplit[1]?.trim() || null;
-      
-      // Parse lawyers (might be in separate cells)
+
       let petitioner_lawyer: string | null = null;
       let respondent_lawyer: string | null = null;
-      
+
       if (cells.length >= 4) {
         const lawyerText = cells[3] || '';
         const lawyerSplit = lawyerText.split(/\s+vs\.?\s+/i);
         petitioner_lawyer = lawyerSplit[0]?.trim() || null;
         respondent_lawyer = lawyerSplit[1]?.trim() || null;
       }
-      
+
       cases.push({
         item_no,
         case_number,
@@ -484,7 +503,25 @@ function parseCauseListHtml(html: string): CaseItem[] {
       });
     }
   }
-  
+
+  // If no cases from HTML, try markdown
+  if (cases.length === 0 && markdown) {
+    const lines = markdown.split('\n');
+    for (const line of lines) {
+      const itemMatch = line.match(/^(\d+)[\.\)]\s*(.+)/);
+      if (itemMatch) {
+        cases.push({
+          item_no: parseInt(itemMatch[1], 10),
+          case_number: itemMatch[2].trim(),
+          petitioner: null,
+          respondent: null,
+          petitioner_lawyer: null,
+          respondent_lawyer: null
+        });
+      }
+    }
+  }
+
   return cases;
 }
 
@@ -510,7 +547,7 @@ async function insertDocketItem(supabase: any, item: any) {
       onConflict: 'date,court_location,court_room_no,item_no,list_type',
       ignoreDuplicates: false
     });
-  
+
   if (error && !error.message?.includes('duplicate')) {
     console.error('[SCRAPER] Insert error:', error);
   }
@@ -518,10 +555,10 @@ async function insertDocketItem(supabase: any, item: any) {
 
 // Log scraper run
 async function logScraperRun(
-  supabase: any, 
-  bench: string, 
-  status: string, 
-  casesFound: number, 
+  supabase: any,
+  bench: string,
+  status: string,
+  casesFound: number,
   errorMessage: string | null,
   listType: string,
   courtNo: string | null
