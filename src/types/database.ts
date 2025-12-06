@@ -33,6 +33,8 @@ export interface DocketItem {
   matched_profile_id: string | null;
   status: 'pending' | 'active' | 'done' | 'passover';
   force_active: boolean;
+  judge_names: string | null;
+  source_url: string | null;
   created_at: string;
 }
 
@@ -88,7 +90,7 @@ export interface CourtMetadata {
   id: string;
   bench: 'JAIPUR' | 'JODHPUR';
   court_no: string;
-  judge_names: string | null;
+  sitting_judges: string | null;
   last_updated: string;
 }
 

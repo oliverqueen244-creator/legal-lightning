@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Scale, Calendar, FileText, Settings, Activity, FileCheck } from 'lucide-react';
+import { ArrowLeft, Scale, Calendar, FileText, Settings, Activity, FileCheck, Database } from 'lucide-react';
 import { AuthGuard } from '@/components/layout/AuthGuard';
 import { useAuth } from '@/hooks/useAuth';
 import { DocketManager } from '@/components/admin/DocketManager';
@@ -10,11 +10,12 @@ import { ArgumentsManager } from '@/components/admin/ArgumentsManager';
 import { CourtConfig } from '@/components/admin/CourtConfig';
 import { SyncMonitorPanel } from '@/components/admin/SyncMonitorPanel';
 import { DataValidationPanel } from '@/components/admin/DataValidationPanel';
+import { CauseListScraper } from '@/components/admin/CauseListScraper';
 
 export default function Admin() {
   const navigate = useNavigate();
   const { isAdmin, loading } = useAuth();
-  const [activeTab, setActiveTab] = useState('docket');
+  const [activeTab, setActiveTab] = useState('scraper');
 
   if (loading) {
     return (
@@ -74,7 +75,11 @@ export default function Admin() {
         {/* Main Content */}
         <main className="flex-1 container mx-auto px-4 py-6">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-            <TabsList className="grid w-full max-w-3xl grid-cols-5">
+            <TabsList className="grid w-full max-w-4xl grid-cols-6">
+              <TabsTrigger value="scraper" className="flex items-center gap-2">
+                <Database className="h-4 w-4" />
+                <span className="hidden sm:inline">Scraper</span>
+              </TabsTrigger>
               <TabsTrigger value="docket" className="flex items-center gap-2">
                 <Calendar className="h-4 w-4" />
                 <span className="hidden sm:inline">Docket</span>
@@ -96,6 +101,10 @@ export default function Admin() {
                 <span className="hidden sm:inline">Validate</span>
               </TabsTrigger>
             </TabsList>
+
+            <TabsContent value="scraper" className="space-y-4">
+              <CauseListScraper />
+            </TabsContent>
 
             <TabsContent value="docket" className="space-y-4">
               <DocketManager />
