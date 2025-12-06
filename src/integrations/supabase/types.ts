@@ -86,22 +86,22 @@ export type Database = {
           bench: string
           court_no: string
           id: string
-          judge_names: string | null
           last_updated: string | null
+          sitting_judges: string | null
         }
         Insert: {
           bench: string
           court_no: string
           id?: string
-          judge_names?: string | null
           last_updated?: string | null
+          sitting_judges?: string | null
         }
         Update: {
           bench?: string
           court_no?: string
           id?: string
-          judge_names?: string | null
           last_updated?: string | null
+          sitting_judges?: string | null
         }
         Relationships: []
       }
@@ -115,12 +115,14 @@ export type Database = {
           force_active: boolean | null
           id: string
           item_no: number | null
+          judge_names: string | null
           list_type: string | null
           matched_profile_id: string | null
           petitioner: string | null
           petitioner_lawyer: string | null
           respondent: string | null
           respondent_lawyer: string | null
+          source_url: string | null
           status: string | null
         }
         Insert: {
@@ -132,12 +134,14 @@ export type Database = {
           force_active?: boolean | null
           id?: string
           item_no?: number | null
+          judge_names?: string | null
           list_type?: string | null
           matched_profile_id?: string | null
           petitioner?: string | null
           petitioner_lawyer?: string | null
           respondent?: string | null
           respondent_lawyer?: string | null
+          source_url?: string | null
           status?: string | null
         }
         Update: {
@@ -149,12 +153,14 @@ export type Database = {
           force_active?: boolean | null
           id?: string
           item_no?: number | null
+          judge_names?: string | null
           list_type?: string | null
           matched_profile_id?: string | null
           petitioner?: string | null
           petitioner_lawyer?: string | null
           respondent?: string | null
           respondent_lawyer?: string | null
+          source_url?: string | null
           status?: string | null
         }
         Relationships: [

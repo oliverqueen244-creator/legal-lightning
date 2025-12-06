@@ -2,6 +2,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { MapPin } from 'lucide-react';
+import { PortalHealthBadge } from '@/components/dashboard/CourtStatusCard';
 
 interface ProfileStepProps {
   data: {
@@ -118,6 +119,14 @@ export default function ProfileStep({ data, onChange }: ProfileStepProps) {
             </div>
           </Label>
         </div>
+
+        {/* Portal Health Check Badge */}
+        {(isJaipurSelected || isJodhpurSelected) && (
+          <div className="flex flex-wrap gap-2 mt-3">
+            {isJodhpurSelected && <PortalHealthBadge bench="JODHPUR" />}
+            {isJaipurSelected && <PortalHealthBadge bench="JAIPUR" />}
+          </div>
+        )}
 
         {data.bench === 'BOTH' && (
           <p className="text-xs text-primary flex items-center gap-1">

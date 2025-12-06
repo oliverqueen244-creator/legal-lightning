@@ -14,7 +14,7 @@ interface CourtMetadata {
   id: string;
   bench: string;
   court_no: string;
-  judge_names: string | null;
+  sitting_judges: string | null;
   last_updated: string | null;
 }
 
@@ -111,11 +111,11 @@ export function CourtMetadataWidget({ bench }: CourtMetadataWidgetProps) {
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="text-xs text-muted-foreground line-clamp-2 leading-tight">
-                      {court.judge_names 
-                        ? court.judge_names.replace(/^(THE JUSTICE |MR\. JUSTICE |MS\. JUSTICE |DR\. JUSTICE )/gi, '').substring(0, 60)
+                      {court.sitting_judges 
+                        ? court.sitting_judges.replace(/^(THE JUSTICE |MR\. JUSTICE |MS\. JUSTICE |DR\. JUSTICE )/gi, '').substring(0, 60)
                         : 'Judge info pending'
                       }
-                      {court.judge_names && court.judge_names.length > 60 && '...'}
+                      {court.sitting_judges && court.sitting_judges.length > 60 && '...'}
                     </p>
                   </div>
                 </div>
