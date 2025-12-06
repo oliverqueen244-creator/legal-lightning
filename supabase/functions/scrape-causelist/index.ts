@@ -535,13 +535,128 @@ async function scrapeCauseListPage(url: string, _firecrawlKey: string): Promise<
   }
 }
 
-// PDF extraction - for now, just store the URL without parsing
-// PDF parsing in edge functions is complex; consider using external service
-async function extractCasesFromPdfWithAI(_pdfBuffer: ArrayBuffer, _apiKey: string): Promise<any[]> {
-  // PDF text extraction requires external service or dedicated worker
-  // The PDF URLs are stored in source_url for later processing
-  console.log(`[SCRAPER] PDF extraction not yet implemented - URL stored for later processing`);
-  return [];
+// PDF extraction using OpenRouter with Gemini vision model
+async function extractCasesFromPdfWithAI(pdfBuffer: ArrayBuffer, _lovableApiKey: string): Promise<any[]> {
+  const openRouterKey = Deno.env.get('OPENROUTER_API_KEY');
+  
+  if (!openRouterKey) {
+    console.log(`[SCRAPER] No OPENROUTER_API_KEY, skipping PDF extraction`);
+    return [];
+  }
+
+  try {
+    // Convert PDF buffer to base64
+    const uint8Array = new Uint8Array(pdfBuffer);
+    let binary = '';
+    const chunkSize = 8192;
+    for (let i = 0; i < uint8Array.length; i += chunkSize) {
+      const chunk = uint8Array.subarray(i, Math.min(i + chunkSize, uint8Array.length));
+      binary += String.fromCharCode.apply(null, Array.from(chunk));
+    }
+    const pdfBase64 = btoa(binary);
+    
+    console.log(`[SCRAPER] Sending PDF to OpenRouter (${Math.round(pdfBuffer.byteLength / 1024)}KB)`);
+
+    // Use Gemini 2.5 Flash for PDF extraction - it supports PDF input directly
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${openRouterKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://lovable.dev',
+        'X-Title': 'Court Cause List Scraper'
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-2.5-flash-preview',
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: `Extract ALL cases from this Indian High Court cause list PDF. Return a JSON array with each case having these fields:
+- item_no: Serial number (integer)
+- case_number: Full case number (e.g., "S.B. Civil Writ Petition No. 1234/2025")
+- petitioner: Name of petitioner(s)
+- respondent: Name of respondent(s)
+- petitioner_lawyer: Name of petitioner's advocate
+- respondent_lawyer: Name of respondent's advocate (may be AAG/APG/GA for government)
+
+IMPORTANT:
+- Extract EVERY case entry, don't skip any
+- Return ONLY valid JSON array, no markdown or explanation
+- If a field is not found, use null
+- Combine multi-line entries for the same case
+
+Example output:
+[{"item_no":1,"case_number":"S.B. Civil Writ Petition No. 1234/2025","petitioner":"John Doe","respondent":"State of Rajasthan","petitioner_lawyer":"Adv. A.K. Sharma","respondent_lawyer":"AAG"}]`
+              },
+              {
+                type: 'image_url',
+                image_url: {
+                  url: `data:application/pdf;base64,${pdfBase64}`
+                }
+              }
+            ]
+          }
+        ],
+        max_tokens: 16000,
+        temperature: 0.1
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`[SCRAPER] OpenRouter error ${response.status}: ${errorText}`);
+      return [];
+    }
+
+    const result = await response.json();
+    const content = result.choices?.[0]?.message?.content || '';
+    
+    console.log(`[SCRAPER] AI response length: ${content.length}`);
+    
+    // Parse the JSON response
+    try {
+      // Remove markdown code blocks if present
+      let jsonStr = content.trim();
+      if (jsonStr.startsWith('```json')) {
+        jsonStr = jsonStr.slice(7);
+      } else if (jsonStr.startsWith('```')) {
+        jsonStr = jsonStr.slice(3);
+      }
+      if (jsonStr.endsWith('```')) {
+        jsonStr = jsonStr.slice(0, -3);
+      }
+      jsonStr = jsonStr.trim();
+      
+      const cases = JSON.parse(jsonStr);
+      
+      if (Array.isArray(cases)) {
+        console.log(`[SCRAPER] Successfully parsed ${cases.length} cases from AI response`);
+        return cases.map(c => ({
+          item_no: parseInt(c.item_no, 10) || 0,
+          case_number: c.case_number || '',
+          petitioner: c.petitioner || null,
+          respondent: c.respondent || null,
+          petitioner_lawyer: c.petitioner_lawyer || null,
+          respondent_lawyer: c.respondent_lawyer || null
+        })).filter(c => c.item_no > 0 || c.case_number);
+      }
+      
+      console.log(`[SCRAPER] AI response was not an array`);
+      return [];
+    } catch (parseErr) {
+      console.error(`[SCRAPER] Failed to parse AI JSON response:`, parseErr);
+      console.log(`[SCRAPER] Raw content (first 500 chars): ${content.substring(0, 500)}`);
+      
+      // Fallback: try to extract with regex-based parsing
+      return parseCauseListText(content);
+    }
+  } catch (err) {
+    console.error(`[SCRAPER] PDF AI extraction error:`, err);
+    return [];
+  }
 }
 
 // Parse cause list text extracted from PDF
