@@ -12,7 +12,6 @@ import { SyncMonitorPanel } from '@/components/admin/SyncMonitorPanel';
 import { DataValidationPanel } from '@/components/admin/DataValidationPanel';
 import { CauseListScraper } from '@/components/admin/CauseListScraper';
 import { ScraperLogsPanel } from '@/components/admin/ScraperLogsPanel';
-import { CISPortalTest } from '@/components/admin/CISPortalTest';
 
 export default function Admin() {
   const navigate = useNavigate();
@@ -113,7 +112,6 @@ export default function Admin() {
             </TabsContent>
 
             <TabsContent value="scraper" className="space-y-4">
-              <CISPortalTest />
               <CauseListScraper />
             </TabsContent>
 
