@@ -363,36 +363,42 @@ function parseCourtTable(html: string, baseUrl: string): CourtData[] {
 
       if (!court_no || !judge_names) continue;
 
-      // Extract PDF links from the row
+      // Extract PDF links from the row - look for data-pdfpath (base64 encoded)
       let daily_link: string | null = null;
       let supplementary_link: string | null = null;
 
-      // Find all href links
-      const linkRegex = /href=["']([^"']+)["']/gi;
-      const links: string[] = [];
-      let linkMatch;
-
-      while ((linkMatch = linkRegex.exec(row)) !== null) {
-        links.push(resolveUrl(linkMatch[1], baseUrl));
+      // The HC website uses base64 encoded paths in data-pdfpath attribute
+      // Example: <a href='javascript:void(0)' data-pdfpath='L2hvbWUv...'>D</a>
+      // The path decodes to something like: /home/court/rhcjodh.../causelist_report/2025/05122025_2011_1001.pdf
+      
+      // Find D (Daily) link with data-pdfpath
+      const dMatch = row.match(/<a[^>]*data-pdfpath=["']([^"']+)["'][^>]*>[\s]*D[\s]*<\/a>/i);
+      if (dMatch) {
+        try {
+          const decodedPath = atob(dMatch[1]);
+          // Construct full URL - the server serves PDFs from a specific endpoint
+          daily_link = `https://hcraj.nic.in${decodedPath}`;
+          console.log(`[SCRAPER] Court ${court_no} Daily PDF: ${daily_link}`);
+        } catch (e) {
+          console.log(`[SCRAPER] Failed to decode Daily path for court ${court_no}`);
+        }
       }
 
-      // Check for D (Daily) and S (Supplementary) links
-      if (row.match(/>[\s]*D[\s]*</i)) {
-        const dMatch = row.match(/href=["']([^"']*?)["'][^>]*>[\s]*D[\s]*</i);
-        if (dMatch) daily_link = resolveUrl(dMatch[1], baseUrl);
+      // Find S (Supplementary) link with data-pdfpath
+      const sMatch = row.match(/<a[^>]*data-pdfpath=["']([^"']+)["'][^>]*>[\s]*S[\s]*<\/a>/i);
+      if (sMatch) {
+        try {
+          const decodedPath = atob(sMatch[1]);
+          supplementary_link = `https://hcraj.nic.in${decodedPath}`;
+          console.log(`[SCRAPER] Court ${court_no} Supp PDF: ${supplementary_link}`);
+        } catch (e) {
+          console.log(`[SCRAPER] Failed to decode Supp path for court ${court_no}`);
+        }
       }
 
-      if (row.match(/>[\s]*S[\s]*</i)) {
-        const sMatch = row.match(/href=["']([^"']*?)["'][^>]*>[\s]*S[\s]*</i);
-        if (sMatch) supplementary_link = resolveUrl(sMatch[1], baseUrl);
-      }
-
-      // Fallback: use links in order
-      if (!daily_link && links.length > 0) {
-        daily_link = links.find(l => l.includes('.pdf') || l.includes('daily')) || links[0];
-      }
-      if (!supplementary_link && links.length > 1) {
-        supplementary_link = links.find(l => l.includes('supp')) || links[1];
+      // Log first row's raw HTML for debugging
+      if (courts.length === 0) {
+        console.log(`[SCRAPER] Sample row HTML (first 500 chars): ${row.substring(0, 500)}`);
       }
 
       courts.push({
@@ -472,34 +478,46 @@ function resolveUrl(url: string, baseUrl: string): string {
   return `${baseUrl.replace(/\/$/, '')}/${url}`;
 }
 
-// Scrape a cause list page
-async function scrapeCauseListPage(url: string, firecrawlKey: string): Promise<any[]> {
-  console.log(`[SCRAPER] Fetching cause list: ${url}`);
+// Scrape a cause list page using direct HTTP request (no Firecrawl)
+async function scrapeCauseListPage(url: string, _firecrawlKey: string): Promise<any[]> {
+  console.log(`[SCRAPER] Fetching cause list directly: ${url}`);
 
-  const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${firecrawlKey}`
-    },
-    body: JSON.stringify({
-      url,
-      formats: ['markdown', 'html'],
-      waitFor: 3000,
-      timeout: 20000
-    })
-  });
+  try {
+    // Use direct HTTP request instead of Firecrawl to avoid rate limits
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5',
+        'Referer': 'https://hcraj.nic.in/'
+      }
+    });
 
-  const result = await response.json();
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
 
-  if (!result.success) {
-    throw new Error(result.error || 'Failed to scrape cause list');
+    const contentType = response.headers.get('content-type') || '';
+    
+    // Handle PDF files
+    if (contentType.includes('application/pdf') || url.endsWith('.pdf')) {
+      console.log(`[SCRAPER] PDF detected, storing for later processing: ${url}`);
+      // For PDFs, we can't parse them directly in edge functions easily
+      // Return empty array - the PDF URL is already stored in source_url
+      return [];
+    }
+
+    // Handle HTML content
+    const html = await response.text();
+    console.log(`[SCRAPER] Fetched HTML content, length: ${html.length}`);
+    
+    return parseCauseListContent(html, '');
+  } catch (error) {
+    const errMsg = error instanceof Error ? error.message : 'Unknown error';
+    console.error(`[SCRAPER] Direct fetch failed: ${errMsg}`);
+    throw error;
   }
-
-  const html = result.data?.html || '';
-  const markdown = result.data?.markdown || '';
-
-  return parseCauseListContent(html, markdown);
 }
 
 // Parse cause list content
