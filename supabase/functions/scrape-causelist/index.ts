@@ -478,20 +478,64 @@ function resolveUrl(url: string, baseUrl: string): string {
   return `${baseUrl.replace(/\/$/, '')}/${url}`;
 }
 
-// Scrape a cause list page using direct HTTP request and AI for PDF parsing
-async function scrapeCauseListPage(url: string, _firecrawlKey: string): Promise<any[]> {
-  console.log(`[SCRAPER] Fetching cause list directly: ${url}`);
+// Scrape a cause list page - use Firecrawl for PDFs to bypass access restrictions
+async function scrapeCauseListPage(url: string, firecrawlKey: string): Promise<any[]> {
+  console.log(`[SCRAPER] Fetching cause list: ${url}`);
 
-  const lovableApiKey = Deno.env.get('LOVABLE_API_KEY');
+  const openRouterKey = Deno.env.get('OPENROUTER_API_KEY');
 
+  // For PDFs, use Firecrawl to get rendered content (bypasses access restrictions)
+  if (url.endsWith('.pdf')) {
+    console.log(`[SCRAPER] PDF URL detected, using Firecrawl for access`);
+    
+    try {
+      // Use Firecrawl to fetch the PDF as markdown
+      const firecrawlResponse = await fetch('https://api.firecrawl.dev/v1/scrape', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${firecrawlKey}`
+        },
+        body: JSON.stringify({
+          url,
+          formats: ['markdown'],
+          waitFor: 2000,
+          timeout: 30000
+        })
+      });
+
+      const firecrawlResult = await firecrawlResponse.json();
+      
+      if (firecrawlResult.success && firecrawlResult.data?.markdown) {
+        const markdown = firecrawlResult.data.markdown;
+        console.log(`[SCRAPER] Firecrawl returned markdown, length: ${markdown.length}`);
+        
+        // Use AI to extract structured data from the markdown
+        if (openRouterKey && markdown.length > 100) {
+          const cases = await extractCasesFromTextWithAI(markdown, openRouterKey);
+          console.log(`[SCRAPER] AI extracted ${cases.length} cases from PDF text`);
+          return cases;
+        }
+        
+        // Fallback to regex parsing
+        return parseCauseListText(markdown);
+      } else {
+        console.log(`[SCRAPER] Firecrawl failed: ${firecrawlResult.error || 'Unknown error'}`);
+        return [];
+      }
+    } catch (err) {
+      console.error(`[SCRAPER] Firecrawl error: ${err}`);
+      return [];
+    }
+  }
+
+  // For non-PDF URLs, use direct fetch
   try {
-    // Use direct HTTP request instead of Firecrawl to avoid rate limits
     const response = await fetch(url, {
       method: 'GET',
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,application/pdf,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.5',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         'Referer': 'https://hcraj.nic.in/'
       }
     });
@@ -500,30 +544,6 @@ async function scrapeCauseListPage(url: string, _firecrawlKey: string): Promise<
       throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
 
-    const contentType = response.headers.get('content-type') || '';
-    
-    // Handle PDF files using Lovable AI (Gemini) for extraction
-    if (contentType.includes('application/pdf') || url.endsWith('.pdf')) {
-      console.log(`[SCRAPER] PDF detected, using AI extraction: ${url}`);
-      
-      if (!lovableApiKey) {
-        console.log(`[SCRAPER] No LOVABLE_API_KEY, skipping PDF extraction`);
-        return [];
-      }
-
-      // Get PDF as ArrayBuffer
-      const pdfBuffer = await response.arrayBuffer();
-      
-      console.log(`[SCRAPER] PDF size: ${pdfBuffer.byteLength} bytes`);
-
-      // Use pdf-parse to extract case data from PDF
-      const cases = await extractCasesFromPdfWithAI(pdfBuffer, lovableApiKey);
-      console.log(`[SCRAPER] Extracted ${cases.length} cases from PDF`);
-      
-      return cases;
-    }
-
-    // Handle HTML content
     const html = await response.text();
     console.log(`[SCRAPER] Fetched HTML content, length: ${html.length}`);
     
@@ -535,29 +555,11 @@ async function scrapeCauseListPage(url: string, _firecrawlKey: string): Promise<
   }
 }
 
-// PDF extraction using OpenRouter with Gemini vision model
-async function extractCasesFromPdfWithAI(pdfBuffer: ArrayBuffer, _lovableApiKey: string): Promise<any[]> {
-  const openRouterKey = Deno.env.get('OPENROUTER_API_KEY');
-  
-  if (!openRouterKey) {
-    console.log(`[SCRAPER] No OPENROUTER_API_KEY, skipping PDF extraction`);
-    return [];
-  }
-
+// Extract cases from text using AI
+async function extractCasesFromTextWithAI(text: string, openRouterKey: string): Promise<any[]> {
   try {
-    // Convert PDF buffer to base64
-    const uint8Array = new Uint8Array(pdfBuffer);
-    let binary = '';
-    const chunkSize = 8192;
-    for (let i = 0; i < uint8Array.length; i += chunkSize) {
-      const chunk = uint8Array.subarray(i, Math.min(i + chunkSize, uint8Array.length));
-      binary += String.fromCharCode.apply(null, Array.from(chunk));
-    }
-    const pdfBase64 = btoa(binary);
-    
-    console.log(`[SCRAPER] Sending PDF to OpenRouter (${Math.round(pdfBuffer.byteLength / 1024)}KB)`);
+    console.log(`[SCRAPER] Sending text to AI for extraction (${text.length} chars)`);
 
-    // Use Gemini 2.5 Flash for PDF extraction - it supports PDF input directly
     const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -567,18 +569,15 @@ async function extractCasesFromPdfWithAI(pdfBuffer: ArrayBuffer, _lovableApiKey:
         'X-Title': 'Court Cause List Scraper'
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash-preview',
+        model: 'google/gemini-2.5-flash',
         messages: [
           {
             role: 'user',
-            content: [
-              {
-                type: 'text',
-                text: `Extract ALL cases from this Indian High Court cause list PDF. Return a JSON array with each case having these fields:
+            content: `Extract ALL cases from this Indian High Court cause list. Return a JSON array with each case having these fields:
 - item_no: Serial number (integer)
 - case_number: Full case number (e.g., "S.B. Civil Writ Petition No. 1234/2025")
 - petitioner: Name of petitioner(s)
-- respondent: Name of respondent(s)
+- respondent: Name of respondent(s)  
 - petitioner_lawyer: Name of petitioner's advocate
 - respondent_lawyer: Name of respondent's advocate (may be AAG/APG/GA for government)
 
@@ -586,21 +585,12 @@ IMPORTANT:
 - Extract EVERY case entry, don't skip any
 - Return ONLY valid JSON array, no markdown or explanation
 - If a field is not found, use null
-- Combine multi-line entries for the same case
 
-Example output:
-[{"item_no":1,"case_number":"S.B. Civil Writ Petition No. 1234/2025","petitioner":"John Doe","respondent":"State of Rajasthan","petitioner_lawyer":"Adv. A.K. Sharma","respondent_lawyer":"AAG"}]`
-              },
-              {
-                type: 'image_url',
-                image_url: {
-                  url: `data:application/pdf;base64,${pdfBase64}`
-                }
-              }
-            ]
+Here is the cause list text:
+${text.substring(0, 30000)}`
           }
         ],
-        max_tokens: 16000,
+        max_tokens: 8000,
         temperature: 0.1
       })
     });
@@ -617,47 +607,33 @@ Example output:
     console.log(`[SCRAPER] AI response length: ${content.length}`);
     
     // Parse the JSON response
-    try {
-      // Remove markdown code blocks if present
-      let jsonStr = content.trim();
-      if (jsonStr.startsWith('```json')) {
-        jsonStr = jsonStr.slice(7);
-      } else if (jsonStr.startsWith('```')) {
-        jsonStr = jsonStr.slice(3);
-      }
-      if (jsonStr.endsWith('```')) {
-        jsonStr = jsonStr.slice(0, -3);
-      }
-      jsonStr = jsonStr.trim();
-      
-      const cases = JSON.parse(jsonStr);
-      
-      if (Array.isArray(cases)) {
-        console.log(`[SCRAPER] Successfully parsed ${cases.length} cases from AI response`);
-        return cases.map(c => ({
-          item_no: parseInt(c.item_no, 10) || 0,
-          case_number: c.case_number || '',
-          petitioner: c.petitioner || null,
-          respondent: c.respondent || null,
-          petitioner_lawyer: c.petitioner_lawyer || null,
-          respondent_lawyer: c.respondent_lawyer || null
-        })).filter(c => c.item_no > 0 || c.case_number);
-      }
-      
-      console.log(`[SCRAPER] AI response was not an array`);
-      return [];
-    } catch (parseErr) {
-      console.error(`[SCRAPER] Failed to parse AI JSON response:`, parseErr);
-      console.log(`[SCRAPER] Raw content (first 500 chars): ${content.substring(0, 500)}`);
-      
-      // Fallback: try to extract with regex-based parsing
-      return parseCauseListText(content);
+    let jsonStr = content.trim();
+    if (jsonStr.startsWith('```json')) jsonStr = jsonStr.slice(7);
+    else if (jsonStr.startsWith('```')) jsonStr = jsonStr.slice(3);
+    if (jsonStr.endsWith('```')) jsonStr = jsonStr.slice(0, -3);
+    jsonStr = jsonStr.trim();
+    
+    const cases = JSON.parse(jsonStr);
+    
+    if (Array.isArray(cases)) {
+      console.log(`[SCRAPER] Successfully parsed ${cases.length} cases from AI`);
+      return cases.map(c => ({
+        item_no: parseInt(c.item_no, 10) || 0,
+        case_number: c.case_number || '',
+        petitioner: c.petitioner || null,
+        respondent: c.respondent || null,
+        petitioner_lawyer: c.petitioner_lawyer || null,
+        respondent_lawyer: c.respondent_lawyer || null
+      })).filter(c => c.item_no > 0 || c.case_number);
     }
+    
+    return [];
   } catch (err) {
-    console.error(`[SCRAPER] PDF AI extraction error:`, err);
+    console.error(`[SCRAPER] AI extraction error:`, err);
     return [];
   }
 }
+
 
 // Parse cause list text extracted from PDF
 function parseCauseListText(text: string): any[] {
