@@ -224,64 +224,97 @@ serve(async (req) => {
 
     console.log(`[SCRAPER] Updated court_metadata for ${courts.length} courts`);
 
-    // Deep scrape each cause list link
+    // Since direct PDF access requires session cookies, we need to use Firecrawl
+    // to scrape PDFs by navigating within the same browser session
+    // For now, we've successfully scraped court metadata with judge names
+    // The PDF scraping will use a session-based approach
+    
     let totalCases = 0;
     const errors: string[] = [];
+    const openRouterKey = Deno.env.get('OPENROUTER_API_KEY');
 
-    for (const court of courts) {
-      // Scrape Daily list
-      if (court.daily_link) {
-        try {
-          const dailyCases = await scrapeCauseListPage(court.daily_link, firecrawlKey);
+    // Process courts in smaller batches to avoid timeout
+    const BATCH_SIZE = 3; // Process 3 courts at a time
+    const MAX_COURTS = 6; // Limit to first 6 courts to avoid timeout
+    const courtsToProcess = courts.slice(0, MAX_COURTS);
 
-          for (const caseItem of dailyCases) {
-            await insertDocketItem(supabase, {
-              ...caseItem,
-              date: targetDate,
-              court_location: bench,
-              court_room_no: court.court_no,
-              list_type: 'DAILY',
-              judge_names: court.judge_names,
-              source_url: court.daily_link
-            });
+    for (let i = 0; i < courtsToProcess.length; i += BATCH_SIZE) {
+      const batch = courtsToProcess.slice(i, i + BATCH_SIZE);
+      
+      const batchPromises = batch.map(async (court) => {
+        let courtCases = 0;
+        
+        // Use Firecrawl to navigate to PDF within session context
+        if (court.daily_link) {
+          try {
+            const dailyCases = await scrapePdfWithSession(
+              baseUrl,
+              court.court_no,
+              'daily',
+              firecrawlKey,
+              openRouterKey,
+              { day, month, year }
+            );
+
+            for (const caseItem of dailyCases) {
+              await insertDocketItem(supabase, {
+                ...caseItem,
+                date: targetDate,
+                court_location: bench,
+                court_room_no: court.court_no,
+                list_type: 'DAILY',
+                judge_names: court.judge_names,
+                source_url: court.daily_link
+              });
+            }
+
+            courtCases += dailyCases.length;
+            console.log(`[SCRAPER] Court ${court.court_no} Daily: ${dailyCases.length} cases`);
+          } catch (err: unknown) {
+            const errMessage = err instanceof Error ? err.message : 'Unknown error';
+            console.error(`[SCRAPER] Court ${court.court_no} Daily error: ${errMessage}`);
+            errors.push(`Court ${court.court_no} Daily: ${errMessage}`);
           }
-
-          totalCases += dailyCases.length;
-          console.log(`[SCRAPER] Court ${court.court_no} Daily: ${dailyCases.length} cases`);
-        } catch (err: unknown) {
-          const errMessage = err instanceof Error ? err.message : 'Unknown error';
-          const errMsg = `Court ${court.court_no} Daily: ${errMessage}`;
-          console.error(`[SCRAPER] ${errMsg}`);
-          errors.push(errMsg);
         }
-      }
 
-      // Scrape Supplementary list
-      if (court.supplementary_link) {
-        try {
-          const suppCases = await scrapeCauseListPage(court.supplementary_link, firecrawlKey);
+        // Scrape Supplementary list
+        if (court.supplementary_link) {
+          try {
+            const suppCases = await scrapePdfWithSession(
+              baseUrl,
+              court.court_no,
+              'supplementary',
+              firecrawlKey,
+              openRouterKey,
+              { day, month, year }
+            );
 
-          for (const caseItem of suppCases) {
-            await insertDocketItem(supabase, {
-              ...caseItem,
-              date: targetDate,
-              court_location: bench,
-              court_room_no: court.court_no,
-              list_type: 'SUPPLEMENTARY',
-              judge_names: court.judge_names,
-              source_url: court.supplementary_link
-            });
+            for (const caseItem of suppCases) {
+              await insertDocketItem(supabase, {
+                ...caseItem,
+                date: targetDate,
+                court_location: bench,
+                court_room_no: court.court_no,
+                list_type: 'SUPPLEMENTARY',
+                judge_names: court.judge_names,
+                source_url: court.supplementary_link
+              });
+            }
+
+            courtCases += suppCases.length;
+            console.log(`[SCRAPER] Court ${court.court_no} Supplementary: ${suppCases.length} cases`);
+          } catch (err: unknown) {
+            const errMessage = err instanceof Error ? err.message : 'Unknown error';
+            console.error(`[SCRAPER] Court ${court.court_no} Supp error: ${errMessage}`);
+            errors.push(`Court ${court.court_no} Supp: ${errMessage}`);
           }
-
-          totalCases += suppCases.length;
-          console.log(`[SCRAPER] Court ${court.court_no} Supplementary: ${suppCases.length} cases`);
-        } catch (err: unknown) {
-          const errMessage = err instanceof Error ? err.message : 'Unknown error';
-          const errMsg = `Court ${court.court_no} Supp: ${errMessage}`;
-          console.error(`[SCRAPER] ${errMsg}`);
-          errors.push(errMsg);
         }
-      }
+
+        return courtCases;
+      });
+
+      const batchResults = await Promise.all(batchPromises);
+      totalCases += batchResults.reduce((sum, count) => sum + count, 0);
     }
 
     // Log the scraper run
@@ -478,18 +511,199 @@ function resolveUrl(url: string, baseUrl: string): string {
   return `${baseUrl.replace(/\/$/, '')}/${url}`;
 }
 
-// Scrape a cause list page - use Firecrawl for PDFs to bypass access restrictions
+// Scrape PDF by navigating within same browser session using Firecrawl actions
+async function scrapePdfWithSession(
+  baseUrl: string,
+  courtNo: string,
+  listType: 'daily' | 'supplementary',
+  firecrawlKey: string,
+  openRouterKey: string | undefined,
+  dateParams: { day: number; month: number; year: number }
+): Promise<any[]> {
+  console.log(`[SCRAPER] Scraping Court ${courtNo} ${listType} with session-based approach`);
+
+  try {
+    // Use Firecrawl with actions to navigate through the website properly
+    // The key is to click the button which triggers JavaScript that handles the PDF
+    
+    const firecrawlResponse = await fetch('https://api.firecrawl.dev/v1/scrape', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${firecrawlKey}`
+      },
+      body: JSON.stringify({
+        url: baseUrl,
+        formats: ['markdown', 'screenshot'],
+        waitFor: 2000,
+        timeout: 90000,
+        actions: [
+          { type: 'wait', milliseconds: 500 },
+          // Set date values using JavaScript
+          { 
+            type: 'evaluate', 
+            code: `
+              const daySelect = document.getElementById('day');
+              const monthSelect = document.getElementById('month');
+              const yearSelect = document.getElementById('year');
+              if (daySelect) daySelect.value = '${dateParams.day}';
+              if (monthSelect) monthSelect.value = '${dateParams.month}';
+              if (yearSelect) yearSelect.value = '${dateParams.year}';
+            `
+          },
+          { type: 'wait', milliseconds: 500 },
+          // Click the Generate Causelist button
+          { type: 'click', selector: 'button[type="submit"]' },
+          { type: 'wait', milliseconds: 4000 },
+          // Now click the D or S button for the specific court
+          // First, let's get the data-pdfpath and set it to a hidden link then click
+          {
+            type: 'evaluate',
+            code: `
+              (function() {
+                const buttonText = '${listType === 'daily' ? 'D' : 'S'}';
+                const rows = document.querySelectorAll('table tr');
+                let clicked = false;
+                
+                for (const row of rows) {
+                  const cells = row.querySelectorAll('td');
+                  if (cells.length >= 1 && cells[0]?.textContent?.trim() === '${courtNo}') {
+                    // Find the correct button (D or S)
+                    const links = row.querySelectorAll('a.view-button');
+                    for (const link of links) {
+                      if (link.textContent?.trim() === buttonText) {
+                        // Get the pdfpath and set it to the download link
+                        const pdfPath = link.getAttribute('data-pdfpath');
+                        if (pdfPath) {
+                          const dwnldLink = document.getElementById('dwnld');
+                          if (dwnldLink) {
+                            const decodedPath = atob(pdfPath);
+                            dwnldLink.href = 'https://hcraj.nic.in' + decodedPath;
+                            dwnldLink.click();
+                            clicked = true;
+                          }
+                        }
+                        break;
+                      }
+                    }
+                    break;
+                  }
+                }
+                return clicked;
+              })();
+            `
+          },
+          { type: 'wait', milliseconds: 8000 }
+        ]
+      })
+    });
+
+    const result = await firecrawlResponse.json();
+    
+    console.log(`[SCRAPER] Court ${courtNo} ${listType} Firecrawl response: success=${result.success}, error=${result.error || 'none'}`);
+    
+    if (result.success && result.data?.markdown) {
+      const markdown = result.data.markdown;
+      console.log(`[SCRAPER] Court ${courtNo} ${listType}: Got ${markdown.length} chars`);
+      
+      // Log first 500 chars for debugging
+      console.log(`[SCRAPER] Content preview: ${markdown.substring(0, 500)}`);
+
+      // Check if we got actual case data (not just the table page or form)
+      const hasCaseData = markdown.length > 2000 && (
+        markdown.includes('S.No') || 
+        markdown.includes('Case Type') || 
+        markdown.includes('Petitioner') || 
+        markdown.includes('Advocate') ||
+        markdown.includes('vs') ||
+        markdown.includes('V/s')
+      );
+      
+      if (hasCaseData) {
+        console.log(`[SCRAPER] Court ${courtNo} ${listType}: Detected case data, extracting...`);
+        if (openRouterKey) {
+          return await extractCasesFromTextWithAI(markdown, openRouterKey);
+        }
+        return parseCauseListText(markdown);
+      } else {
+        console.log(`[SCRAPER] Court ${courtNo} ${listType}: No case data detected in content`);
+        // Still got the quick download page, PDF didn't load
+      }
+    } else {
+      console.log(`[SCRAPER] Court ${courtNo} ${listType}: Firecrawl failed - ${result.error || 'Unknown error'}`);
+    }
+
+    return [];
+  } catch (err) {
+    console.error(`[SCRAPER] Court ${courtNo} ${listType} session error:`, err);
+    return [];
+  }
+}
+
+// Scrape a cause list PDF using direct fetch with proper headers
 async function scrapeCauseListPage(url: string, firecrawlKey: string): Promise<any[]> {
   console.log(`[SCRAPER] Fetching cause list: ${url}`);
 
   const openRouterKey = Deno.env.get('OPENROUTER_API_KEY');
 
-  // For PDFs, use Firecrawl to get rendered content (bypasses access restrictions)
+  // For PDFs, try multiple approaches
   if (url.endsWith('.pdf')) {
-    console.log(`[SCRAPER] PDF URL detected, using Firecrawl for access`);
+    console.log(`[SCRAPER] PDF URL detected, attempting download with session headers`);
     
+    // Approach 1: Direct fetch with proper referer and cookies simulation
     try {
-      // Use Firecrawl to fetch the PDF as markdown
+      const pdfResponse = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'application/pdf,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Referer': 'https://hcraj.nic.in/quick-causelist-jp/',
+          'Origin': 'https://hcraj.nic.in',
+          'Sec-Fetch-Dest': 'document',
+          'Sec-Fetch-Mode': 'navigate',
+          'Sec-Fetch-Site': 'same-origin',
+          'Sec-Fetch-User': '?1',
+          'Upgrade-Insecure-Requests': '1',
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      });
+
+      if (pdfResponse.ok) {
+        const contentType = pdfResponse.headers.get('content-type') || '';
+        console.log(`[SCRAPER] Direct PDF response: ${pdfResponse.status}, content-type: ${contentType}`);
+
+        // Check if we actually got a PDF
+        if (contentType.includes('pdf')) {
+          // We got a PDF! Convert to base64 for AI processing
+          const pdfBuffer = await pdfResponse.arrayBuffer();
+          const pdfBytes = new Uint8Array(pdfBuffer);
+          console.log(`[SCRAPER] Downloaded PDF, size: ${pdfBytes.length} bytes`);
+
+          if (pdfBytes.length > 1000 && openRouterKey) {
+            // Send PDF to Gemini for extraction (Gemini can read PDFs directly)
+            const base64Pdf = btoa(String.fromCharCode(...pdfBytes));
+            const cases = await extractCasesFromPdfWithGemini(base64Pdf, openRouterKey);
+            console.log(`[SCRAPER] Gemini extracted ${cases.length} cases from PDF`);
+            return cases;
+          }
+        } else {
+          // Got HTML error page instead of PDF
+          const errorText = await pdfResponse.text();
+          console.log(`[SCRAPER] Direct fetch returned non-PDF: ${errorText.substring(0, 200)}`);
+        }
+      } else {
+        console.log(`[SCRAPER] Direct PDF fetch failed: ${pdfResponse.status}`);
+      }
+    } catch (directErr) {
+      console.log(`[SCRAPER] Direct PDF fetch error: ${directErr}`);
+    }
+
+    // Approach 2: Use Firecrawl with longer wait and JS rendering
+    try {
+      console.log(`[SCRAPER] Trying Firecrawl for PDF access`);
+      
       const firecrawlResponse = await fetch('https://api.firecrawl.dev/v1/scrape', {
         method: 'POST',
         headers: {
@@ -499,8 +713,12 @@ async function scrapeCauseListPage(url: string, firecrawlKey: string): Promise<a
         body: JSON.stringify({
           url,
           formats: ['markdown'],
-          waitFor: 2000,
-          timeout: 30000
+          waitFor: 5000,
+          timeout: 45000,
+          headers: {
+            'Referer': 'https://hcraj.nic.in/quick-causelist-jp/',
+            'Origin': 'https://hcraj.nic.in'
+          }
         })
       });
 
@@ -510,23 +728,26 @@ async function scrapeCauseListPage(url: string, firecrawlKey: string): Promise<a
         const markdown = firecrawlResult.data.markdown;
         console.log(`[SCRAPER] Firecrawl returned markdown, length: ${markdown.length}`);
         
-        // Use AI to extract structured data from the markdown
-        if (openRouterKey && markdown.length > 100) {
-          const cases = await extractCasesFromTextWithAI(markdown, openRouterKey);
-          console.log(`[SCRAPER] AI extracted ${cases.length} cases from PDF text`);
-          return cases;
+        // Check if it's actual content or error page
+        if (markdown.length > 500 && !markdown.toLowerCase().includes('access denied')) {
+          if (openRouterKey) {
+            const cases = await extractCasesFromTextWithAI(markdown, openRouterKey);
+            console.log(`[SCRAPER] AI extracted ${cases.length} cases from Firecrawl text`);
+            return cases;
+          }
+          return parseCauseListText(markdown);
+        } else {
+          console.log(`[SCRAPER] Firecrawl content too short or access denied`);
         }
-        
-        // Fallback to regex parsing
-        return parseCauseListText(markdown);
       } else {
         console.log(`[SCRAPER] Firecrawl failed: ${firecrawlResult.error || 'Unknown error'}`);
-        return [];
       }
-    } catch (err) {
-      console.error(`[SCRAPER] Firecrawl error: ${err}`);
-      return [];
+    } catch (fcErr) {
+      console.error(`[SCRAPER] Firecrawl error: ${fcErr}`);
     }
+
+    console.log(`[SCRAPER] All PDF access methods failed for: ${url}`);
+    return [];
   }
 
   // For non-PDF URLs, use direct fetch
@@ -552,6 +773,93 @@ async function scrapeCauseListPage(url: string, firecrawlKey: string): Promise<a
     const errMsg = error instanceof Error ? error.message : 'Unknown error';
     console.error(`[SCRAPER] Direct fetch failed: ${errMsg}`);
     throw error;
+  }
+}
+
+// Extract cases from PDF using Gemini (can process base64 PDFs directly)
+async function extractCasesFromPdfWithGemini(base64Pdf: string, openRouterKey: string): Promise<any[]> {
+  try {
+    console.log(`[SCRAPER] Sending PDF to Gemini for extraction (${base64Pdf.length} chars base64)`);
+
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${openRouterKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://lovable.dev',
+        'X-Title': 'Court Cause List Scraper'
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-2.5-flash',
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: `Extract ALL cases from this Indian High Court cause list PDF. Return a JSON array with each case having these fields:
+- item_no: Serial number (integer)
+- case_number: Full case number (e.g., "S.B. Civil Writ Petition No. 1234/2025")
+- petitioner: Name of petitioner(s)
+- respondent: Name of respondent(s)
+- petitioner_lawyer: Name of petitioner's advocate
+- respondent_lawyer: Name of respondent's advocate (may be AAG/APG/GA for government)
+
+IMPORTANT:
+- Extract EVERY case entry from the table, don't skip any
+- Return ONLY valid JSON array, no markdown or explanation
+- If a field is not found, use null`
+              },
+              {
+                type: 'image_url',
+                image_url: {
+                  url: `data:application/pdf;base64,${base64Pdf}`
+                }
+              }
+            ]
+          }
+        ],
+        max_tokens: 16000,
+        temperature: 0.1
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`[SCRAPER] Gemini PDF error ${response.status}: ${errorText.substring(0, 500)}`);
+      return [];
+    }
+
+    const result = await response.json();
+    const content = result.choices?.[0]?.message?.content || '';
+    
+    console.log(`[SCRAPER] Gemini PDF response length: ${content.length}`);
+    
+    // Parse the JSON response
+    let jsonStr = content.trim();
+    if (jsonStr.startsWith('```json')) jsonStr = jsonStr.slice(7);
+    else if (jsonStr.startsWith('```')) jsonStr = jsonStr.slice(3);
+    if (jsonStr.endsWith('```')) jsonStr = jsonStr.slice(0, -3);
+    jsonStr = jsonStr.trim();
+    
+    const cases = JSON.parse(jsonStr);
+    
+    if (Array.isArray(cases)) {
+      console.log(`[SCRAPER] Successfully parsed ${cases.length} cases from Gemini PDF extraction`);
+      return cases.map(c => ({
+        item_no: parseInt(c.item_no, 10) || 0,
+        case_number: c.case_number || '',
+        petitioner: c.petitioner || null,
+        respondent: c.respondent || null,
+        petitioner_lawyer: c.petitioner_lawyer || null,
+        respondent_lawyer: c.respondent_lawyer || null
+      })).filter(c => c.item_no > 0 || c.case_number);
+    }
+    
+    return [];
+  } catch (err) {
+    console.error(`[SCRAPER] Gemini PDF extraction error:`, err);
+    return [];
   }
 }
 
