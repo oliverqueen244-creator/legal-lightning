@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Scale, Calendar, FileText, Settings, Activity, FileCheck, Globe, ScrollText } from 'lucide-react';
+import { ArrowLeft, Scale, Calendar, FileText, Settings, Activity, FileCheck } from 'lucide-react';
 import { AuthGuard } from '@/components/layout/AuthGuard';
 import { useAuth } from '@/hooks/useAuth';
 import { DocketManager } from '@/components/admin/DocketManager';
@@ -10,8 +10,6 @@ import { ArgumentsManager } from '@/components/admin/ArgumentsManager';
 import { CourtConfig } from '@/components/admin/CourtConfig';
 import { SyncMonitorPanel } from '@/components/admin/SyncMonitorPanel';
 import { DataValidationPanel } from '@/components/admin/DataValidationPanel';
-import { CauseListScraper } from '@/components/admin/CauseListScraper';
-import { ScraperLogsPanel } from '@/components/admin/ScraperLogsPanel';
 
 export default function Admin() {
   const navigate = useNavigate();
@@ -76,18 +74,10 @@ export default function Admin() {
         {/* Main Content */}
         <main className="flex-1 container mx-auto px-4 py-6">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-            <TabsList className="grid w-full max-w-4xl grid-cols-7">
+            <TabsList className="grid w-full max-w-3xl grid-cols-5">
               <TabsTrigger value="docket" className="flex items-center gap-2">
                 <Calendar className="h-4 w-4" />
                 <span className="hidden sm:inline">Docket</span>
-              </TabsTrigger>
-              <TabsTrigger value="scraper" className="flex items-center gap-2">
-                <Globe className="h-4 w-4" />
-                <span className="hidden sm:inline">Scraper</span>
-              </TabsTrigger>
-              <TabsTrigger value="logs" className="flex items-center gap-2">
-                <ScrollText className="h-4 w-4" />
-                <span className="hidden sm:inline">Logs</span>
               </TabsTrigger>
               <TabsTrigger value="arguments" className="flex items-center gap-2">
                 <FileText className="h-4 w-4" />
@@ -109,14 +99,6 @@ export default function Admin() {
 
             <TabsContent value="docket" className="space-y-4">
               <DocketManager />
-            </TabsContent>
-
-            <TabsContent value="scraper" className="space-y-4">
-              <CauseListScraper />
-            </TabsContent>
-
-            <TabsContent value="logs" className="space-y-4">
-              <ScraperLogsPanel />
             </TabsContent>
 
             <TabsContent value="arguments" className="space-y-4">
