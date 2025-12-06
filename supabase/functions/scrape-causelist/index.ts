@@ -478,9 +478,11 @@ function resolveUrl(url: string, baseUrl: string): string {
   return `${baseUrl.replace(/\/$/, '')}/${url}`;
 }
 
-// Scrape a cause list page using direct HTTP request (no Firecrawl)
+// Scrape a cause list page using direct HTTP request and AI for PDF parsing
 async function scrapeCauseListPage(url: string, _firecrawlKey: string): Promise<any[]> {
   console.log(`[SCRAPER] Fetching cause list directly: ${url}`);
+
+  const lovableApiKey = Deno.env.get('LOVABLE_API_KEY');
 
   try {
     // Use direct HTTP request instead of Firecrawl to avoid rate limits
@@ -488,7 +490,7 @@ async function scrapeCauseListPage(url: string, _firecrawlKey: string): Promise<
       method: 'GET',
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,application/pdf,*/*;q=0.8',
         'Accept-Language': 'en-US,en;q=0.5',
         'Referer': 'https://hcraj.nic.in/'
       }
@@ -500,12 +502,25 @@ async function scrapeCauseListPage(url: string, _firecrawlKey: string): Promise<
 
     const contentType = response.headers.get('content-type') || '';
     
-    // Handle PDF files
+    // Handle PDF files using Lovable AI (Gemini) for extraction
     if (contentType.includes('application/pdf') || url.endsWith('.pdf')) {
-      console.log(`[SCRAPER] PDF detected, storing for later processing: ${url}`);
-      // For PDFs, we can't parse them directly in edge functions easily
-      // Return empty array - the PDF URL is already stored in source_url
-      return [];
+      console.log(`[SCRAPER] PDF detected, using AI extraction: ${url}`);
+      
+      if (!lovableApiKey) {
+        console.log(`[SCRAPER] No LOVABLE_API_KEY, skipping PDF extraction`);
+        return [];
+      }
+
+      // Get PDF as ArrayBuffer
+      const pdfBuffer = await response.arrayBuffer();
+      
+      console.log(`[SCRAPER] PDF size: ${pdfBuffer.byteLength} bytes`);
+
+      // Use pdf-parse to extract case data from PDF
+      const cases = await extractCasesFromPdfWithAI(pdfBuffer, lovableApiKey);
+      console.log(`[SCRAPER] Extracted ${cases.length} cases from PDF`);
+      
+      return cases;
     }
 
     // Handle HTML content
@@ -517,6 +532,132 @@ async function scrapeCauseListPage(url: string, _firecrawlKey: string): Promise<
     const errMsg = error instanceof Error ? error.message : 'Unknown error';
     console.error(`[SCRAPER] Direct fetch failed: ${errMsg}`);
     throw error;
+  }
+}
+
+// PDF extraction - for now, just store the URL without parsing
+// PDF parsing in edge functions is complex; consider using external service
+async function extractCasesFromPdfWithAI(_pdfBuffer: ArrayBuffer, _apiKey: string): Promise<any[]> {
+  // PDF text extraction requires external service or dedicated worker
+  // The PDF URLs are stored in source_url for later processing
+  console.log(`[SCRAPER] PDF extraction not yet implemented - URL stored for later processing`);
+  return [];
+}
+
+// Parse cause list text extracted from PDF
+function parseCauseListText(text: string): any[] {
+  const cases: any[] = [];
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l);
+  
+  // Pattern to match item numbers at start of line
+  // Common patterns: "1.", "1)", "1 ", "Sr.No. 1"
+  const itemPattern = /^(\d{1,4})[\.\)\s]/;
+  
+  // Case number patterns for Indian courts
+  const caseNumberPatterns = [
+    /S\.?B\.?\s*(?:Civil|Criminal|Misc\.?)?\s*(?:Writ|Appeal|Petition|Application|Revision)?\s*(?:No\.?)?\s*\d+\/\d{4}/gi,
+    /D\.?B\.?\s*(?:Civil|Criminal|Misc\.?)?\s*(?:Writ|Appeal|Petition|Application|Revision)?\s*(?:No\.?)?\s*\d+\/\d{4}/gi,
+    /(?:CW|CA|CR|MA|RA|SA|WP|CP)\s*(?:No\.?)?\s*\d+\/\d{4}/gi,
+    /\d+\/\d{4}/g // Fallback: just case numbers
+  ];
+  
+  let currentCase: any = null;
+  let currentText = '';
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const itemMatch = line.match(itemPattern);
+    
+    if (itemMatch) {
+      // Save previous case if exists
+      if (currentCase && currentCase.item_no > 0) {
+        parseAndSaveCase(currentCase, currentText, cases);
+      }
+      
+      // Start new case
+      const itemNo = parseInt(itemMatch[1], 10);
+      if (itemNo > 0 && itemNo < 1000) { // Reasonable item number range
+        currentCase = { item_no: itemNo };
+        currentText = line.substring(itemMatch[0].length).trim();
+      }
+    } else if (currentCase) {
+      // Continue building current case text
+      currentText += ' ' + line;
+    }
+  }
+  
+  // Don't forget the last case
+  if (currentCase && currentCase.item_no > 0) {
+    parseAndSaveCase(currentCase, currentText, cases);
+  }
+  
+  return cases;
+}
+
+// Parse case details from accumulated text
+function parseAndSaveCase(caseObj: any, text: string, cases: any[]): void {
+  // Extract case number
+  const casePatterns = [
+    /S\.?B\.?\s*(?:Civil|Criminal|Misc\.?)?\s*(?:Writ|Appeal|Petition|Application|Revision)?\s*(?:No\.?)?\s*\d+\/\d{4}/i,
+    /D\.?B\.?\s*(?:Civil|Criminal|Misc\.?)?\s*(?:Writ|Appeal|Petition|Application|Revision)?\s*(?:No\.?)?\s*\d+\/\d{4}/i,
+    /(?:CW|CA|CR|MA|RA|SA|WP|CP)\s*(?:No\.?)?\s*\d+\/\d{4}/i,
+  ];
+  
+  for (const pattern of casePatterns) {
+    const match = text.match(pattern);
+    if (match) {
+      caseObj.case_number = match[0].trim();
+      break;
+    }
+  }
+  
+  // If no case number found, try simple pattern
+  if (!caseObj.case_number) {
+    const simpleMatch = text.match(/\d+\/\d{4}/);
+    if (simpleMatch) {
+      caseObj.case_number = simpleMatch[0];
+    }
+  }
+  
+  // Extract petitioner and respondent (pattern: "X Vs. Y" or "X V/s Y")
+  const vsMatch = text.match(/([^Vv]+)\s+[Vv][Ss\.\/]+\s+(.+?)(?=\s+(?:Adv|Mr\.|Ms\.|Shri|Smt\.|AAG|APG|GA)|$)/i);
+  if (vsMatch) {
+    caseObj.petitioner = vsMatch[1].replace(/[^\w\s]/g, '').trim().substring(0, 200);
+    caseObj.respondent = vsMatch[2].replace(/[^\w\s]/g, '').trim().substring(0, 200);
+  }
+  
+  // Extract lawyers
+  const lawyerPatterns = [
+    /(?:Adv\.?|Advocate|Counsel)\s*[:\-]?\s*([A-Za-z\s\.]+?)(?=\s+(?:Vs|V\/s|for|$))/gi,
+    /(?:Mr\.|Ms\.|Shri|Smt\.)\s+([A-Za-z\s\.]+?)(?=\s+(?:Adv|for|Vs|$))/gi,
+  ];
+  
+  // Look for petitioner lawyer
+  const petLawyerMatch = text.match(/(?:for\s+(?:the\s+)?petitioner|pet\s*:?\s*)(?:Adv\.?|Mr\.|Ms\.|Shri|Smt\.)\s*([A-Za-z\s\.]+)/i);
+  if (petLawyerMatch) {
+    caseObj.petitioner_lawyer = petLawyerMatch[1].trim().substring(0, 100);
+  }
+  
+  // Look for respondent lawyer (often AAG, APG, GA for government)
+  const respLawyerMatch = text.match(/(?:for\s+(?:the\s+)?respondent|resp\s*:?\s*)(?:AAG|APG|GA|Adv\.?|Mr\.|Ms\.|Shri|Smt\.)\s*([A-Za-z\s\.]*)/i);
+  if (respLawyerMatch) {
+    const lawyer = respLawyerMatch[0].includes('AAG') ? 'AAG' : 
+                   respLawyerMatch[0].includes('APG') ? 'APG' :
+                   respLawyerMatch[0].includes('GA') ? 'GA' :
+                   respLawyerMatch[1]?.trim().substring(0, 100);
+    caseObj.respondent_lawyer = lawyer;
+  }
+  
+  // Only add if we have at least case number or item number
+  if (caseObj.case_number || caseObj.petitioner) {
+    cases.push({
+      item_no: caseObj.item_no,
+      case_number: caseObj.case_number || '',
+      petitioner: caseObj.petitioner || null,
+      respondent: caseObj.respondent || null,
+      petitioner_lawyer: caseObj.petitioner_lawyer || null,
+      respondent_lawyer: caseObj.respondent_lawyer || null
+    });
   }
 }
 
