@@ -2606,16 +2606,21 @@ if (req.method === 'OPTIONS') {
               {/* Current Status Summary */}
               <div className="p-4 rounded-lg bg-primary/10 border border-primary/20">
                 <h4 className="font-semibold text-foreground mb-3">Current Status Summary</h4>
-                <div className="grid gap-2 text-sm">
+                <div className="grid gap-3 text-sm">
                   <div className="flex items-center gap-2">
                     <span className="w-3 h-3 rounded-full bg-green-500"></span>
                     <span className="text-foreground">Working:</span>
-                    <span className="text-muted-foreground">Court metadata & judge names extraction (20 courts)</span>
+                    <span className="text-muted-foreground">Court metadata & judge names extraction (48 courts: 24 JAIPUR + 24 JODHPUR)</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="w-3 h-3 rounded-full bg-red-500"></span>
                     <span className="text-foreground">Blocked:</span>
-                    <span className="text-muted-foreground">PDF case data extraction (requires session-based browser automation)</span>
+                    <span className="text-muted-foreground">PDF case data extraction (0 cases - requires session-based browser automation)</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-3 h-3 rounded-full bg-blue-500"></span>
+                    <span className="text-foreground">Scraper Runs:</span>
+                    <span className="text-muted-foreground">102 success • 58 warning • 38 failed</span>
                   </div>
                 </div>
               </div>
@@ -3013,26 +3018,38 @@ ERROR: API format issues and rate limiting`}
 └──────────────────────────────────────────────────────────────────────────┘
 
     ┌─────────────────────────────────────────────────────────────────────┐
-    │  ✅ COURT METADATA EXTRACTION                                       │
+    │  ✅ COURT METADATA EXTRACTION (48 Courts Total)                     │
     │                                                                     │
     │  Source: Quick Download Page HTML Table                             │
     │  Method: Firecrawl markdown scrape + regex parsing                 │
     │                                                                     │
-    │  Extracted Data:                                                    │
-    │  ┌───────────┬─────────────────────────────────────────────────┐   │
-    │  │ Court No  │ Judge Names                                      │   │
-    │  ├───────────┼─────────────────────────────────────────────────┤   │
-    │  │ 1         │ HON'BLE MR. JUSTICE MANINDRA MOHAN SHRIVASTAVA  │   │
-    │  │ 2         │ HON'BLE MR. JUSTICE PUSHPENDRA SINGH BHATI      │   │
-    │  │ 3         │ HON'BLE MR. JUSTICE INDERJEET SINGH,            │   │
-    │  │           │ MR. JUSTICE RAVI CHIRANIA                        │   │
-    │  │ 4         │ HON'BLE MR. JUSTICE ARUN MONGA,                  │   │
-    │  │           │ MR. JUSTICE SUDESH BANSAL                        │   │
-    │  │ ...       │ (20 courts total)                                │   │
-    │  └───────────┴─────────────────────────────────────────────────┘   │
+    │  Database Stats:                                                    │
+    │  ┌───────────────────────────────────────────────────────────────┐ │
+    │  │ Bench     │ Courts │ Status                                    │ │
+    │  ├───────────┼────────┼───────────────────────────────────────────┤ │
+    │  │ JAIPUR    │ 24     │ ✅ Metadata extracted                     │ │
+    │  │ JODHPUR   │ 24     │ ✅ Metadata extracted                     │ │
+    │  └───────────┴────────┴───────────────────────────────────────────┘ │
+    │                                                                     │
+    │  Scraper Run Statistics:                                            │
+    │  ┌───────────────────────────────────────────────────────────────┐ │
+    │  │ Status    │ Count │ Description                                │ │
+    │  ├───────────┼───────┼────────────────────────────────────────────┤ │
+    │  │ Success   │ 102   │ Full metadata extracted                    │ │
+    │  │ Warning   │ 58    │ Partial data (PDF access blocked)          │ │
+    │  │ Failed    │ 38    │ Rate limits / network errors               │ │
+    │  └───────────┴───────┴────────────────────────────────────────────┘ │
     │                                                                     │
     │  Storage: court_metadata table in Supabase                         │
     │  Refresh: Every 30 minutes via useScrapeOnLogin hook               │
+    └─────────────────────────────────────────────────────────────────────┘
+
+    ┌─────────────────────────────────────────────────────────────────────┐
+    │  ❌ CASE DATA EXTRACTION (0 Cases)                                  │
+    │                                                                     │
+    │  Status: BLOCKED - PDF access requires session authentication       │
+    │  Cause: Website uses JavaScript-only navigation with cookies       │
+    │  Impact: Cannot auto-populate daily_court_docket table             │
     └─────────────────────────────────────────────────────────────────────┘
 
     ┌─────────────────────────────────────────────────────────────────────┐
