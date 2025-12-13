@@ -23,31 +23,8 @@ interface TelegramMessage {
   };
 }
 
-// Telegram channel usernames for Rajasthan High Court live boards
-const TELEGRAM_CHANNELS = {
-  JAIPUR: [
-    'rhc_jaipur_court1',
-    'rhc_jaipur_court2', 
-    'rhc_jaipur_court3',
-    'rhc_jaipur_court4',
-    'rhc_jaipur_court5',
-    'rhc_jaipur_liveboard', // Main channel if exists
-  ],
-  JODHPUR: [
-    'rhc_jodhpur_court1',
-    'rhc_jodhpur_court2',
-    'rhc_jodhpur_court3', 
-    'rhc_jodhpur_court4',
-    'rhc_jodhpur_court5',
-    'rhc_jodhpur_liveboard', // Main channel if exists
-  ]
-};
-
-// Alternative: If the court uses a single channel with all updates
-const CONSOLIDATED_CHANNELS = {
-  JAIPUR: 'RHCJaipurLiveBoard',
-  JODHPUR: 'RHCJodhpurLiveBoard'
-};
+// Telegram channel for Rajasthan High Court live boards
+const MAIN_CHANNEL = 'hcrajtc';
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -184,72 +161,25 @@ async function fetchTelegramUpdates(
   const liveBoardData: LiveBoardData[] = [];
 
   try {
-    // Use Telegram's HTTP API with session
-    // The session string allows us to make authenticated requests
+    // Fetch from the main channel
+    const publicUrl = `https://t.me/s/${MAIN_CHANNEL}`;
+    console.log(`[telegram-scraper] Fetching from public preview: ${publicUrl}`);
     
-    // For MTProto session-based access, we need to call Telegram's API
-    // This is a simplified implementation - full MTProto would require a library
-    
-    // Alternative approach: Use a Telegram Bot API if available
-    // Or parse from a public channel if the court publishes there
-    
-    // For now, let's implement using web scraping of telegram.me/s/ public preview
-    const channelUsername = CONSOLIDATED_CHANNELS[bench as keyof typeof CONSOLIDATED_CHANNELS];
-    
-    if (channelUsername) {
-      const publicUrl = `https://t.me/s/${channelUsername}`;
-      console.log(`[telegram-scraper] Fetching from public preview: ${publicUrl}`);
-      
-      const response = await fetch(publicUrl, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        }
-      });
-
-      if (response.ok) {
-        const html = await response.text();
-        const parsed = parsePublicChannelMessages(html);
-        liveBoardData.push(...parsed);
-      } else {
-        console.log(`[telegram-scraper] Public preview fetch failed: ${response.status}`);
+    const response = await fetch(publicUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
       }
+    });
+
+    if (response.ok) {
+      const html = await response.text();
+      const parsed = parsePublicChannelMessages(html);
+      liveBoardData.push(...parsed);
+      console.log(`[telegram-scraper] Parsed ${parsed.length} updates from main channel`);
+    } else {
+      console.log(`[telegram-scraper] Public preview fetch failed: ${response.status}`);
     }
 
-    // Also try individual court channels
-    const courtChannels = TELEGRAM_CHANNELS[bench as keyof typeof TELEGRAM_CHANNELS] || [];
-    
-    for (const channel of courtChannels.slice(0, 5)) {
-      try {
-        const publicUrl = `https://t.me/s/${channel}`;
-        const response = await fetch(publicUrl, {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-          }
-        });
-
-        if (response.ok) {
-          const html = await response.text();
-          const parsed = parsePublicChannelMessages(html);
-          
-          // Extract court number from channel name
-          const courtNoMatch = channel.match(/court(\d+)/i);
-          if (courtNoMatch && parsed.length > 0) {
-            parsed.forEach(p => {
-              if (!p.court_no) {
-                p.court_no = courtNoMatch[1];
-              }
-            });
-          }
-          
-          liveBoardData.push(...parsed);
-        }
-      } catch (err) {
-        console.log(`[telegram-scraper] Error fetching ${channel}:`, err);
-      }
-      
-      // Small delay between requests
-      await new Promise(r => setTimeout(r, 200));
-    }
 
   } catch (error) {
     console.error('[telegram-scraper] Error fetching updates:', error);
