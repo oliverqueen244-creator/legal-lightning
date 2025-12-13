@@ -20,3 +20,6 @@ verify_jwt = false
 
 [functions.scrape-telegram-causelist]
 verify_jwt = false
+
+[functions.telegram-webhook]
+verify_jwt = false
