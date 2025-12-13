@@ -7,7 +7,7 @@ const corsHeaders = {
 };
 
 // Telegram channel for Rajasthan High Court
-const CHANNEL_USERNAME = 'hcrajtc';
+const CHANNEL_URL = 'https://t.me/s/hcrajtc';
 
 interface CauselistInfo {
   bench: 'JAIPUR' | 'JODHPUR';
@@ -28,20 +28,17 @@ serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const telegramApiId = Deno.env.get('TELEGRAM_API_ID');
-    const telegramApiHash = Deno.env.get('TELEGRAM_API_HASH');
-    const telegramSession = Deno.env.get('TELEGRAM_SESSION_STRING');
+    const firecrawlKey = Deno.env.get('FIRECRAWL_API_KEY');
     const openRouterKey = Deno.env.get('OPENROUTER_API_KEY');
     const lovableApiKey = Deno.env.get('LOVABLE_API_KEY');
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Validate Telegram credentials
-    if (!telegramApiId || !telegramApiHash || !telegramSession) {
-      console.error('[telegram-causelist] Missing Telegram credentials');
+    if (!firecrawlKey) {
+      console.error('[telegram-causelist] FIRECRAWL_API_KEY not configured');
       return new Response(JSON.stringify({
         success: false,
-        error: 'Telegram credentials not configured. Need: TELEGRAM_API_ID, TELEGRAM_API_HASH, TELEGRAM_SESSION_STRING'
+        error: 'FIRECRAWL_API_KEY not configured'
       }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -55,70 +52,93 @@ serve(async (req) => {
     console.log(`[telegram-causelist] Action: ${action}, Date: ${targetDate}`);
 
     if (action === 'scrape') {
-      // Since public preview doesn't show messages, we need to use MTProto
-      // The session string allows authenticated access to the channel
+      // Use Firecrawl to scrape the public Telegram channel with JS rendering
+      console.log(`[telegram-causelist] Scraping channel: ${CHANNEL_URL}`);
       
-      // For now, use the Telegram Bot API approach or a proxy service
-      // Full MTProto implementation requires the gramjs/telethon equivalent for Deno
-      
-      // Alternative: Use a webhook or external service to forward messages
-      // For now, let's implement a workaround using the Telegram API
-      
-      const messages = await fetchChannelMessages(
-        telegramApiId,
-        telegramApiHash,
-        telegramSession,
-        CHANNEL_USERNAME
-      );
+      const firecrawlResponse = await fetch('https://api.firecrawl.dev/v1/scrape', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${firecrawlKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          url: CHANNEL_URL,
+          formats: ['markdown', 'html', 'links'],
+          waitFor: 5000, // Wait for JS to load
+          timeout: 60000,
+        })
+      });
 
-      console.log(`[telegram-causelist] Fetched ${messages.length} messages`);
-
-      // Parse messages to find causelist PDFs
-      const causelists: CauselistInfo[] = [];
+      const firecrawlData = await firecrawlResponse.json();
       
-      for (const msg of messages) {
-        const parsed = parseCauselistMessage(msg.text, msg.fileUrl, msg.date);
-        if (parsed) {
-          causelists.push(parsed);
-        }
+      if (!firecrawlResponse.ok || !firecrawlData.success) {
+        console.error('[telegram-causelist] Firecrawl error:', firecrawlData);
+        return new Response(JSON.stringify({
+          success: false,
+          error: firecrawlData.error || 'Failed to scrape Telegram channel'
+        }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
       }
 
+      const html = firecrawlData.data?.html || '';
+      const markdown = firecrawlData.data?.markdown || '';
+      const links = firecrawlData.data?.links || [];
+
+      console.log(`[telegram-causelist] Scraped HTML length: ${html.length}, Links: ${links.length}`);
+
+      // Parse messages and find PDF links
+      const causelists = parseChannelContent(html, markdown, links, targetDate);
       console.log(`[telegram-causelist] Found ${causelists.length} causelists`);
 
-      // Process each causelist
+      // Process each causelist PDF
       let totalCases = 0;
       const errors: string[] = [];
+      const processedCauselists: CauselistInfo[] = [];
 
       for (const causelist of causelists) {
         try {
-          // Download and parse the PDF
+          console.log(`[telegram-causelist] Processing: ${causelist.bench} Court ${causelist.court_no} - ${causelist.pdf_url}`);
+          
+          // Download and parse the PDF using Firecrawl
           const cases = await processCauselistPdf(
             causelist,
             supabase,
-            openRouterKey || lovableApiKey
+            firecrawlKey,
+            openRouterKey || lovableApiKey,
+            targetDate
           );
+          
           totalCases += cases;
-          console.log(`[telegram-causelist] Processed ${causelist.bench} Court ${causelist.court_no}: ${cases} cases`);
+          processedCauselists.push(causelist);
+          console.log(`[telegram-causelist] Processed ${cases} cases from ${causelist.bench} Court ${causelist.court_no}`);
         } catch (err) {
           const errMsg = err instanceof Error ? err.message : 'Unknown error';
           errors.push(`${causelist.bench} Court ${causelist.court_no}: ${errMsg}`);
-          console.error(`[telegram-causelist] Error processing causelist:`, errMsg);
+          console.error(`[telegram-causelist] Error:`, errMsg);
         }
       }
 
       // Log the scraper run
       await supabase.from('scraper_logs').insert({
         bench: 'TELEGRAM',
-        status: errors.length === 0 ? 'success' : (totalCases > 0 ? 'partial' : 'failed'),
+        status: causelists.length === 0 ? 'warning' : (errors.length === 0 ? 'success' : (totalCases > 0 ? 'partial' : 'failed')),
         cases_found: totalCases,
         list_type: 'DAILY',
-        error_message: errors.length > 0 ? errors.join('; ') : null
+        error_message: errors.length > 0 ? errors.join('; ') : (causelists.length === 0 ? 'No causelists found in channel' : null)
       });
 
       return new Response(JSON.stringify({
         success: true,
-        messages_found: messages.length,
+        channel: CHANNEL_URL,
         causelists_found: causelists.length,
+        causelists: processedCauselists.map(c => ({
+          bench: c.bench,
+          court_no: c.court_no,
+          list_type: c.list_type,
+          pdf_url: c.pdf_url
+        })),
         cases_processed: totalCases,
         errors: errors.length > 0 ? errors : undefined,
         duration_ms: Date.now() - startTime
@@ -128,14 +148,29 @@ serve(async (req) => {
     }
 
     if (action === 'test') {
-      // Test the Telegram connection
-      const testResult = await testTelegramAccess(
-        telegramApiId,
-        telegramApiHash,
-        telegramSession
-      );
+      // Test scraping the channel
+      const testResponse = await fetch('https://api.firecrawl.dev/v1/scrape', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${firecrawlKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          url: CHANNEL_URL,
+          formats: ['markdown', 'links'],
+          waitFor: 3000,
+        })
+      });
 
-      return new Response(JSON.stringify(testResult), {
+      const testData = await testResponse.json();
+      
+      return new Response(JSON.stringify({
+        success: testData.success,
+        message: testData.success ? 'Successfully scraped Telegram channel' : 'Failed to scrape channel',
+        markdown_preview: testData.data?.markdown?.substring(0, 500),
+        links_found: testData.data?.links?.length || 0,
+        sample_links: testData.data?.links?.slice(0, 10)
+      }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
@@ -159,157 +194,282 @@ serve(async (req) => {
   }
 });
 
-interface TelegramMessage {
-  id: number;
-  text: string;
-  date: string;
-  fileUrl?: string;
-  fileName?: string;
-}
+function parseChannelContent(
+  html: string,
+  markdown: string,
+  links: string[],
+  targetDate: string
+): CauselistInfo[] {
+  const causelists: CauselistInfo[] = [];
+  const seenUrls = new Set<string>();
 
-async function fetchChannelMessages(
-  apiId: string,
-  apiHash: string,
-  sessionString: string,
-  channelUsername: string
-): Promise<TelegramMessage[]> {
-  const messages: TelegramMessage[] = [];
+  // Find PDF links from the links array
+  const pdfLinks = links.filter(link => 
+    link.includes('.pdf') || 
+    link.includes('causelist') ||
+    link.includes('cause_list') ||
+    link.includes('hcraj.nic.in')
+  );
 
-  try {
-    // MTProto requires complex implementation
-    // For Deno, we can use the Telegram API through HTTP
-    // The session string from telethon contains auth data
-    
-    // Parse session string to extract auth info
-    // Telethon session format: dc_id:server_address:port:auth_key
-    const sessionParts = sessionString.split(':');
-    
-    if (sessionParts.length < 4) {
-      console.log('[telegram-causelist] Session string format not recognized, trying alternative methods');
+  console.log(`[telegram-causelist] Found ${pdfLinks.length} potential PDF links`);
+
+  // Parse message blocks from HTML to get context for each PDF
+  const messageBlocks = html.match(/<div class="tgme_widget_message[^"]*"[\s\S]*?<\/div>\s*<\/div>\s*<\/div>/gi) || [];
+  
+  for (const block of messageBlocks) {
+    // Extract message text
+    const textMatch = block.match(/<div class="tgme_widget_message_text[^"]*"[^>]*>([\s\S]*?)<\/div>/i);
+    const messageText = textMatch ? 
+      textMatch[1]
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<[^>]+>/g, '')
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&amp;/g, '&')
+        .trim() : '';
+
+    // Extract links from this message block
+    const blockLinks = block.match(/href=["']([^"']+)["']/gi) || [];
+    const blockUrls = blockLinks
+      .map(l => l.match(/href=["']([^"']+)["']/i)?.[1])
+      .filter(Boolean) as string[];
+
+    // Find PDF URLs in this block
+    for (const url of blockUrls) {
+      if (seenUrls.has(url)) continue;
       
-      // Try using Telegram's web export or bot API as fallback
-      // For now, return empty - full implementation needs gramjs equivalent
-      return messages;
+      if (url.includes('.pdf') || url.includes('causelist')) {
+        seenUrls.add(url);
+        
+        const info = extractCauselistInfo(messageText, url, targetDate);
+        if (info) {
+          causelists.push(info);
+        }
+      }
     }
 
-    // For full MTProto implementation, we would need to:
-    // 1. Connect to Telegram DC using the session
-    // 2. Call messages.getHistory for the channel
-    // 3. Parse the response to extract messages and files
-    
-    // Since this is complex, let's use an alternative approach:
-    // Check if there's a bot token we can use, or implement a webhook receiver
-    
-    console.log('[telegram-causelist] MTProto not fully implemented in Deno edge function');
-    console.log('[telegram-causelist] Consider using a bot or webhook approach');
-
-  } catch (error) {
-    console.error('[telegram-causelist] Error fetching messages:', error);
+    // Also check for document attachments (Telegram files)
+    const docMatch = block.match(/href=["']([^"']*(?:cdn|telesco\.pe|tgstat)[^"']*)["']/i);
+    if (docMatch && docMatch[1] && !seenUrls.has(docMatch[1])) {
+      seenUrls.add(docMatch[1]);
+      const info = extractCauselistInfo(messageText, docMatch[1], targetDate);
+      if (info) {
+        causelists.push(info);
+      }
+    }
   }
 
-  return messages;
+  // Also process standalone PDF links not in message blocks
+  for (const url of pdfLinks) {
+    if (seenUrls.has(url)) continue;
+    seenUrls.add(url);
+    
+    const info = extractCauselistInfo('', url, targetDate);
+    if (info) {
+      causelists.push(info);
+    }
+  }
+
+  return causelists;
 }
 
-function parseCauselistMessage(
-  text: string,
-  fileUrl: string | undefined,
-  date: string
+function extractCauselistInfo(
+  messageText: string,
+  pdfUrl: string,
+  targetDate: string
 ): CauselistInfo | null {
-  if (!text && !fileUrl) return null;
-
-  // Common patterns in causelist messages:
-  // "Jaipur Bench - Court No. 1 - Daily Causelist"
-  // "जोधपुर - कोर्ट 3 - दैनिक वादसूची"
-  // "Supplementary List Court 5 Jodhpur"
+  const lowerText = messageText.toLowerCase();
+  const lowerUrl = pdfUrl.toLowerCase();
   
-  const lowerText = (text || '').toLowerCase();
-  
-  // Determine bench
+  // Determine bench from text or URL
   let bench: 'JAIPUR' | 'JODHPUR' = 'JAIPUR';
-  if (lowerText.includes('jodhpur') || lowerText.includes('जोधपुर')) {
+  if (lowerText.includes('jodhpur') || lowerText.includes('जोधपुर') || 
+      lowerUrl.includes('jodh') || lowerUrl.includes('jdp')) {
     bench = 'JODHPUR';
+  } else if (lowerText.includes('jaipur') || lowerText.includes('जयपुर') ||
+             lowerUrl.includes('jaip') || lowerUrl.includes('jp')) {
+    bench = 'JAIPUR';
   }
   
   // Determine list type
   let list_type: 'DAILY' | 'SUPPLEMENTARY' = 'DAILY';
-  if (lowerText.includes('supp') || lowerText.includes('अनुपूरक')) {
+  if (lowerText.includes('supp') || lowerText.includes('अनुपूरक') ||
+      lowerUrl.includes('supp')) {
     list_type = 'SUPPLEMENTARY';
   }
   
-  // Extract court number
-  const courtMatch = text?.match(/court\s*(?:no\.?)?\s*[:\-]?\s*(\d+)/i) ||
-                     text?.match(/कोर्ट\s*(\d+)/i);
-  const court_no = courtMatch ? courtMatch[1] : '1';
-  
-  // If there's a PDF file, this is likely a causelist
-  if (fileUrl && (fileUrl.endsWith('.pdf') || lowerText.includes('causelist') || lowerText.includes('वादसूची'))) {
-    return {
-      bench,
-      court_no,
-      list_type,
-      date,
-      pdf_url: fileUrl,
-      message_text: text || ''
-    };
+  // Extract court number from text or URL
+  let court_no = '1';
+  const courtMatch = messageText.match(/court\s*(?:no\.?)?\s*[:\-]?\s*(\d+)/i) ||
+                     messageText.match(/कोर्ट\s*(?:नं\.?)?\s*[:\-]?\s*(\d+)/i) ||
+                     pdfUrl.match(/_(\d+)\.pdf$/i) ||
+                     pdfUrl.match(/court[-_]?(\d+)/i);
+  if (courtMatch) {
+    court_no = courtMatch[1];
   }
   
-  return null;
+  // Extract date from message or URL if available
+  let date = targetDate;
+  const dateMatch = messageText.match(/(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})/) ||
+                    pdfUrl.match(/(\d{2})(\d{2})(\d{4})/);
+  if (dateMatch) {
+    const day = dateMatch[1].padStart(2, '0');
+    const month = dateMatch[2].padStart(2, '0');
+    const year = dateMatch[3].length === 2 ? `20${dateMatch[3]}` : dateMatch[3];
+    date = `${year}-${month}-${day}`;
+  }
+
+  return {
+    bench,
+    court_no,
+    list_type,
+    date,
+    pdf_url: pdfUrl,
+    message_text: messageText.substring(0, 200)
+  };
 }
 
 async function processCauselistPdf(
   causelist: CauselistInfo,
   supabase: any,
-  aiApiKey: string | undefined
+  firecrawlKey: string,
+  aiApiKey: string | undefined,
+  targetDate: string
 ): Promise<number> {
-  // Download and parse the PDF
-  // This would use the same PDF parsing logic as scrape-causelist
+  // Use Firecrawl to extract content from the PDF
+  const scrapeResponse = await fetch('https://api.firecrawl.dev/v1/scrape', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${firecrawlKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      url: causelist.pdf_url,
+      formats: ['markdown'],
+      timeout: 60000,
+    })
+  });
+
+  const scrapeData = await scrapeResponse.json();
   
-  console.log(`[telegram-causelist] Would process PDF: ${causelist.pdf_url}`);
+  if (!scrapeData.success) {
+    console.log(`[telegram-causelist] Could not scrape PDF directly, trying alternative approach`);
+    // PDF might need different handling - store the URL for manual processing
+    return 0;
+  }
+
+  const pdfContent = scrapeData.data?.markdown || '';
+  console.log(`[telegram-causelist] PDF content length: ${pdfContent.length}`);
+
+  if (pdfContent.length < 100) {
+    console.log(`[telegram-causelist] PDF content too short, skipping`);
+    return 0;
+  }
+
+  // Parse cases from the PDF content
+  const cases = parseCasesFromPdfContent(pdfContent, causelist);
   
-  // For now, return 0 - full implementation would:
-  // 1. Download the PDF
-  // 2. Use AI to extract case data
-  // 3. Insert into daily_court_docket
-  
-  return 0;
+  // Insert cases into database
+  let insertedCount = 0;
+  for (const caseItem of cases) {
+    const { error } = await supabase
+      .from('daily_court_docket')
+      .upsert({
+        date: causelist.date,
+        court_location: causelist.bench,
+        court_room_no: causelist.court_no,
+        list_type: causelist.list_type,
+        item_no: caseItem.item_no,
+        case_number: caseItem.case_number,
+        petitioner: caseItem.petitioner,
+        respondent: caseItem.respondent,
+        petitioner_lawyer: caseItem.petitioner_lawyer,
+        respondent_lawyer: caseItem.respondent_lawyer,
+        source_url: causelist.pdf_url,
+        status: 'pending'
+      }, {
+        onConflict: 'date,court_location,court_room_no,item_no',
+        ignoreDuplicates: false
+      });
+
+    if (!error) {
+      insertedCount++;
+    }
+  }
+
+  return insertedCount;
 }
 
-async function testTelegramAccess(
-  apiId: string,
-  apiHash: string,
-  sessionString: string
-): Promise<{ success: boolean; message: string; details?: unknown }> {
-  try {
-    // Validate session string format
-    if (!sessionString || sessionString.length < 50) {
-      return {
-        success: false,
-        message: 'Session string appears to be invalid or too short',
-        details: { sessionLength: sessionString?.length || 0 }
-      };
+interface ParsedCase {
+  item_no: number;
+  case_number: string;
+  petitioner: string | null;
+  respondent: string | null;
+  petitioner_lawyer: string | null;
+  respondent_lawyer: string | null;
+}
+
+function parseCasesFromPdfContent(content: string, causelist: CauselistInfo): ParsedCase[] {
+  const cases: ParsedCase[] = [];
+  const lines = content.split('\n');
+
+  // Common patterns in causelists:
+  // "1. D.B. Civil Misc. Appeal No. 1234/2024 - Petitioner vs Respondent"
+  // "| 1 | SBCWP/1234/2024 | ABC | XYZ | Adv. Name1 | Adv. Name2 |"
+  
+  let currentItemNo = 0;
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+
+    // Pattern 1: Numbered list format
+    const numberedMatch = line.match(/^(\d+)[\.\)\s]+(.+)/);
+    if (numberedMatch) {
+      currentItemNo = parseInt(numberedMatch[1], 10);
+      const restOfLine = numberedMatch[2];
+      
+      // Extract case number
+      const caseNoMatch = restOfLine.match(/([A-Z\.]+\s*(?:No\.)?\s*\d+\/\d+)/i);
+      if (caseNoMatch) {
+        cases.push({
+          item_no: currentItemNo,
+          case_number: caseNoMatch[1].trim(),
+          petitioner: null,
+          respondent: null,
+          petitioner_lawyer: null,
+          respondent_lawyer: null
+        });
+      }
+      continue;
     }
 
-    // Check if it looks like a telethon session string
-    const looksValid = sessionString.includes('=') || 
-                       sessionString.match(/^[A-Za-z0-9+/=]+$/) ||
-                       sessionString.includes(':');
-
-    return {
-      success: true,
-      message: 'Telegram credentials configured',
-      details: {
-        apiIdPresent: !!apiId,
-        apiHashPresent: !!apiHash,
-        sessionFormat: looksValid ? 'valid' : 'unknown',
-        note: 'Full MTProto implementation requires additional setup. Consider using a Telegram Bot for easier integration.'
+    // Pattern 2: Table format with pipes
+    if (line.includes('|')) {
+      const cells = line.split('|').map(c => c.trim()).filter(c => c);
+      if (cells.length >= 2) {
+        const itemNoMatch = cells[0].match(/(\d+)/);
+        if (itemNoMatch) {
+          const itemNo = parseInt(itemNoMatch[1], 10);
+          const caseNumber = cells[1] || '';
+          
+          // Skip header rows
+          if (caseNumber.toLowerCase().includes('case') || caseNumber.toLowerCase().includes('item')) {
+            continue;
+          }
+          
+          cases.push({
+            item_no: itemNo,
+            case_number: caseNumber,
+            petitioner: cells[2] || null,
+            respondent: cells[3] || null,
+            petitioner_lawyer: cells[4] || null,
+            respondent_lawyer: cells[5] || null
+          });
+        }
       }
-    };
-
-  } catch (error) {
-    return {
-      success: false,
-      message: 'Error validating credentials',
-      details: error instanceof Error ? error.message : 'Unknown error'
-    };
+    }
   }
+
+  console.log(`[telegram-causelist] Parsed ${cases.length} cases from PDF content`);
+  return cases;
 }
