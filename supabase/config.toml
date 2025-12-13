@@ -17,3 +17,6 @@ verify_jwt = false
 
 [functions.health-check]
 verify_jwt = false
+
+[functions.scrape-telegram-liveboard]
+verify_jwt = false
