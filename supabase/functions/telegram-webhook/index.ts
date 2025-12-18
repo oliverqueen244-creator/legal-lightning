@@ -58,6 +58,24 @@ interface ParsedCase {
   petitioner_lawyer?: string;
   respondent_lawyer?: string;
   judge_names?: string;
+  court_room_no?: string;
+}
+
+interface CourtSection {
+  court_identifier: string;
+  judge_names: string;
+  start_item_no: number;
+  end_item_no: number;
+  items_contiguous: boolean;
+}
+
+interface PdfStructure {
+  total_courts_detected: number;
+  item_numbering_type_global: 'continuous_global' | 'resets_per_court' | 'unknown';
+  courts: CourtSection[];
+  courts_interleaved: boolean;
+  safe_for_court_based_split: boolean;
+  notes: string;
 }
 
 serve(async (req) => {
@@ -401,55 +419,172 @@ async function parsePdfWithAI(
     const pdfDataUrl = `data:application/pdf;base64,${base64Pdf}`;
     console.log(`[TELEGRAM] Base64 encoded, length: ${base64Pdf.length}`);
     
-    // Step 1: Get metadata (judge names and total case count)
-    console.log('[TELEGRAM] Step 1: Getting metadata and case count...');
-    const metadataPrompt = `You are a legal document parser. Analyze this ${bench} Bench ${listType} causelist PDF.
+    // Step 1: Detect PDF structure (courts, item ranges)
+    console.log('[TELEGRAM] Step 1: Detecting PDF structure...');
+    const structurePrompt = `You are analyzing a High Court causelist PDF ONLY to detect its STRUCTURE.
 
-Extract ONLY:
-1. The names of presiding judges
-2. The TOTAL number of cases/items in the entire document
+DO NOT extract individual case details.
+DO NOT list petitioners, respondents, or lawyers.
 
-Return ONLY a valid JSON object (no markdown):
+Your task is to IDENTIFY COURT / BENCH SEGMENTS in the document.
+
+---
+
+STEP 1 — Detect Court / Bench Headers
+
+Scan the document and identify every distinct court or bench section.
+A court section usually includes:
+- Court No / Court Number OR
+- Bench name OR
+- Judge name(s) heading a block of items
+
+---
+
+STEP 2 — For EACH detected court / bench, determine:
+
+- court_identifier: (Court No / Bench name / exact header text as seen in PDF)
+- judge_names: (exact names as written, comma-separated)
+- start_item_no: (first item number appearing under this court)
+- end_item_no: (last item number appearing under this court)
+- item_numbering_type: One of:
+  - "continuous_global" (item numbers continue across courts)
+  - "resets_per_court" (item numbers restart at 1 for each court)
+  - "unknown"
+
+---
+
+STEP 3 — Validate structure integrity
+
+Determine:
+- Are all items for a court CONTIGUOUS? (once a court starts, all its items appear together)
+- Are courts INTERLEAVED? (items from different courts mixed together)
+
+---
+
+STEP 4 — Output SAFETY DECISION
+
+Decide whether it is SAFE to split this PDF by court for parallel parsing.
+Court-based splitting is SAFE ONLY IF:
+- courts are clearly segmented
+- item ranges do not overlap
+- items are not interleaved
+
+---
+
+OUTPUT FORMAT (STRICT JSON — no markdown, no explanations):
 {
-  "judge_names": "Name of presiding judge(s)",
-  "total_cases": 150
+  "total_courts_detected": 3,
+  "item_numbering_type_global": "continuous_global",
+  "courts": [
+    {
+      "court_identifier": "Court No. 1",
+      "judge_names": "Hon'ble Justice A, Hon'ble Justice B",
+      "start_item_no": 1,
+      "end_item_no": 312,
+      "items_contiguous": true
+    }
+  ],
+  "courts_interleaved": false,
+  "safe_for_court_based_split": true,
+  "notes": ""
 }`;
 
-    const metadataResponse = await callLovableAI(lovableApiKey, pdfDataUrl, metadataPrompt);
+    const structureResponse = await callLovableAI(lovableApiKey, pdfDataUrl, structurePrompt);
+    let pdfStructure: PdfStructure | null = null;
     let judgeNames = '';
     let totalCases = 0;
     
-    if (metadataResponse) {
-      const metaMatch = metadataResponse.match(/\{[\s\S]*\}/);
-      if (metaMatch) {
+    if (structureResponse) {
+      const structMatch = structureResponse.match(/\{[\s\S]*\}/);
+      if (structMatch) {
         try {
-          const meta = JSON.parse(metaMatch[0]);
-          judgeNames = meta.judge_names || '';
-          totalCases = parseInt(meta.total_cases) || 0;
-          console.log(`[TELEGRAM] Metadata: ${totalCases} cases, judges: ${judgeNames.substring(0, 50)}...`);
+          pdfStructure = JSON.parse(structMatch[0]) as PdfStructure;
+          console.log(`[TELEGRAM] Structure detected: ${pdfStructure.total_courts_detected} courts, safe_split=${pdfStructure.safe_for_court_based_split}`);
+          
+          // Collect all judge names
+          judgeNames = pdfStructure.courts.map(c => c.judge_names).filter(Boolean).join('; ');
+          
+          // Calculate total cases from structure
+          if (pdfStructure.item_numbering_type_global === 'continuous_global') {
+            totalCases = Math.max(...pdfStructure.courts.map(c => c.end_item_no));
+          } else {
+            totalCases = pdfStructure.courts.reduce((sum, c) => sum + (c.end_item_no - c.start_item_no + 1), 0);
+          }
+          
+          console.log(`[TELEGRAM] Total cases from structure: ${totalCases}, judges: ${judgeNames.substring(0, 80)}...`);
         } catch (e) {
-          console.log('[TELEGRAM] Could not parse metadata, using defaults');
-          totalCases = 200; // Assume max
+          console.log('[TELEGRAM] Could not parse structure, falling back to simple chunking');
         }
       }
     }
     
-    if (totalCases === 0) totalCases = 200; // Default if not detected
-    
-    // Step 2: Parse cases in chunks of 40
-    const CHUNK_SIZE = 40;
     const allCases: ParsedCase[] = [];
-    const chunks = Math.ceil(totalCases / CHUNK_SIZE);
     
-    console.log(`[TELEGRAM] Step 2: Parsing ${totalCases} cases in ${chunks} chunks of ${CHUNK_SIZE}...`);
-    
-    for (let chunk = 0; chunk < chunks; chunk++) {
-      const startItem = chunk * CHUNK_SIZE + 1;
-      const endItem = Math.min((chunk + 1) * CHUNK_SIZE, totalCases);
+    // Step 2: Parse cases - use court-based or chunk-based approach
+    if (pdfStructure && pdfStructure.safe_for_court_based_split && pdfStructure.courts.length > 0) {
+      // Court-based parsing: parse each court section separately
+      console.log(`[TELEGRAM] Step 2: Court-based parsing (${pdfStructure.courts.length} courts)...`);
       
-      console.log(`[TELEGRAM] Parsing chunk ${chunk + 1}/${chunks}: items ${startItem}-${endItem}...`);
+      for (let courtIdx = 0; courtIdx < pdfStructure.courts.length; courtIdx++) {
+        const court = pdfStructure.courts[courtIdx];
+        const courtCaseCount = court.end_item_no - court.start_item_no + 1;
+        
+        console.log(`[TELEGRAM] Parsing ${court.court_identifier}: items ${court.start_item_no}-${court.end_item_no} (${courtCaseCount} cases)...`);
+        
+        // For large courts, chunk them; for small ones, parse in one go
+        const CHUNK_SIZE = 50;
+        
+        if (courtCaseCount <= CHUNK_SIZE) {
+          // Parse entire court section at once
+          const courtCases = await parseCourtSection(
+            lovableApiKey, pdfDataUrl, bench, listType,
+            court.court_identifier, court.judge_names,
+            court.start_item_no, court.end_item_no
+          );
+          allCases.push(...courtCases);
+        } else {
+          // Chunk within this court
+          const chunks = Math.ceil(courtCaseCount / CHUNK_SIZE);
+          for (let chunk = 0; chunk < chunks; chunk++) {
+            const startItem = court.start_item_no + chunk * CHUNK_SIZE;
+            const endItem = Math.min(court.start_item_no + (chunk + 1) * CHUNK_SIZE - 1, court.end_item_no);
+            
+            console.log(`[TELEGRAM]   Chunk ${chunk + 1}/${chunks}: items ${startItem}-${endItem}...`);
+            
+            const chunkCases = await parseCourtSection(
+              lovableApiKey, pdfDataUrl, bench, listType,
+              court.court_identifier, court.judge_names,
+              startItem, endItem
+            );
+            allCases.push(...chunkCases);
+            
+            if (chunk < chunks - 1) {
+              await new Promise(resolve => setTimeout(resolve, 800));
+            }
+          }
+        }
+        
+        // Delay between courts
+        if (courtIdx < pdfStructure.courts.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
+    } else {
+      // Fallback: Simple chunk-based parsing (original approach)
+      if (totalCases === 0) totalCases = 200;
       
-      const chunkPrompt = `You are a legal document parser for Indian High Court causelists.
+      const CHUNK_SIZE = 40;
+      const chunks = Math.ceil(totalCases / CHUNK_SIZE);
+      
+      console.log(`[TELEGRAM] Step 2: Chunk-based parsing (${totalCases} cases in ${chunks} chunks)...`);
+      
+      for (let chunk = 0; chunk < chunks; chunk++) {
+        const startItem = chunk * CHUNK_SIZE + 1;
+        const endItem = Math.min((chunk + 1) * CHUNK_SIZE, totalCases);
+        
+        console.log(`[TELEGRAM] Parsing chunk ${chunk + 1}/${chunks}: items ${startItem}-${endItem}...`);
+        
+        const chunkPrompt = `You are a legal document parser for Indian High Court causelists.
 
 Parse this ${bench} Bench ${listType} causelist PDF and extract ONLY cases with item numbers from ${startItem} to ${endItem}.
 
@@ -458,6 +593,80 @@ For each case, extract:
 - case_number: Full case number
 - petitioner: Name(s) of petitioner(s)
 - respondent: Name(s) of respondent(s)  
+- petitioner_lawyer: Name(s) of advocate(s) for petitioner
+- respondent_lawyer: Name(s) of advocate(s) for respondent
+- court_room_no: Court number if visible
+
+Return ONLY a valid JSON object (no markdown, no code blocks):
+{
+  "cases": [
+    {
+      "item_no": ${startItem},
+      "case_number": "...",
+      "petitioner": "...",
+      "respondent": "...",
+      "petitioner_lawyer": "...",
+      "respondent_lawyer": "...",
+      "court_room_no": "..."
+    }
+  ]
+}
+
+IMPORTANT: Only extract items ${startItem} to ${endItem}. If a field is not available, use null.`;
+
+        const chunkResponse = await callLovableAI(lovableApiKey, pdfDataUrl, chunkPrompt);
+        
+        if (chunkResponse) {
+          const chunkCases = parseChunkResponse(chunkResponse);
+          console.log(`[TELEGRAM] Chunk ${chunk + 1}: extracted ${chunkCases.length} cases`);
+          allCases.push(...chunkCases);
+        }
+        
+        if (chunk < chunks - 1) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+        
+        if (allCases.length >= totalCases || (chunkResponse && parseChunkResponse(chunkResponse).length === 0)) {
+          console.log(`[TELEGRAM] Stopping early: extracted ${allCases.length} cases`);
+          break;
+        }
+      }
+    }
+    
+    console.log(`[TELEGRAM] Total extracted: ${allCases.length} cases`);
+    return { cases: allCases, judgeNames };
+    
+  } catch (error) {
+    console.error('[TELEGRAM] AI parsing error:', error);
+    return { cases: [], judgeNames: '' };
+  }
+}
+
+// Parse a specific court section
+async function parseCourtSection(
+  apiKey: string,
+  pdfDataUrl: string,
+  bench: string,
+  listType: string,
+  courtIdentifier: string,
+  courtJudges: string,
+  startItem: number,
+  endItem: number
+): Promise<ParsedCase[]> {
+  const prompt = `You are a legal document parser for Indian High Court causelists.
+
+Parse this ${bench} Bench ${listType} causelist PDF.
+
+FOCUS ONLY on: ${courtIdentifier}
+Judge(s): ${courtJudges}
+
+Extract ONLY cases with item numbers from ${startItem} to ${endItem}.
+
+For each case, extract:
+- item_no: The serial/item number
+- case_number: Full case number (e.g., "S.B. Civil Writ Petition No. 12345/2024")
+- petitioner: Name(s) of petitioner(s)
+- respondent: Name(s) of respondent(s)
 - petitioner_lawyer: Name(s) of advocate(s) for petitioner
 - respondent_lawyer: Name(s) of advocate(s) for respondent
 
@@ -475,35 +684,20 @@ Return ONLY a valid JSON object (no markdown, no code blocks):
   ]
 }
 
-IMPORTANT: Only extract items ${startItem} to ${endItem}. If a field is not available, use null.`;
+IMPORTANT: Only extract items ${startItem} to ${endItem} from ${courtIdentifier}. If a field is not available, use null.`;
 
-      const chunkResponse = await callLovableAI(lovableApiKey, pdfDataUrl, chunkPrompt);
-      
-      if (chunkResponse) {
-        const chunkCases = parseChunkResponse(chunkResponse);
-        console.log(`[TELEGRAM] Chunk ${chunk + 1}: extracted ${chunkCases.length} cases`);
-        allCases.push(...chunkCases);
-      }
-      
-      // Small delay between chunks to avoid rate limiting
-      if (chunk < chunks - 1) {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-      }
-      
-      // Stop if we've extracted enough or no more cases found
-      if (allCases.length >= totalCases || (chunkResponse && parseChunkResponse(chunkResponse).length === 0)) {
-        console.log(`[TELEGRAM] Stopping early: extracted ${allCases.length} cases`);
-        break;
-      }
-    }
-    
-    console.log(`[TELEGRAM] Total extracted: ${allCases.length} cases`);
-    return { cases: allCases, judgeNames };
-    
-  } catch (error) {
-    console.error('[TELEGRAM] AI parsing error:', error);
-    return { cases: [], judgeNames: '' };
-  }
+  const response = await callLovableAI(apiKey, pdfDataUrl, prompt);
+  
+  if (!response) return [];
+  
+  const cases = parseChunkResponse(response);
+  
+  // Enrich with court info
+  return cases.map(c => ({
+    ...c,
+    judge_names: courtJudges,
+    court_room_no: courtIdentifier.replace(/Court\s*No\.?\s*/i, '').trim() || undefined,
+  }));
 }
 
 // Call Lovable AI (Gemini) first, fallback to OpenAI GPT-4o if it fails
