@@ -317,15 +317,16 @@ async function processNextInQueue(supabase: any, botToken: string, lovableApiKey
   }
 
   // Check if there are more pending documents and process them
-  const { data: pendingCount } = await supabase
+  const { count: pendingCount } = await supabase
     .from('document_processing_queue')
-    .select('id', { count: 'exact', head: true })
+    .select('*', { count: 'exact', head: true })
     .eq('status', 'pending');
 
-  if (pendingCount && pendingCount.length > 0) {
-    console.log(`[TELEGRAM-QUEUE] ${pendingCount.length} more documents pending, processing next...`);
+  if (pendingCount && pendingCount > 0) {
+    console.log(`[TELEGRAM-QUEUE] ${pendingCount} more documents pending, processing next...`);
     // Small delay before processing next
-    await new Promise(r => setTimeout(r, 1000));
+    await new Promise(r => setTimeout(r, 2000));
+    // Continue processing in the same execution context
     await processNextInQueue(supabase, botToken, lovableApiKey, supabaseUrl);
   } else {
     console.log('[TELEGRAM-QUEUE] All documents processed');
