@@ -342,20 +342,29 @@ async function handleTelegramUpdate(update: TelegramUpdate, supabase: any, botTo
 
 async function parsePdfWithAI(
   pdfContent: Uint8Array, 
-  apiKey: string,
+  _apiKey: string, // Not used anymore - using GOOGLE_AI_API_KEY instead
   bench: string,
   listType: string
 ): Promise<{ cases: ParsedCase[], judgeNames: string }> {
   try {
     console.log(`[TELEGRAM] Starting AI parse, PDF size: ${pdfContent.length} bytes`);
     
+    // Get Google AI API key
+    const googleApiKey = Deno.env.get('GOOGLE_AI_API_KEY');
+    if (!googleApiKey) {
+      console.error('[TELEGRAM] GOOGLE_AI_API_KEY not configured');
+      return { cases: [], judgeNames: '' };
+    }
+    
     // Convert PDF to base64 using Deno's standard library approach
-    // btoa doesn't work well with large binary data
     const base64Pdf = encodeBase64(pdfContent);
     console.log(`[TELEGRAM] Base64 encoded, length: ${base64Pdf.length}`);
     
-    const systemPrompt = `You are a legal document parser specialized in Indian High Court causelists.
-Extract ALL cases from the PDF causelist. For each case, extract:
+    const prompt = `You are a legal document parser specialized in Indian High Court causelists.
+
+Parse this ${bench} Bench ${listType} causelist PDF and extract ALL case details.
+
+For each case, extract:
 - item_no: The serial/item number
 - case_number: Full case number (e.g., "S.B. Civil Writ Petition No. 1234/2024")
 - petitioner: Name(s) of petitioner(s)
@@ -365,10 +374,7 @@ Extract ALL cases from the PDF causelist. For each case, extract:
 
 Also extract the judge names presiding over this court.
 
-Be thorough - extract EVERY case listed in the document.`;
-
-    const userPrompt = `Parse this ${bench} Bench ${listType} causelist PDF and extract all case details.
-Return the data as a JSON object with this structure:
+Return ONLY a valid JSON object with this exact structure (no markdown, no code blocks):
 {
   "judge_names": "Name of presiding judge(s)",
   "cases": [
@@ -383,11 +389,11 @@ Return the data as a JSON object with this structure:
   ]
 }
 
-Extract ALL cases from the document. If a field is not available, use null.`;
+Extract ALL cases from the document. If a field is not available, use null. Be thorough.`;
 
-    console.log('[TELEGRAM] Calling Lovable AI...');
+    console.log('[TELEGRAM] Calling Google AI Studio...');
     
-    // Use AbortController with 50 second timeout (edge functions have ~60s limit)
+    // Use AbortController with 50 second timeout
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {
       console.log('[TELEGRAM] AI request timeout, aborting...');
@@ -396,30 +402,27 @@ Extract ALL cases from the document. If a field is not available, use null.`;
     
     let response: Response;
     try {
-      response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${googleApiKey}`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'google/gemini-2.5-flash',
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { 
-              role: 'user', 
-              content: [
-                { type: 'text', text: userPrompt },
-                { 
-                  type: 'image_url',
-                  image_url: {
-                    url: `data:application/pdf;base64,${base64Pdf}`
-                  }
+          contents: [{
+            parts: [
+              { text: prompt },
+              { 
+                inline_data: {
+                  mime_type: 'application/pdf',
+                  data: base64Pdf
                 }
-              ]
-            }
-          ],
-          max_tokens: 16000,
+              }
+            ]
+          }],
+          generationConfig: {
+            maxOutputTokens: 16000,
+            temperature: 0.1,
+          }
         }),
         signal: controller.signal,
       });
@@ -439,12 +442,12 @@ Extract ALL cases from the document. If a field is not available, use null.`;
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('[TELEGRAM] AI API error:', response.status, errorText);
+      console.error('[TELEGRAM] Google AI API error:', response.status, errorText);
       return { cases: [], judgeNames: '' };
     }
 
     const data = await response.json();
-    const content = data.choices?.[0]?.message?.content || '';
+    const content = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
     
     console.log('[TELEGRAM] AI response length:', content.length);
     console.log('[TELEGRAM] AI response preview:', content.substring(0, 500));
