@@ -423,7 +423,7 @@ Extract ALL cases from the document. If a field is not available, use null. Be t
           ],
           generationConfig: {
             temperature: 0.1,
-            maxOutputTokens: 16000,
+            maxOutputTokens: 32000,
           }
         }),
         signal: controller.signal,
