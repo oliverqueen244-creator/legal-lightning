@@ -264,59 +264,99 @@ async function handleTelegramUpdate(update: TelegramUpdate, supabase: any, botTo
     }
   }
 
-  // Store cases in database
+  // Store cases in database with deduplication
   let insertedCount = 0;
+  let skippedCount = 0;
   
   if (parsedCases.length > 0) {
-    // Insert all parsed cases
-    const casesToInsert = parsedCases.map(c => ({
-      date,
-      court_location: bench,
-      list_type: listType,
-      court_room_no: courtNo,
-      item_no: c.item_no,
-      case_number: c.case_number,
-      petitioner: c.petitioner,
-      respondent: c.respondent,
-      petitioner_lawyer: c.petitioner_lawyer,
-      respondent_lawyer: c.respondent_lawyer,
-      judge_names: judgeNames || c.judge_names,
-      source_url: storedPdfUrl || fileUrl || `telegram:${message.message_id}`,
-      status: 'pending',
-    }));
-
-    const { data, error } = await supabase
+    // Check for existing cases for this date/bench/list_type to prevent duplicates
+    const { data: existingCases } = await supabase
       .from('daily_court_docket')
-      .insert(casesToInsert)
-      .select();
-
-    if (error) {
-      console.error('[TELEGRAM] Database error:', error);
-    } else {
-      insertedCount = data?.length || 0;
-      console.log(`[TELEGRAM] Inserted ${insertedCount} cases`);
+      .select('item_no')
+      .eq('date', date)
+      .eq('court_location', bench)
+      .eq('list_type', listType);
+    
+    const existingItemNos = new Set((existingCases || []).map((c: { item_no: number }) => c.item_no));
+    
+    if (existingItemNos.size > 0) {
+      console.log(`[TELEGRAM] Found ${existingItemNos.size} existing cases for ${date}/${bench}/${listType}`);
     }
-  } else {
-    // No parsed cases - store a placeholder entry
-    const { data, error } = await supabase
-      .from('daily_court_docket')
-      .insert({
+    
+    // Filter out cases that already exist
+    const newCases = parsedCases.filter(c => !existingItemNos.has(c.item_no));
+    skippedCount = parsedCases.length - newCases.length;
+    
+    if (skippedCount > 0) {
+      console.log(`[TELEGRAM] Skipping ${skippedCount} duplicate cases`);
+    }
+    
+    if (newCases.length > 0) {
+      // Insert only new cases
+      const casesToInsert = newCases.map(c => ({
         date,
         court_location: bench,
         list_type: listType,
         court_room_no: courtNo,
+        item_no: c.item_no,
+        case_number: c.case_number,
+        petitioner: c.petitioner,
+        respondent: c.respondent,
+        petitioner_lawyer: c.petitioner_lawyer,
+        respondent_lawyer: c.respondent_lawyer,
+        judge_names: judgeNames || c.judge_names,
         source_url: storedPdfUrl || fileUrl || `telegram:${message.message_id}`,
-        status: 'pending_parse',
-        case_number: `PENDING_${message.message_id}`,
-        item_no: 0,
-      })
-      .select();
+        status: 'pending',
+      }));
 
-    if (error) {
-      console.error('[TELEGRAM] Database error:', error);
+      const { data, error } = await supabase
+        .from('daily_court_docket')
+        .insert(casesToInsert)
+        .select();
+
+      if (error) {
+        console.error('[TELEGRAM] Database error:', error);
+      } else {
+        insertedCount = data?.length || 0;
+        console.log(`[TELEGRAM] Inserted ${insertedCount} new cases (skipped ${skippedCount} duplicates)`);
+      }
     } else {
-      insertedCount = 1;
-      console.log(`[TELEGRAM] Created placeholder docket entry: ${data?.[0]?.id}`);
+      console.log(`[TELEGRAM] All ${parsedCases.length} cases already exist, skipping insert`);
+    }
+  } else {
+    // No parsed cases - check if placeholder already exists
+    const { data: existingPlaceholder } = await supabase
+      .from('daily_court_docket')
+      .select('id')
+      .eq('date', date)
+      .eq('court_location', bench)
+      .eq('list_type', listType)
+      .eq('item_no', 0)
+      .maybeSingle();
+    
+    if (existingPlaceholder) {
+      console.log(`[TELEGRAM] Placeholder already exists for ${date}/${bench}/${listType}, skipping`);
+    } else {
+      const { data, error } = await supabase
+        .from('daily_court_docket')
+        .insert({
+          date,
+          court_location: bench,
+          list_type: listType,
+          court_room_no: courtNo,
+          source_url: storedPdfUrl || fileUrl || `telegram:${message.message_id}`,
+          status: 'pending_parse',
+          case_number: `PENDING_${message.message_id}`,
+          item_no: 0,
+        })
+        .select();
+
+      if (error) {
+        console.error('[TELEGRAM] Database error:', error);
+      } else {
+        insertedCount = 1;
+        console.log(`[TELEGRAM] Created placeholder docket entry: ${data?.[0]?.id}`);
+      }
     }
   }
 
