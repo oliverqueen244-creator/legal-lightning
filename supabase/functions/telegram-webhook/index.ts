@@ -329,8 +329,12 @@ async function parsePdfWithAI(
   listType: string
 ): Promise<{ cases: ParsedCase[], judgeNames: string }> {
   try {
-    // Convert PDF to base64
-    const base64Pdf = btoa(String.fromCharCode(...pdfContent));
+    console.log(`[TELEGRAM] Starting AI parse, PDF size: ${pdfContent.length} bytes`);
+    
+    // Convert PDF to base64 using Deno's standard library approach
+    // btoa doesn't work well with large binary data
+    const base64Pdf = encodeBase64(pdfContent);
+    console.log(`[TELEGRAM] Base64 encoded, length: ${base64Pdf.length}`);
     
     const systemPrompt = `You are a legal document parser specialized in Indian High Court causelists.
 Extract ALL cases from the PDF causelist. For each case, extract:
@@ -363,6 +367,8 @@ Return the data as a JSON object with this structure:
 
 Extract ALL cases from the document. If a field is not available, use null.`;
 
+    console.log('[TELEGRAM] Calling Lovable AI...');
+    
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -378,10 +384,9 @@ Extract ALL cases from the document. If a field is not available, use null.`;
             content: [
               { type: 'text', text: userPrompt },
               { 
-                type: 'file',
-                file: {
-                  filename: 'causelist.pdf',
-                  file_data: `data:application/pdf;base64,${base64Pdf}`
+                type: 'image_url',
+                image_url: {
+                  url: `data:application/pdf;base64,${base64Pdf}`
                 }
               }
             ]
@@ -390,6 +395,8 @@ Extract ALL cases from the document. If a field is not available, use null.`;
         max_tokens: 16000,
       }),
     });
+
+    console.log(`[TELEGRAM] AI response status: ${response.status}`);
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -401,6 +408,7 @@ Extract ALL cases from the document. If a field is not available, use null.`;
     const content = data.choices?.[0]?.message?.content || '';
     
     console.log('[TELEGRAM] AI response length:', content.length);
+    console.log('[TELEGRAM] AI response preview:', content.substring(0, 500));
     
     // Parse the JSON from the response
     const jsonMatch = content.match(/\{[\s\S]*\}/);
@@ -416,6 +424,7 @@ Extract ALL cases from the document. If a field is not available, use null.`;
         judge_names: c.judge_names || null,
       }));
       
+      console.log(`[TELEGRAM] Successfully parsed ${cases.length} cases`);
       return { 
         cases, 
         judgeNames: parsed.judge_names || '' 
@@ -423,12 +432,24 @@ Extract ALL cases from the document. If a field is not available, use null.`;
     }
     
     console.error('[TELEGRAM] Could not parse AI response as JSON');
+    console.log('[TELEGRAM] Full response:', content);
     return { cases: [], judgeNames: '' };
     
   } catch (error) {
     console.error('[TELEGRAM] AI parsing error:', error);
     return { cases: [], judgeNames: '' };
   }
+}
+
+// Helper function for base64 encoding
+function encodeBase64(data: Uint8Array): string {
+  const CHUNK_SIZE = 0x8000; // 32KB chunks
+  let result = '';
+  for (let i = 0; i < data.length; i += CHUNK_SIZE) {
+    const chunk = data.subarray(i, Math.min(i + CHUNK_SIZE, data.length));
+    result += String.fromCharCode(...chunk);
+  }
+  return btoa(result);
 }
 
 async function handleLegacyPayload(payload: LegacyPayload, supabase: any, req: Request, lovableApiKey?: string) {
