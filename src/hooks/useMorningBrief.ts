@@ -27,11 +27,16 @@ export interface MorningBriefCase {
   status: string;
   judge_names: string | null;
   matched_as: 'petitioner' | 'respondent' | null;
+  case_fingerprint: string | null;
   
   // Computed fields
   readiness: ReadinessScore;
   hasHistory: boolean;
   previousAppearances: number;
+  
+  // Post-court capture indicator
+  lastHearingCaptured: boolean;
+  lastCaptureNote?: string;
   
   // Risk flags
   risks: {
@@ -231,9 +236,12 @@ export function useMorningBrief() {
             .select('*', { count: 'exact', head: true })
             .eq('docket_id', docket.id);
 
-          // Check history
+          // Check history and post-court captures
           const fingerprint = (docket as any).case_fingerprint;
           let previousAppearances = 0;
+          let lastHearingCaptured = false;
+          let lastCaptureNote: string | undefined;
+          
           if (fingerprint) {
             const { count } = await supabase
               .from('daily_court_docket')
@@ -241,6 +249,21 @@ export function useMorningBrief() {
               .eq('case_fingerprint', fingerprint)
               .lt('date', today);
             previousAppearances = count || 0;
+            
+            // Check for recent post-court capture (yesterday or before)
+            const { data: recentCapture } = await supabase
+              .from('post_court_notes')
+              .select('what_happened, next_direction')
+              .eq('case_fingerprint', fingerprint)
+              .lt('hearing_date', today)
+              .order('hearing_date', { ascending: false })
+              .limit(1)
+              .maybeSingle();
+            
+            if (recentCapture) {
+              lastHearingCaptured = true;
+              lastCaptureNote = recentCapture.next_direction || recentCapture.what_happened || undefined;
+            }
           }
 
           // Determine matched_as
@@ -302,9 +325,12 @@ export function useMorningBrief() {
             status: docket.status || 'pending',
             judge_names: docket.judge_names,
             matched_as,
+            case_fingerprint: fingerprint,
             readiness,
             hasHistory: previousAppearances > 0,
             previousAppearances,
+            lastHearingCaptured,
+            lastCaptureNote,
             risks,
             suggestion,
             suggestionReason,

@@ -3,13 +3,14 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowLeft, Scale, AlertTriangle, FileText, List, History } from 'lucide-react';
+import { ArrowLeft, Scale, AlertTriangle, FileText, List, History, BookMarked } from 'lucide-react';
 import { ArgumentsPanel } from '@/components/war-room/ArgumentsPanel';
 import { SmartPdfViewer } from '@/components/war-room/SmartPdfViewer';
 import { DocumentSelector } from '@/components/war-room/DocumentSelector';
 import { DocumentReviewPanel } from '@/components/documents/DocumentReviewPanel';
 import { CaseHistoryPanel } from '@/components/case-history/CaseHistoryPanel';
 import { JudgmentReferencesPanel } from '@/components/war-room/JudgmentReferencesPanel';
+import { PostCourtNoteCard } from '@/components/post-court/PostCourtNoteCard';
 import { WhisperNotification } from '@/components/war-room/WhisperNotification';
 import { WhisperDrawer } from '@/components/war-room/WhisperDrawer';
 import { AuthGuard } from '@/components/layout/AuthGuard';
@@ -19,6 +20,7 @@ import { useArguments } from '@/hooks/useArguments';
 import { useExtendedDocuments, useDocumentReview } from '@/hooks/useDocumentManagement';
 import { useLiveBoardForCourt } from '@/hooks/useLiveBoard';
 import { useCaseHistory, useCaseHasHistory } from '@/hooks/useCaseHistory';
+import { usePostCourtNotes } from '@/hooks/usePostCourtCapture';
 import type { CaseArgument } from '@/types/database';
 import { cn } from '@/lib/utils';
 
@@ -39,6 +41,8 @@ export default function WarRoom() {
   const { approveDocument, rejectDocument, setPrimaryDocument } = useDocumentReview(caseId!);
   const { data: caseHistory, isLoading: historyLoading } = useCaseHistory(caseId!);
   const { data: hasHistoryData } = useCaseHasHistory(caseId!);
+  const { data: postCourtNotes } = usePostCourtNotes(caseHistory?.fingerprint);
+  const latestNote = postCourtNotes?.[0];
   const liveBoard = useLiveBoardForCourt(
     docketItem?.court_location ?? '',
     docketItem?.court_room_no ?? ''
@@ -246,7 +250,11 @@ export default function WarRoom() {
                 />
               </TabsContent>
               
-              <TabsContent value="history" className="flex-1 m-0 overflow-hidden p-2">
+              <TabsContent value="history" className="flex-1 m-0 overflow-hidden p-2 space-y-3">
+                {/* Latest post-court note - what happened last time */}
+                {latestNote && (
+                  <PostCourtNoteCard note={latestNote} compact />
+                )}
                 <CaseHistoryPanel
                   history={caseHistory}
                   isLoading={historyLoading}
