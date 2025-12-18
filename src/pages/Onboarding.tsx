@@ -37,8 +37,8 @@ export default function Onboarding() {
     if (profile) {
       setProfileData({
         full_name: profile.full_name || '',
-        bar_registration_number: (profile as any).bar_registration_number || '',
-        bench: (profile as any).bench || '',
+        bar_registration_number: profile.bar_registration_number || '',
+        bench: (profile.bench as 'JAIPUR' | 'JODHPUR' | 'BOTH' | '') || '',
       });
     }
   }, [profile]);
