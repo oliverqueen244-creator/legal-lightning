@@ -9,6 +9,7 @@ import { SmartPdfViewer } from '@/components/war-room/SmartPdfViewer';
 import { DocumentSelector } from '@/components/war-room/DocumentSelector';
 import { DocumentReviewPanel } from '@/components/documents/DocumentReviewPanel';
 import { CaseHistoryPanel } from '@/components/case-history/CaseHistoryPanel';
+import { JudgmentReferencesPanel } from '@/components/war-room/JudgmentReferencesPanel';
 import { WhisperNotification } from '@/components/war-room/WhisperNotification';
 import { WhisperDrawer } from '@/components/war-room/WhisperDrawer';
 import { AuthGuard } from '@/components/layout/AuthGuard';
@@ -253,6 +254,16 @@ export default function WarRoom() {
                 />
               </TabsContent>
             </Tabs>
+            
+            {/* Judgment References Panel - Collapsed by Default */}
+            <div className="p-2 border-t border-border">
+              <JudgmentReferencesPanel
+                judgeName={docketItem.judge_names}
+                court={docketItem.court_location}
+                petitionerLawyer={docketItem.petitioner_lawyer}
+                respondentLawyer={docketItem.respondent_lawyer}
+              />
+            </div>
           </div>
 
           {/* Right Panel: Smart PDF Viewer (70%) */}

@@ -280,6 +280,42 @@ export type Database = {
           },
         ]
       }
+      judge_judgment_references: {
+        Row: {
+          added_at: string
+          added_by: string | null
+          case_type: string
+          court: string
+          id: string
+          indian_kanoon_url: string
+          judge_name: string
+          judgment_date: string
+          lawyer_names: string[] | null
+        }
+        Insert: {
+          added_at?: string
+          added_by?: string | null
+          case_type: string
+          court: string
+          id?: string
+          indian_kanoon_url: string
+          judge_name: string
+          judgment_date: string
+          lawyer_names?: string[] | null
+        }
+        Update: {
+          added_at?: string
+          added_by?: string | null
+          case_type?: string
+          court?: string
+          id?: string
+          indian_kanoon_url?: string
+          judge_name?: string
+          judgment_date?: string
+          lawyer_names?: string[] | null
+        }
+        Relationships: []
+      }
       lawyer_aliases: {
         Row: {
           alias_name: string
