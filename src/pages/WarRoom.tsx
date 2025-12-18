@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowLeft, Scale, AlertTriangle, FileText, List, History, BookMarked } from 'lucide-react';
+import { ArrowLeft, Scale, AlertTriangle, FileText, List, History } from 'lucide-react';
 import { ArgumentsPanel } from '@/components/war-room/ArgumentsPanel';
 import { SmartPdfViewer } from '@/components/war-room/SmartPdfViewer';
 import { DocumentSelector } from '@/components/war-room/DocumentSelector';
@@ -11,6 +11,7 @@ import { DocumentReviewPanel } from '@/components/documents/DocumentReviewPanel'
 import { CaseHistoryPanel } from '@/components/case-history/CaseHistoryPanel';
 import { JudgmentReferencesPanel } from '@/components/war-room/JudgmentReferencesPanel';
 import { PostCourtNoteCard } from '@/components/post-court/PostCourtNoteCard';
+import { ClientUpdateButton } from '@/components/client-update/ClientUpdateButton';
 import { WhisperNotification } from '@/components/war-room/WhisperNotification';
 import { WhisperDrawer } from '@/components/war-room/WhisperDrawer';
 import { AuthGuard } from '@/components/layout/AuthGuard';
@@ -251,6 +252,14 @@ export default function WarRoom() {
               </TabsContent>
               
               <TabsContent value="history" className="flex-1 m-0 overflow-hidden p-2 space-y-3">
+                {/* Client Update Generator Button - SENIOR only */}
+                <div className="flex justify-end">
+                  <ClientUpdateButton
+                    postCourtNote={latestNote || null}
+                    caseNumber={docketItem.case_number || ''}
+                  />
+                </div>
+                
                 {/* Latest post-court note - what happened last time */}
                 {latestNote && (
                   <PostCourtNoteCard note={latestNote} compact />
