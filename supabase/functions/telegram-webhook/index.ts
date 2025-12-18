@@ -482,26 +482,54 @@ Extract ALL cases from the document. If a field is not available, use null. Be t
         };
       } catch (parseError) {
         console.log('[TELEGRAM] JSON parse failed, attempting to salvage partial data...');
+        console.log('[TELEGRAM] Parse error:', parseError);
         
-        // Try to extract judge_names before cases array
+        // Try to extract judge_names
         const judgeMatch = jsonStr.match(/"judge_names"\s*:\s*"([^"]+)"/);
         const judgeNames = judgeMatch ? judgeMatch[1] : '';
+        console.log('[TELEGRAM] Extracted judge_names:', judgeNames.substring(0, 100));
         
-        // Try to find all complete case objects
-        const casePattern = /\{\s*"item_no"\s*:\s*(\d+)\s*,\s*"case_number"\s*:\s*"([^"]*)"[^}]*"petitioner"\s*:\s*(?:"([^"]*)"|null)[^}]*"respondent"\s*:\s*(?:"([^"]*)"|null)[^}]*"petitioner_lawyer"\s*:\s*(?:"([^"]*)"|null)[^}]*"respondent_lawyer"\s*:\s*(?:"([^"]*)"|null)[^}]*\}/g;
-        
+        // Find all complete case objects by looking for closing braces
         const cases: ParsedCase[] = [];
-        let match;
-        while ((match = casePattern.exec(jsonStr)) !== null) {
-          cases.push({
-            item_no: parseInt(match[1]) || 0,
-            case_number: match[2] || 'Unknown',
-            petitioner: match[3] || undefined,
-            respondent: match[4] || undefined,
-            petitioner_lawyer: match[5] || undefined,
-            respondent_lawyer: match[6] || undefined,
-            judge_names: undefined,
-          });
+        
+        // Split by case objects - look for patterns like {"item_no": N, ...}
+        const caseMatches = jsonStr.matchAll(/\{\s*"item_no"\s*:\s*(\d+)[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/g);
+        
+        for (const m of caseMatches) {
+          try {
+            const caseStr = m[0];
+            // Try to parse each case individually
+            const caseObj = JSON.parse(caseStr);
+            cases.push({
+              item_no: caseObj.item_no || 0,
+              case_number: caseObj.case_number || 'Unknown',
+              petitioner: caseObj.petitioner || undefined,
+              respondent: caseObj.respondent || undefined,
+              petitioner_lawyer: caseObj.petitioner_lawyer || undefined,
+              respondent_lawyer: caseObj.respondent_lawyer || undefined,
+              judge_names: undefined,
+            });
+          } catch {
+            // Individual case failed to parse, try regex extraction
+            const itemNo = parseInt(m[1]) || 0;
+            const caseNumMatch = m[0].match(/"case_number"\s*:\s*"([^"]*)"/);
+            const petMatch = m[0].match(/"petitioner"\s*:\s*"([^"]*)"/);
+            const respMatch = m[0].match(/"respondent"\s*:\s*"([^"]*)"/);
+            const petLawMatch = m[0].match(/"petitioner_lawyer"\s*:\s*"([^"]*)"/);
+            const respLawMatch = m[0].match(/"respondent_lawyer"\s*:\s*"([^"]*)"/);
+            
+            if (caseNumMatch) {
+              cases.push({
+                item_no: itemNo,
+                case_number: caseNumMatch[1] || 'Unknown',
+                petitioner: petMatch?.[1] || undefined,
+                respondent: respMatch?.[1] || undefined,
+                petitioner_lawyer: petLawMatch?.[1] || undefined,
+                respondent_lawyer: respLawMatch?.[1] || undefined,
+                judge_names: undefined,
+              });
+            }
+          }
         }
         
         if (cases.length > 0) {
