@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import { DocketCard } from '@/components/dashboard/DocketCard';
 import { LiveTicker } from '@/components/dashboard/LiveTicker';
@@ -10,21 +11,26 @@ import { CourtMetadataWidget } from '@/components/dashboard/CourtMetadataWidget'
 import { DateSelector } from '@/components/dashboard/DateSelector';
 import { Header } from '@/components/layout/Header';
 import { AuthGuard } from '@/components/layout/AuthGuard';
+import { MorningBriefPanel } from '@/components/morning-brief/MorningBriefPanel';
 import { useDocket } from '@/hooks/useDocket';
 import { useLiveBoard } from '@/hooks/useLiveBoard';
 import { useAuth } from '@/hooks/useAuth';
+import { useMorningBrief } from '@/hooks/useMorningBrief';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Scale, AlertCircle, Search } from 'lucide-react';
+import { Scale, AlertCircle, Search, Sun, Gavel } from 'lucide-react';
 import { LiveBoardSimulator } from '@/components/dashboard/LiveBoardSimulator';
 
 export default function Dashboard() {
+  const navigate = useNavigate();
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const { data: docket, isLoading: docketLoading, refetch } = useDocket();
   const { data: liveBoards, isLoading: liveBoardLoading } = useLiveBoard();
   const { role, profile } = useAuth();
-  const [activeTab, setActiveTab] = useState('daily');
+  const { data: morningBrief, isLoading: briefLoading, refetch: refetchBrief } = useMorningBrief();
+  const [activeTab, setActiveTab] = useState('brief');
   
   // Format date for API calls
   const formattedDate = format(selectedDate, 'yyyy-MM-dd');
@@ -77,8 +83,8 @@ export default function Dashboard() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Left: Cause List with Tabs */}
             <div className="lg:col-span-2 space-y-4">
-            {/* Date Selector + Scraper Status */}
-              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+              {/* Quick Actions Bar */}
+              <div className="flex flex-wrap items-center gap-3">
                 <DateSelector 
                   selectedDate={selectedDate}
                   onDateChange={setSelectedDate}
@@ -88,10 +94,28 @@ export default function Dashboard() {
                   selectedDate={formattedDate}
                   onRefreshComplete={refetch}
                 />
+                <Button
+                  variant="gold"
+                  size="sm"
+                  onClick={() => navigate('/courtroom')}
+                  className="ml-auto flex items-center gap-2"
+                >
+                  <Gavel className="h-4 w-4" />
+                  Enter Courtroom
+                </Button>
               </div>
               
               <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-                <TabsList className="grid w-full grid-cols-3 mb-4">
+                <TabsList className="grid w-full grid-cols-4 mb-4">
+                  <TabsTrigger value="brief" className="flex items-center gap-2">
+                    <Sun className="h-3 w-3" />
+                    Brief
+                    {morningBrief && morningBrief.summary.high_risk_count > 0 && (
+                      <Badge variant="danger" className="ml-1 h-5 w-5 p-0 flex items-center justify-center text-xs">
+                        {morningBrief.summary.high_risk_count}
+                      </Badge>
+                    )}
+                  </TabsTrigger>
                   <TabsTrigger value="daily" className="flex items-center gap-2">
                     <div className="h-2 w-2 rounded-full bg-primary" />
                     Daily
@@ -114,6 +138,15 @@ export default function Dashboard() {
                     Search
                   </TabsTrigger>
                 </TabsList>
+
+                {/* Morning Brief Tab */}
+                <TabsContent value="brief" className="mt-0">
+                  <MorningBriefPanel
+                    brief={morningBrief}
+                    isLoading={briefLoading}
+                    onRefresh={refetchBrief}
+                  />
+                </TabsContent>
 
                 <TabsContent value="daily" className="space-y-3 mt-0">
                   <div className="flex items-center gap-2 mb-2">

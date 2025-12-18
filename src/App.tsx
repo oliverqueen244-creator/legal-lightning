@@ -10,6 +10,7 @@ import Admin from "./pages/Admin";
 import Documentation from "./pages/Documentation";
 import Onboarding from "./pages/Onboarding";
 import NotFound from "./pages/NotFound";
+import CourtroomMode from "./pages/CourtroomMode";
 
 const queryClient = new QueryClient();
 
@@ -31,6 +32,7 @@ const App = () => (
           <Route path="/admin" element={<Admin />} />
           <Route path="/war-room/:caseId" element={<WarRoom />} />
           <Route path="/control-deck/:caseId" element={<ControlDeck />} />
+          <Route path="/courtroom" element={<CourtroomMode />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
