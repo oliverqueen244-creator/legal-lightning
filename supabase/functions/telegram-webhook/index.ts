@@ -78,6 +78,23 @@ interface PdfStructure {
   notes: string;
 }
 
+// AI Provider types for round-robin distribution
+type AIProvider = 'gemini' | 'gpt4o';
+
+interface CourtParseTask {
+  courtIdx: number;
+  court: CourtSection;
+  provider: AIProvider;
+}
+
+interface CourtParseResult {
+  courtIdx: number;
+  provider: AIProvider;
+  cases: ParsedCase[];
+  success: boolean;
+  error?: string;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -522,51 +539,85 @@ OUTPUT FORMAT (STRICT JSON — no markdown, no explanations):
     
     // Step 2: Parse cases - use court-based or chunk-based approach
     if (pdfStructure && pdfStructure.safe_for_court_based_split && pdfStructure.courts.length > 0) {
-      // Court-based parsing: parse each court section separately
-      console.log(`[TELEGRAM] Step 2: Court-based parsing (${pdfStructure.courts.length} courts)...`);
+      // Court-based parallel parsing with round-robin provider distribution
+      console.log(`[TELEGRAM] Step 2: Parallel court-based parsing (${pdfStructure.courts.length} courts)...`);
       
-      for (let courtIdx = 0; courtIdx < pdfStructure.courts.length; courtIdx++) {
-        const court = pdfStructure.courts[courtIdx];
-        const courtCaseCount = court.end_item_no - court.start_item_no + 1;
+      // Assign courts to providers: even indices → Gemini, odd indices → GPT-4o
+      const tasks: CourtParseTask[] = pdfStructure.courts.map((court, idx) => ({
+        courtIdx: idx,
+        court,
+        provider: idx % 2 === 0 ? 'gemini' : 'gpt4o'
+      }));
+      
+      const geminiCount = tasks.filter(t => t.provider === 'gemini').length;
+      const gpt4oCount = tasks.filter(t => t.provider === 'gpt4o').length;
+      console.log(`[TELEGRAM] Distribution: ${geminiCount} courts → Gemini, ${gpt4oCount} courts → GPT-4o`);
+      
+      // Process courts in parallel batches of 2 (1 Gemini + 1 GPT-4o running simultaneously)
+      const BATCH_SIZE = 2;
+      const batches: CourtParseTask[][] = [];
+      for (let i = 0; i < tasks.length; i += BATCH_SIZE) {
+        batches.push(tasks.slice(i, i + BATCH_SIZE));
+      }
+      
+      console.log(`[TELEGRAM] Processing ${batches.length} parallel batches...`);
+      
+      for (let batchIdx = 0; batchIdx < batches.length; batchIdx++) {
+        const batch = batches[batchIdx];
+        const batchStart = Date.now();
         
-        console.log(`[TELEGRAM] Parsing ${court.court_identifier}: items ${court.start_item_no}-${court.end_item_no} (${courtCaseCount} cases)...`);
+        console.log(`[TELEGRAM] Batch ${batchIdx + 1}/${batches.length}: ${batch.map(t => `${t.court.court_identifier}→${t.provider}`).join(' | ')}`);
         
-        // For large courts, chunk them; for small ones, parse in one go
-        const CHUNK_SIZE = 50;
+        // Execute batch in parallel
+        const batchPromises = batch.map(task => 
+          parseCourtSectionWithProvider(
+            lovableApiKey, pdfDataUrl, bench, listType, task.court, task.provider
+          ).then(cases => ({
+            courtIdx: task.courtIdx,
+            provider: task.provider,
+            cases,
+            success: true,
+          } as CourtParseResult)).catch(err => ({
+            courtIdx: task.courtIdx,
+            provider: task.provider,
+            cases: [],
+            success: false,
+            error: err?.message || 'Unknown error',
+          } as CourtParseResult))
+        );
         
-        if (courtCaseCount <= CHUNK_SIZE) {
-          // Parse entire court section at once
-          const courtCases = await parseCourtSection(
-            lovableApiKey, pdfDataUrl, bench, listType,
-            court.court_identifier, court.judge_names,
-            court.start_item_no, court.end_item_no
-          );
-          allCases.push(...courtCases);
-        } else {
-          // Chunk within this court
-          const chunks = Math.ceil(courtCaseCount / CHUNK_SIZE);
-          for (let chunk = 0; chunk < chunks; chunk++) {
-            const startItem = court.start_item_no + chunk * CHUNK_SIZE;
-            const endItem = Math.min(court.start_item_no + (chunk + 1) * CHUNK_SIZE - 1, court.end_item_no);
+        const batchResults = await Promise.all(batchPromises);
+        
+        // Process results and retry failures with alternate provider
+        for (const result of batchResults) {
+          const task = batch.find(t => t.courtIdx === result.courtIdx)!;
+          
+          if (result.success && result.cases.length > 0) {
+            allCases.push(...result.cases);
+            console.log(`[TELEGRAM] ✓ ${task.court.court_identifier} via ${result.provider}: ${result.cases.length} cases`);
+          } else {
+            // Retry with alternate provider
+            const altProvider: AIProvider = task.provider === 'gemini' ? 'gpt4o' : 'gemini';
+            console.log(`[TELEGRAM] ✗ ${task.court.court_identifier} failed on ${task.provider} (${result.error || 'no cases'}), retrying with ${altProvider}...`);
             
-            console.log(`[TELEGRAM]   Chunk ${chunk + 1}/${chunks}: items ${startItem}-${endItem}...`);
-            
-            const chunkCases = await parseCourtSection(
-              lovableApiKey, pdfDataUrl, bench, listType,
-              court.court_identifier, court.judge_names,
-              startItem, endItem
-            );
-            allCases.push(...chunkCases);
-            
-            if (chunk < chunks - 1) {
-              await new Promise(resolve => setTimeout(resolve, 800));
+            try {
+              const retryCases = await parseCourtSectionWithProvider(
+                lovableApiKey, pdfDataUrl, bench, listType, task.court, altProvider
+              );
+              allCases.push(...retryCases);
+              console.log(`[TELEGRAM] ✓ Retry ${task.court.court_identifier} via ${altProvider}: ${retryCases.length} cases`);
+            } catch (retryErr) {
+              console.error(`[TELEGRAM] ✗✗ ${task.court.court_identifier} failed on both providers`);
             }
           }
         }
         
-        // Delay between courts
-        if (courtIdx < pdfStructure.courts.length - 1) {
-          await new Promise(resolve => setTimeout(resolve, 1000));
+        const batchDuration = Date.now() - batchStart;
+        console.log(`[TELEGRAM] Batch ${batchIdx + 1} completed in ${batchDuration}ms`);
+        
+        // Small delay between batches to be respectful to APIs
+        if (batchIdx < batches.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 300));
         }
       }
     } else {
@@ -642,8 +693,54 @@ IMPORTANT: Only extract items ${startItem} to ${endItem}. If a field is not avai
   }
 }
 
-// Parse a specific court section
-async function parseCourtSection(
+// Parse a specific court section with a specified AI provider
+async function parseCourtSectionWithProvider(
+  apiKey: string,
+  pdfDataUrl: string,
+  bench: string,
+  listType: string,
+  court: CourtSection,
+  provider: AIProvider
+): Promise<ParsedCase[]> {
+  const courtCaseCount = court.end_item_no - court.start_item_no + 1;
+  const CHUNK_SIZE = 50;
+  const allCases: ParsedCase[] = [];
+  
+  // For large courts, chunk them; for small ones, parse in one go
+  if (courtCaseCount <= CHUNK_SIZE) {
+    const cases = await parseCourtChunkWithProvider(
+      apiKey, pdfDataUrl, bench, listType,
+      court.court_identifier, court.judge_names,
+      court.start_item_no, court.end_item_no, provider
+    );
+    allCases.push(...cases);
+  } else {
+    // Chunk within this court (sequential within court, but courts run in parallel)
+    const chunks = Math.ceil(courtCaseCount / CHUNK_SIZE);
+    for (let chunk = 0; chunk < chunks; chunk++) {
+      const startItem = court.start_item_no + chunk * CHUNK_SIZE;
+      const endItem = Math.min(court.start_item_no + (chunk + 1) * CHUNK_SIZE - 1, court.end_item_no);
+      
+      console.log(`[TELEGRAM]   ${court.court_identifier} chunk ${chunk + 1}/${chunks} via ${provider}: items ${startItem}-${endItem}`);
+      
+      const chunkCases = await parseCourtChunkWithProvider(
+        apiKey, pdfDataUrl, bench, listType,
+        court.court_identifier, court.judge_names,
+        startItem, endItem, provider
+      );
+      allCases.push(...chunkCases);
+      
+      if (chunk < chunks - 1) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+    }
+  }
+  
+  return allCases;
+}
+
+// Parse a chunk of a court section with a specific provider
+async function parseCourtChunkWithProvider(
   apiKey: string,
   pdfDataUrl: string,
   bench: string,
@@ -651,7 +748,8 @@ async function parseCourtSection(
   courtIdentifier: string,
   courtJudges: string,
   startItem: number,
-  endItem: number
+  endItem: number,
+  provider: AIProvider
 ): Promise<ParsedCase[]> {
   const prompt = `You are a legal document parser for Indian High Court causelists.
 
@@ -686,7 +784,14 @@ Return ONLY a valid JSON object (no markdown, no code blocks):
 
 IMPORTANT: Only extract items ${startItem} to ${endItem} from ${courtIdentifier}. If a field is not available, use null.`;
 
-  const response = await callLovableAI(apiKey, pdfDataUrl, prompt);
+  // Call specific provider directly (no fallback - fallback handled at court level)
+  let response: string | null = null;
+  
+  if (provider === 'gemini') {
+    response = await callGeminiAI(apiKey, pdfDataUrl, prompt);
+  } else {
+    response = await callOpenAIGPT4o(pdfDataUrl, prompt);
+  }
   
   if (!response) return [];
   
