@@ -393,12 +393,12 @@ Extract ALL cases from the document. If a field is not available, use null. Be t
 
     console.log('[TELEGRAM] Calling Google AI Studio API (gemini-2.5-flash)...');
     
-    // Use AbortController with 60 second timeout
+    // Use AbortController with 180 second timeout
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {
       console.log('[TELEGRAM] AI request timeout, aborting...');
       controller.abort();
-    }, 60000);
+    }, 180000);
     
     let response: Response;
     try {
@@ -432,7 +432,7 @@ Extract ALL cases from the document. If a field is not available, use null. Be t
       clearTimeout(timeoutId);
       const err = fetchError as Error;
       if (err?.name === 'AbortError') {
-        console.error('[TELEGRAM] AI request timed out after 60 seconds');
+        console.error('[TELEGRAM] AI request timed out after 180 seconds');
         return { cases: [], judgeNames: '' };
       }
       console.error('[TELEGRAM] AI fetch error:', err?.message || fetchError);
