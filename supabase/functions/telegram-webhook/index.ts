@@ -457,17 +457,15 @@ async function logResult(supabase: any, bench: string, listType: string, courtNo
 
 function determineBench(text: string, fileName: string): string {
   const combined = `${text} ${fileName}`.toLowerCase();
-  if (combined.includes('jaipur')) return 'Jaipur';
-  if (combined.includes('jodhpur')) return 'Jodhpur';
-  if (combined.includes('delhi')) return 'Delhi';
-  return 'Jodhpur';
+  if (combined.includes('jaipur')) return 'JAIPUR';
+  if (combined.includes('jodhpur')) return 'JODHPUR';
+  return 'JODHPUR';
 }
 
 function determineListType(text: string, fileName: string): string {
   const combined = `${text} ${fileName}`.toLowerCase();
-  if (combined.includes('supplementary')) return 'Supplementary';
-  if (combined.includes('advance')) return 'Advance';
-  return 'Daily';
+  if (combined.includes('supplementary')) return 'SUPPLEMENTARY';
+  return 'DAILY';
 }
 
 function extractCourtNumber(text: string, fileName: string): string {
