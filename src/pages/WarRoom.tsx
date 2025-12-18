@@ -3,11 +3,12 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowLeft, Scale, AlertTriangle, FileText, List } from 'lucide-react';
+import { ArrowLeft, Scale, AlertTriangle, FileText, List, History } from 'lucide-react';
 import { ArgumentsPanel } from '@/components/war-room/ArgumentsPanel';
 import { SmartPdfViewer } from '@/components/war-room/SmartPdfViewer';
 import { DocumentSelector } from '@/components/war-room/DocumentSelector';
 import { DocumentReviewPanel } from '@/components/documents/DocumentReviewPanel';
+import { CaseHistoryPanel } from '@/components/case-history/CaseHistoryPanel';
 import { WhisperNotification } from '@/components/war-room/WhisperNotification';
 import { WhisperDrawer } from '@/components/war-room/WhisperDrawer';
 import { AuthGuard } from '@/components/layout/AuthGuard';
@@ -16,6 +17,7 @@ import { useDocketItem } from '@/hooks/useDocket';
 import { useArguments } from '@/hooks/useArguments';
 import { useExtendedDocuments, useDocumentReview } from '@/hooks/useDocumentManagement';
 import { useLiveBoardForCourt } from '@/hooks/useLiveBoard';
+import { useCaseHistory, useCaseHasHistory } from '@/hooks/useCaseHistory';
 import type { CaseArgument } from '@/types/database';
 import { cn } from '@/lib/utils';
 
@@ -28,12 +30,14 @@ export default function WarRoom() {
   const [selectedArg, setSelectedArg] = useState<CaseArgument | null>(null);
   const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
   const [fontSize, setFontSize] = useState<'normal' | 'large' | 'xlarge'>('normal');
-  const [leftPanelTab, setLeftPanelTab] = useState<'arguments' | 'documents'>('arguments');
+  const [leftPanelTab, setLeftPanelTab] = useState<'arguments' | 'documents' | 'history'>('arguments');
 
   const { data: docketItem, isLoading: docketLoading } = useDocketItem(caseId!);
   const { data: args } = useArguments(caseId!);
   const { data: documents, isLoading: docsLoading } = useExtendedDocuments(caseId!);
   const { approveDocument, rejectDocument, setPrimaryDocument } = useDocumentReview(caseId!);
+  const { data: caseHistory, isLoading: historyLoading } = useCaseHistory(caseId!);
+  const { data: hasHistoryData } = useCaseHasHistory(caseId!);
   const liveBoard = useLiveBoardForCourt(
     docketItem?.court_location ?? '',
     docketItem?.court_room_no ?? ''
@@ -191,20 +195,29 @@ export default function WarRoom() {
           <div className="w-[30%] border-r border-border flex flex-col">
             <Tabs
               value={leftPanelTab}
-              onValueChange={(v) => setLeftPanelTab(v as 'arguments' | 'documents')}
+              onValueChange={(v) => setLeftPanelTab(v as 'arguments' | 'documents' | 'history')}
               className="flex flex-col h-full"
             >
-              <TabsList className="grid w-full grid-cols-2 m-2">
+              <TabsList className="grid w-full grid-cols-3 m-2">
                 <TabsTrigger value="arguments" className="flex items-center gap-2">
                   <List className="h-4 w-4" />
-                  Arguments
+                  Args
                 </TabsTrigger>
                 <TabsTrigger value="documents" className="flex items-center gap-2 relative">
                   <FileText className="h-4 w-4" />
-                  Documents
+                  Docs
                   {pendingCount > 0 && (
                     <Badge variant="danger" className="absolute -top-1 -right-1 h-5 w-5 p-0 flex items-center justify-center text-xs">
                       {pendingCount}
+                    </Badge>
+                  )}
+                </TabsTrigger>
+                <TabsTrigger value="history" className="flex items-center gap-2 relative">
+                  <History className="h-4 w-4" />
+                  History
+                  {hasHistoryData?.hasHistory && (
+                    <Badge variant="gold" className="absolute -top-1 -right-1 h-5 w-5 p-0 flex items-center justify-center text-xs">
+                      {hasHistoryData.previousCount}
                     </Badge>
                   )}
                 </TabsTrigger>
@@ -229,6 +242,14 @@ export default function WarRoom() {
                   onViewDocument={handleViewDocument}
                   selectedDocId={selectedDocId}
                   isLoading={docsLoading}
+                />
+              </TabsContent>
+              
+              <TabsContent value="history" className="flex-1 m-0 overflow-hidden p-2">
+                <CaseHistoryPanel
+                  history={caseHistory}
+                  isLoading={historyLoading}
+                  compact
                 />
               </TabsContent>
             </Tabs>
