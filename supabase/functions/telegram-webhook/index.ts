@@ -1,6 +1,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+// Handle graceful shutdown
+addEventListener('beforeunload', (ev: any) => {
+  console.log('[TELEGRAM] Function shutdown due to:', ev.detail?.reason || 'unknown');
+});
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-webhook-secret',
@@ -225,191 +230,191 @@ async function handleTelegramUpdate(update: TelegramUpdate, supabase: any, botTo
 
   console.log(`[TELEGRAM] Processing: bench=${bench}, type=${listType}, court=${courtNo}, date=${date}`);
 
-  // Get file URL and download PDF if document exists
-  let fileUrl = '';
-  let pdfContent: Uint8Array | null = null;
-  
-  console.log(`[TELEGRAM] Checking PDF download: document=${!!message.document}, botToken=${!!botToken}`);
-  
-  if (message.document && botToken) {
+  // Start background processing - return immediately to Telegram
+  const backgroundTask = async () => {
+    const startTime = Date.now();
+    console.log(`[TELEGRAM-BG] Starting background processing for ${bench}/${listType}/${date}`);
+    
     try {
-      console.log(`[TELEGRAM] Getting file info for file_id: ${message.document.file_id}`);
-      const getFileUrl = `https://api.telegram.org/bot${botToken}/getFile?file_id=${message.document.file_id}`;
-      console.log(`[TELEGRAM] Calling: ${getFileUrl.substring(0, 50)}...`);
+      // Get file URL and download PDF if document exists
+      let fileUrl = '';
+      let pdfContent: Uint8Array | null = null;
       
-      const fileResponse = await fetch(getFileUrl);
-      const fileData = await fileResponse.json();
+      if (message.document && botToken) {
+        try {
+          console.log(`[TELEGRAM-BG] Getting file info for file_id: ${message.document.file_id}`);
+          const getFileUrl = `https://api.telegram.org/bot${botToken}/getFile?file_id=${message.document.file_id}`;
+          
+          const fileResponse = await fetch(getFileUrl);
+          const fileData = await fileResponse.json();
+          
+          if (fileData.ok && fileData.result.file_path) {
+            fileUrl = `https://api.telegram.org/file/bot${botToken}/${fileData.result.file_path}`;
+            console.log(`[TELEGRAM-BG] File URL obtained, downloading PDF...`);
+            
+            const pdfResponse = await fetch(fileUrl);
+            if (pdfResponse.ok) {
+              pdfContent = new Uint8Array(await pdfResponse.arrayBuffer());
+              console.log(`[TELEGRAM-BG] PDF downloaded, size: ${pdfContent.length} bytes`);
+            }
+          }
+        } catch (err) {
+          console.error('[TELEGRAM-BG] Error downloading file:', err);
+        }
+      }
+
+      // Parse PDF with AI
+      let parsedCases: ParsedCase[] = [];
+      let judgeNames = '';
       
-      console.log(`[TELEGRAM] getFile response:`, JSON.stringify(fileData));
-      
-      if (fileData.ok && fileData.result.file_path) {
-        fileUrl = `https://api.telegram.org/file/bot${botToken}/${fileData.result.file_path}`;
-        console.log(`[TELEGRAM] File URL obtained: ${fileUrl.substring(0, 60)}...`);
+      if (pdfContent && lovableApiKey) {
+        console.log('[TELEGRAM-BG] Starting AI parsing...');
+        const parseResult = await parsePdfWithAI(pdfContent, lovableApiKey, bench, listType);
+        parsedCases = parseResult.cases;
+        judgeNames = parseResult.judgeNames;
+        console.log(`[TELEGRAM-BG] AI extracted ${parsedCases.length} cases in ${Date.now() - startTime}ms`);
+      }
+
+      // Upload PDF to Supabase storage
+      let storedPdfUrl = '';
+      if (pdfContent) {
+        const storagePath = `causelists/${date}/${bench}/${courtNo}_${listType}_${message.message_id}.pdf`;
+        const { error: uploadError } = await supabase.storage
+          .from('causelist-pdfs')
+          .upload(storagePath, pdfContent, {
+            contentType: 'application/pdf',
+            upsert: true
+          });
         
-        // Download the PDF
-        console.log(`[TELEGRAM] Downloading PDF...`);
-        const pdfResponse = await fetch(fileUrl);
-        console.log(`[TELEGRAM] PDF response status: ${pdfResponse.status}`);
+        if (!uploadError) {
+          const { data: publicUrl } = supabase.storage.from('causelist-pdfs').getPublicUrl(storagePath);
+          storedPdfUrl = publicUrl.publicUrl;
+          console.log(`[TELEGRAM-BG] PDF stored at: ${storedPdfUrl}`);
+        }
+      }
+
+      // Store cases in database with deduplication
+      let insertedCount = 0;
+      let skippedCount = 0;
+      
+      if (parsedCases.length > 0) {
+        const { data: existingCases } = await supabase
+          .from('daily_court_docket')
+          .select('item_no')
+          .eq('date', date)
+          .eq('court_location', bench)
+          .eq('list_type', listType);
         
-        if (pdfResponse.ok) {
-          pdfContent = new Uint8Array(await pdfResponse.arrayBuffer());
-          console.log(`[TELEGRAM] PDF downloaded, size: ${pdfContent.length} bytes`);
-        } else {
-          console.error(`[TELEGRAM] PDF download failed: ${pdfResponse.status} ${pdfResponse.statusText}`);
+        const existingItemNos = new Set((existingCases || []).map((c: { item_no: number }) => c.item_no));
+        const newCases = parsedCases.filter(c => !existingItemNos.has(c.item_no));
+        skippedCount = parsedCases.length - newCases.length;
+        
+        if (newCases.length > 0) {
+          const casesToInsert = newCases.map(c => ({
+            date,
+            court_location: bench,
+            list_type: listType,
+            court_room_no: c.court_room_no || courtNo,
+            item_no: c.item_no,
+            case_number: c.case_number,
+            petitioner: c.petitioner,
+            respondent: c.respondent,
+            petitioner_lawyer: c.petitioner_lawyer,
+            respondent_lawyer: c.respondent_lawyer,
+            judge_names: c.judge_names || judgeNames,
+            source_url: storedPdfUrl || fileUrl || `telegram:${message.message_id}`,
+            status: 'pending',
+          }));
+
+          // Insert in batches of 100 to avoid payload limits
+          const BATCH_SIZE = 100;
+          for (let i = 0; i < casesToInsert.length; i += BATCH_SIZE) {
+            const batch = casesToInsert.slice(i, i + BATCH_SIZE);
+            const { data, error } = await supabase
+              .from('daily_court_docket')
+              .insert(batch)
+              .select();
+
+            if (error) {
+              console.error(`[TELEGRAM-BG] Database error for batch ${i / BATCH_SIZE + 1}:`, error);
+            } else {
+              insertedCount += data?.length || 0;
+            }
+          }
+          
+          console.log(`[TELEGRAM-BG] Inserted ${insertedCount} new cases (skipped ${skippedCount} duplicates)`);
         }
       } else {
-        console.error(`[TELEGRAM] getFile failed:`, JSON.stringify(fileData));
+        // Create placeholder if no cases parsed
+        const { data: existingPlaceholder } = await supabase
+          .from('daily_court_docket')
+          .select('id')
+          .eq('date', date)
+          .eq('court_location', bench)
+          .eq('list_type', listType)
+          .eq('item_no', 0)
+          .maybeSingle();
+        
+        if (!existingPlaceholder) {
+          await supabase
+            .from('daily_court_docket')
+            .insert({
+              date,
+              court_location: bench,
+              list_type: listType,
+              court_room_no: courtNo,
+              source_url: storedPdfUrl || fileUrl || `telegram:${message.message_id}`,
+              status: 'pending_parse',
+              case_number: `PENDING_${message.message_id}`,
+              item_no: 0,
+            });
+        }
       }
-    } catch (err) {
-      console.error('[TELEGRAM] Error getting/downloading file:', err);
-    }
-  } else {
-    console.log(`[TELEGRAM] Skipping PDF download - no document or no botToken`);
-  }
 
-  // If we have PDF content and Lovable API key, parse with AI
-  let parsedCases: ParsedCase[] = [];
-  let judgeNames = '';
-  
-  if (pdfContent && lovableApiKey) {
-    console.log('[TELEGRAM] Parsing PDF with AI...');
-    const parseResult = await parsePdfWithAI(pdfContent, lovableApiKey, bench, listType);
-    parsedCases = parseResult.cases;
-    judgeNames = parseResult.judgeNames;
-    console.log(`[TELEGRAM] AI extracted ${parsedCases.length} cases`);
-  }
-
-  // Upload PDF to Supabase storage
-  let storedPdfUrl = '';
-  if (pdfContent) {
-    const storagePath = `causelists/${date}/${bench}/${courtNo}_${listType}_${message.message_id}.pdf`;
-    const { data: uploadData, error: uploadError } = await supabase.storage
-      .from('causelist-pdfs')
-      .upload(storagePath, pdfContent, {
-        contentType: 'application/pdf',
-        upsert: true
-      });
-    
-    if (!uploadError) {
-      const { data: publicUrl } = supabase.storage.from('causelist-pdfs').getPublicUrl(storagePath);
-      storedPdfUrl = publicUrl.publicUrl;
-      console.log(`[TELEGRAM] PDF stored at: ${storedPdfUrl}`);
-    } else {
-      console.error('[TELEGRAM] Storage error:', uploadError);
-    }
-  }
-
-  // Store cases in database with deduplication
-  let insertedCount = 0;
-  let skippedCount = 0;
-  
-  if (parsedCases.length > 0) {
-    // Check for existing cases for this date/bench/list_type to prevent duplicates
-    const { data: existingCases } = await supabase
-      .from('daily_court_docket')
-      .select('item_no')
-      .eq('date', date)
-      .eq('court_location', bench)
-      .eq('list_type', listType);
-    
-    const existingItemNos = new Set((existingCases || []).map((c: { item_no: number }) => c.item_no));
-    
-    if (existingItemNos.size > 0) {
-      console.log(`[TELEGRAM] Found ${existingItemNos.size} existing cases for ${date}/${bench}/${listType}`);
-    }
-    
-    // Filter out cases that already exist
-    const newCases = parsedCases.filter(c => !existingItemNos.has(c.item_no));
-    skippedCount = parsedCases.length - newCases.length;
-    
-    if (skippedCount > 0) {
-      console.log(`[TELEGRAM] Skipping ${skippedCount} duplicate cases`);
-    }
-    
-    if (newCases.length > 0) {
-      // Insert only new cases
-      const casesToInsert = newCases.map(c => ({
-        date,
-        court_location: bench,
+      // Log to scraper_logs
+      await supabase.from('scraper_logs').insert({
+        bench,
+        status: parsedCases.length > 0 ? 'success' : 'partial',
+        cases_found: insertedCount,
         list_type: listType,
-        court_room_no: courtNo,
-        item_no: c.item_no,
-        case_number: c.case_number,
-        petitioner: c.petitioner,
-        respondent: c.respondent,
-        petitioner_lawyer: c.petitioner_lawyer,
-        respondent_lawyer: c.respondent_lawyer,
-        judge_names: judgeNames || c.judge_names,
-        source_url: storedPdfUrl || fileUrl || `telegram:${message.message_id}`,
-        status: 'pending',
-      }));
+        court_no: courtNo,
+      });
 
-      const { data, error } = await supabase
-        .from('daily_court_docket')
-        .insert(casesToInsert)
-        .select();
-
-      if (error) {
-        console.error('[TELEGRAM] Database error:', error);
-      } else {
-        insertedCount = data?.length || 0;
-        console.log(`[TELEGRAM] Inserted ${insertedCount} new cases (skipped ${skippedCount} duplicates)`);
-      }
-    } else {
-      console.log(`[TELEGRAM] All ${parsedCases.length} cases already exist, skipping insert`);
+      const totalTime = Date.now() - startTime;
+      console.log(`[TELEGRAM-BG] ✓ Background processing completed in ${totalTime}ms: ${parsedCases.length} parsed, ${insertedCount} inserted`);
+      
+    } catch (error) {
+      console.error('[TELEGRAM-BG] Background processing error:', error);
+      
+      // Log failure
+      await supabase.from('scraper_logs').insert({
+        bench,
+        status: 'error',
+        error_message: error instanceof Error ? error.message : 'Unknown error',
+        list_type: listType,
+        court_no: courtNo,
+      });
     }
+  };
+
+  // Use EdgeRuntime.waitUntil for background processing
+  // @ts-ignore - EdgeRuntime is available in Supabase Edge Functions
+  if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime.waitUntil) {
+    // @ts-ignore
+    EdgeRuntime.waitUntil(backgroundTask());
+    console.log('[TELEGRAM] Background task started, returning immediate response');
   } else {
-    // No parsed cases - check if placeholder already exists
-    const { data: existingPlaceholder } = await supabase
-      .from('daily_court_docket')
-      .select('id')
-      .eq('date', date)
-      .eq('court_location', bench)
-      .eq('list_type', listType)
-      .eq('item_no', 0)
-      .maybeSingle();
-    
-    if (existingPlaceholder) {
-      console.log(`[TELEGRAM] Placeholder already exists for ${date}/${bench}/${listType}, skipping`);
-    } else {
-      const { data, error } = await supabase
-        .from('daily_court_docket')
-        .insert({
-          date,
-          court_location: bench,
-          list_type: listType,
-          court_room_no: courtNo,
-          source_url: storedPdfUrl || fileUrl || `telegram:${message.message_id}`,
-          status: 'pending_parse',
-          case_number: `PENDING_${message.message_id}`,
-          item_no: 0,
-        })
-        .select();
-
-      if (error) {
-        console.error('[TELEGRAM] Database error:', error);
-      } else {
-        insertedCount = 1;
-        console.log(`[TELEGRAM] Created placeholder docket entry: ${data?.[0]?.id}`);
-      }
-    }
+    // Fallback: run synchronously if EdgeRuntime not available
+    console.log('[TELEGRAM] EdgeRuntime not available, running synchronously');
+    await backgroundTask();
   }
 
-  // Log to scraper_logs
-  await supabase.from('scraper_logs').insert({
-    bench,
-    status: parsedCases.length > 0 ? 'success' : 'partial',
-    cases_found: insertedCount,
-    list_type: listType,
-    court_no: courtNo,
-  });
-
+  // Return immediate response to Telegram
   return new Response(
     JSON.stringify({ 
       ok: true, 
-      processed: true, 
-      cases_parsed: parsedCases.length,
-      cases_inserted: insertedCount 
+      processing: true,
+      message: 'PDF processing started in background'
     }),
     { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
   );
@@ -542,31 +547,30 @@ OUTPUT FORMAT (STRICT JSON — no markdown, no explanations):
       // Court-based parallel parsing with round-robin provider distribution
       console.log(`[TELEGRAM] Step 2: Parallel court-based parsing (${pdfStructure.courts.length} courts)...`);
       
-      // Assign courts to providers: even indices → Gemini, odd indices → GPT-4o
+      // Assign all courts to Gemini (GPT-4o doesn't support PDFs)
+      // Still use parallel batches for speed
       const tasks: CourtParseTask[] = pdfStructure.courts.map((court, idx) => ({
         courtIdx: idx,
         court,
-        provider: idx % 2 === 0 ? 'gemini' : 'gpt4o'
+        provider: 'gemini' as AIProvider // Gemini supports PDF natively
       }));
       
-      const geminiCount = tasks.filter(t => t.provider === 'gemini').length;
-      const gpt4oCount = tasks.filter(t => t.provider === 'gpt4o').length;
-      console.log(`[TELEGRAM] Distribution: ${geminiCount} courts → Gemini, ${gpt4oCount} courts → GPT-4o`);
+      console.log(`[TELEGRAM] All ${tasks.length} courts will use Gemini (PDF support)`);
       
-      // Process courts in parallel batches of 2 (1 Gemini + 1 GPT-4o running simultaneously)
-      const BATCH_SIZE = 2;
+      // Process courts in parallel batches of 3 (balance speed vs rate limits)
+      const BATCH_SIZE = 3;
       const batches: CourtParseTask[][] = [];
       for (let i = 0; i < tasks.length; i += BATCH_SIZE) {
         batches.push(tasks.slice(i, i + BATCH_SIZE));
       }
       
-      console.log(`[TELEGRAM] Processing ${batches.length} parallel batches...`);
+      console.log(`[TELEGRAM] Processing ${batches.length} parallel batches (${BATCH_SIZE} courts each)...`);
       
       for (let batchIdx = 0; batchIdx < batches.length; batchIdx++) {
         const batch = batches[batchIdx];
         const batchStart = Date.now();
         
-        console.log(`[TELEGRAM] Batch ${batchIdx + 1}/${batches.length}: ${batch.map(t => `${t.court.court_identifier}→${t.provider}`).join(' | ')}`);
+        console.log(`[TELEGRAM] Batch ${batchIdx + 1}/${batches.length}: ${batch.map(t => t.court.court_identifier).join(' | ')}`);
         
         // Execute batch in parallel
         const batchPromises = batch.map(task => 
@@ -588,26 +592,26 @@ OUTPUT FORMAT (STRICT JSON — no markdown, no explanations):
         
         const batchResults = await Promise.all(batchPromises);
         
-        // Process results and retry failures with alternate provider
+        // Process results and retry failures
         for (const result of batchResults) {
           const task = batch.find(t => t.courtIdx === result.courtIdx)!;
           
           if (result.success && result.cases.length > 0) {
             allCases.push(...result.cases);
-            console.log(`[TELEGRAM] ✓ ${task.court.court_identifier} via ${result.provider}: ${result.cases.length} cases`);
+            console.log(`[TELEGRAM] ✓ ${task.court.court_identifier}: ${result.cases.length} cases`);
           } else {
-            // Retry with alternate provider
-            const altProvider: AIProvider = task.provider === 'gemini' ? 'gpt4o' : 'gemini';
-            console.log(`[TELEGRAM] ✗ ${task.court.court_identifier} failed on ${task.provider} (${result.error || 'no cases'}), retrying with ${altProvider}...`);
+            // Retry once with Gemini
+            console.log(`[TELEGRAM] ✗ ${task.court.court_identifier} failed (${result.error || 'no cases'}), retrying...`);
             
             try {
+              await new Promise(resolve => setTimeout(resolve, 1000)); // Wait before retry
               const retryCases = await parseCourtSectionWithProvider(
-                lovableApiKey, pdfDataUrl, bench, listType, task.court, altProvider
+                lovableApiKey, pdfDataUrl, bench, listType, task.court, 'gemini'
               );
               allCases.push(...retryCases);
-              console.log(`[TELEGRAM] ✓ Retry ${task.court.court_identifier} via ${altProvider}: ${retryCases.length} cases`);
+              console.log(`[TELEGRAM] ✓ Retry ${task.court.court_identifier}: ${retryCases.length} cases`);
             } catch (retryErr) {
-              console.error(`[TELEGRAM] ✗✗ ${task.court.court_identifier} failed on both providers`);
+              console.error(`[TELEGRAM] ✗✗ ${task.court.court_identifier} failed after retry`);
             }
           }
         }
@@ -615,9 +619,9 @@ OUTPUT FORMAT (STRICT JSON — no markdown, no explanations):
         const batchDuration = Date.now() - batchStart;
         console.log(`[TELEGRAM] Batch ${batchIdx + 1} completed in ${batchDuration}ms`);
         
-        // Small delay between batches to be respectful to APIs
+        // Small delay between batches to respect rate limits
         if (batchIdx < batches.length - 1) {
-          await new Promise(resolve => setTimeout(resolve, 300));
+          await new Promise(resolve => setTimeout(resolve, 500));
         }
       }
     } else {
