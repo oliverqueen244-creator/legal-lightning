@@ -25,8 +25,7 @@ export default function Auth() {
   useEffect(() => {
     if (isAuthenticated && !loading && profile) {
       // Check if onboarding is completed
-      const onboardingCompleted = (profile as any).onboarding_completed;
-      if (onboardingCompleted) {
+      if (profile.onboarding_completed) {
         navigate('/');
       } else {
         navigate('/onboarding');

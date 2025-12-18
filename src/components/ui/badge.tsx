@@ -16,7 +16,7 @@ const badgeVariants = cva(
         danger: "border-court-danger-light bg-court-danger/20 text-court-danger-light animate-pulse",
         success: "border-court-success bg-court-success/10 text-court-success",
         warning: "border-court-warning bg-court-warning/10 text-court-warning",
-        supplementary: "border-orange-500 bg-orange-500/10 text-orange-400",
+        supplementary: "border-court-warning bg-court-warning/10 text-court-warning",
         running: "border-court-danger-light bg-court-danger text-foreground font-bold animate-pulse",
       },
     },

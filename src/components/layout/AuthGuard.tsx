@@ -21,7 +21,7 @@ export function AuthGuard({ children, requireOnboarding = true }: AuthGuardProps
 
     // Check onboarding completion (skip if on onboarding page)
     if (requireOnboarding && !loading && isAuthenticated && profile) {
-      const onboardingCompleted = (profile as any).onboarding_completed;
+      const onboardingCompleted = profile.onboarding_completed;
       const isOnboardingPage = location.pathname === '/onboarding';
       
       if (!onboardingCompleted && !isOnboardingPage) {

@@ -1,13 +1,13 @@
 export interface Profile {
   id: string;
-  role: 'SENIOR' | 'JUNIOR' | 'CLERK';
+  role: 'SENIOR' | 'JUNIOR' | 'CLERK' | string | null;
   full_name: string | null;
   whatsapp_number: string | null;
   bar_registration_number: string | null;
-  bench: 'JAIPUR' | 'JODHPUR' | null;
-  is_verified: boolean;
-  onboarding_completed: boolean;
-  created_at: string;
+  bench: string | null;
+  is_verified: boolean | null;
+  onboarding_completed: boolean | null;
+  created_at: string | null;
 }
 
 export interface LawyerAlias {

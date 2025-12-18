@@ -77,18 +77,21 @@ export function Header() {
     }
   };
 
-  const handleBenchChange = async (bench: Bench) => {
+  const handleBenchChange = async (bench: Bench | 'BOTH') => {
     setSelectedBench(bench);
+    
+    // For database storage, convert BOTH to comma-separated value
+    const benchForDb = bench === 'BOTH' ? 'JAIPUR,JODHPUR' : bench;
     
     // Update profile if user has permission
     if (profile?.id) {
       await supabase
         .from('profiles')
-        .update({ bench })
+        .update({ bench: benchForDb })
         .eq('id', profile.id);
     }
     
-    toast.success(`Switched to ${bench} Bench`);
+    toast.success(`Switched to ${bench === 'BOTH' ? 'Both Benches' : bench + ' Bench'}`);
   };
 
   // Format last sync time
@@ -173,7 +176,7 @@ export function Header() {
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem 
-                  onClick={() => handleBenchChange('JAIPUR,JODHPUR' as Bench)}
+                  onClick={() => handleBenchChange('BOTH')}
                   className={selectedBench === 'BOTH' ? 'bg-primary/10' : ''}
                 >
                   <MapPin className="h-4 w-4 mr-2" />
