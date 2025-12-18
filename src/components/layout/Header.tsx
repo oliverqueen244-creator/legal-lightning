@@ -122,7 +122,7 @@ export function Header() {
                 Vakalat-OS
               </h1>
               <p className="text-sm text-muted-foreground">
-                Rajasthan High Court Dashboard
+                Rajasthan High Court
               </p>
             </div>
           </div>

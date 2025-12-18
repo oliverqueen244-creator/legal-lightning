@@ -44,15 +44,15 @@ export function MorningBriefPanel({ brief, isLoading, onRefresh }: MorningBriefP
 
   if (!brief || brief.total_cases === 0) {
     return (
-      <Card className="glass-card">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 font-display tracking-wide">
+      <Card className="glass-card border-none bg-transparent">
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2 font-display tracking-wide text-xl">
             <Sun className="h-5 w-5 text-primary" />
-            Morning Brief
+            Today's Brief
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-muted-foreground text-center py-8">
+          <p className="text-muted-foreground text-center py-12 text-lg">
             No cases scheduled for today
           </p>
         </CardContent>
@@ -176,36 +176,36 @@ export function MorningBriefPanel({ brief, isLoading, onRefresh }: MorningBriefP
   };
 
   return (
-    <Card className="glass-card">
-      <CardHeader className="pb-2">
+    <Card className="glass-card border-none bg-transparent shadow-none">
+      <CardHeader className="pb-4 px-0">
         <CardTitle className="flex items-center justify-between font-display tracking-wide">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 text-xl">
             <Sun className="h-5 w-5 text-primary" />
-            Morning Brief
+            Today's Brief
           </div>
-          <Badge variant="outline" className="text-xs">
+          <span className="text-xs text-muted-foreground font-normal">
             {format(new Date(brief.generated_at), 'HH:mm')}
-          </Badge>
+          </span>
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
-        {/* Summary stats */}
-        <div className="grid grid-cols-4 gap-2">
-          <div className="text-center p-2 rounded-lg bg-muted">
-            <p className="text-2xl font-bold text-foreground">{brief.total_cases}</p>
-            <p className="text-xs text-muted-foreground">Total</p>
+      <CardContent className="space-y-6 px-0">
+        {/* Summary stats - larger, clearer */}
+        <div className="grid grid-cols-4 gap-3">
+          <div className="text-center p-3 rounded-lg bg-muted/50">
+            <p className="text-3xl font-bold text-foreground">{brief.total_cases}</p>
+            <p className="text-xs text-muted-foreground mt-1">Total</p>
           </div>
-          <div className="text-center p-2 rounded-lg bg-court-danger/10">
-            <p className="text-2xl font-bold text-court-danger-light">{brief.summary.attend_count}</p>
-            <p className="text-xs text-muted-foreground">Attend</p>
+          <div className="text-center p-3 rounded-lg bg-court-danger/5 border border-court-danger/20">
+            <p className="text-3xl font-bold text-court-danger-light">{brief.summary.attend_count}</p>
+            <p className="text-xs text-muted-foreground mt-1">Attend</p>
           </div>
-          <div className="text-center p-2 rounded-lg bg-court-success/10">
-            <p className="text-2xl font-bold text-court-success">{brief.summary.delegate_count}</p>
-            <p className="text-xs text-muted-foreground">Delegate</p>
+          <div className="text-center p-3 rounded-lg bg-court-success/5 border border-court-success/20">
+            <p className="text-3xl font-bold text-court-success">{brief.summary.delegate_count}</p>
+            <p className="text-xs text-muted-foreground mt-1">Delegate</p>
           </div>
-          <div className="text-center p-2 rounded-lg bg-primary/10">
-            <p className="text-2xl font-bold text-primary">{brief.summary.monitor_count}</p>
-            <p className="text-xs text-muted-foreground">Monitor</p>
+          <div className="text-center p-3 rounded-lg bg-muted/30 border border-border/50">
+            <p className="text-3xl font-bold text-muted-foreground">{brief.summary.monitor_count}</p>
+            <p className="text-xs text-muted-foreground mt-1">Monitor</p>
           </div>
         </div>
 

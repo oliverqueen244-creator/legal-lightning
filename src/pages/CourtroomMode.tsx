@@ -1,9 +1,7 @@
-import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Separator } from '@/components/ui/separator';
 import {
   Scale,
   AlertTriangle,
@@ -12,26 +10,22 @@ import {
   Clock,
   WifiOff,
   RefreshCw,
-  ChevronDown,
-  ChevronUp,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { AuthGuard } from '@/components/layout/AuthGuard';
 import { useCourtroomSnapshot, CourtroomCase } from '@/hooks/useCourtroomSnapshot';
-import { DOCUMENT_TYPE_LABELS, DOCUMENT_LANGUAGE_LABELS, DOCUMENT_FORMAT_LABELS } from '@/types/documents';
 
 export default function CourtroomMode() {
   const navigate = useNavigate();
   const { snapshot, isLoading, isOnline, regenerate, isRegenerating } = useCourtroomSnapshot();
-  const [expandedCase, setExpandedCase] = useState<string | null>(null);
 
-  // Loading state - minimal, no spinner animation
+  // Loading state - minimal, no animation
   if (isLoading) {
     return (
       <AuthGuard>
-        <div className="min-h-screen bg-black flex items-center justify-center">
-          <Scale className="h-16 w-16 text-primary" />
+        <div className="min-h-screen bg-background flex items-center justify-center">
+          <Scale className="h-16 w-16 text-muted-foreground" />
         </div>
       </AuthGuard>
     );
@@ -41,13 +35,13 @@ export default function CourtroomMode() {
   if (!snapshot || snapshot.total_cases === 0) {
     return (
       <AuthGuard>
-        <div className="min-h-screen bg-black flex flex-col items-center justify-center gap-6 p-8">
-          <Scale className="h-20 w-20 text-muted-foreground" />
+        <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-6 p-8">
+          <Scale className="h-20 w-20 text-muted-foreground/50" />
           <h1 className="text-2xl font-display text-foreground text-center">
-            No Cases for Today
+            No Cases Today
           </h1>
           <p className="text-muted-foreground text-center max-w-md">
-            No scheduled cases found. Return to dashboard to check your docket.
+            No scheduled cases found.
           </p>
           <Button
             variant="outline"
@@ -55,211 +49,117 @@ export default function CourtroomMode() {
             onClick={() => navigate('/')}
             className="mt-4"
           >
-            Return to Dashboard
+            Return
           </Button>
         </div>
       </AuthGuard>
     );
   }
 
+  // Calm, flat case card - no expansion, no interaction
   const CaseCard = ({ caseItem }: { caseItem: CourtroomCase }) => {
-    const isExpanded = expandedCase === caseItem.id;
     const hasWarnings = caseItem.warnings.length > 0;
-    const primaryDocs = caseItem.documents.filter((d) => d.is_primary);
 
     return (
-      <div
-        className={cn(
-          'border-b border-border/50 py-6',
-          hasWarnings && 'bg-court-danger/5'
-        )}
-      >
-        {/* Main case info - always visible */}
-        <div
-          className="cursor-pointer"
-          onClick={() => setExpandedCase(isExpanded ? null : caseItem.id)}
-        >
-          {/* Item number - GIANT */}
-          <div className="flex items-start justify-between mb-4">
-            <div className="flex items-baseline gap-4">
-              <span className="text-6xl md:text-7xl font-display font-bold text-primary">
-                {caseItem.item_no}
-              </span>
-              <div>
-                <h2 className="text-xl md:text-2xl font-display font-semibold text-foreground">
-                  {caseItem.case_number}
-                </h2>
-                <p className="text-lg text-muted-foreground">
-                  Court {caseItem.court_room_no}
-                </p>
-              </div>
-            </div>
-            
-            <div className="flex items-center gap-2">
-              {hasWarnings && (
-                <Badge variant="danger" className="text-sm">
-                  <AlertTriangle className="h-4 w-4 mr-1" />
-                  {caseItem.warnings.length}
-                </Badge>
-              )}
-              {isExpanded ? (
-                <ChevronUp className="h-6 w-6 text-muted-foreground" />
-              ) : (
-                <ChevronDown className="h-6 w-6 text-muted-foreground" />
-              )}
+      <div className="border-b border-border/20 py-8">
+        {/* Item number - large and clear */}
+        <div className="flex items-start justify-between mb-6">
+          <div className="flex items-baseline gap-6">
+            <span className="text-7xl md:text-8xl font-display font-bold text-foreground/80 tabular-nums">
+              {caseItem.item_no}
+            </span>
+            <div>
+              <h2 className="text-xl md:text-2xl font-display text-foreground">
+                {caseItem.case_number}
+              </h2>
+              <p className="text-base text-muted-foreground mt-1">
+                Court {caseItem.court_room_no}
+              </p>
             </div>
           </div>
-
-          {/* Parties */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-lg">
-            <div className={cn(caseItem.matched_as === 'petitioner' && 'text-primary font-medium')}>
-              <span className="text-muted-foreground text-sm block">Petitioner</span>
-              {caseItem.petitioner || 'Not specified'}
-              {caseItem.petitioner_lawyer && (
-                <span className="text-muted-foreground text-base block">
-                  Adv. {caseItem.petitioner_lawyer}
-                </span>
-              )}
-            </div>
-            <div className={cn(caseItem.matched_as === 'respondent' && 'text-primary font-medium')}>
-              <span className="text-muted-foreground text-sm block">Respondent</span>
-              {caseItem.respondent || 'Not specified'}
-              {caseItem.respondent_lawyer && (
-                <span className="text-muted-foreground text-base block">
-                  Adv. {caseItem.respondent_lawyer}
-                </span>
-              )}
-            </div>
-          </div>
-
-          {/* Judge */}
-          {caseItem.judge_names && (
-            <p className="mt-3 text-base text-muted-foreground">
-              <strong>Before:</strong> {caseItem.judge_names}
-            </p>
-          )}
         </div>
 
-        {/* Expanded content */}
-        {isExpanded && (
-          <div className="mt-6 pt-6 border-t border-border/30 space-y-6">
-            {/* Warnings */}
-            {hasWarnings && (
-              <div className="space-y-2">
-                <h3 className="text-sm font-semibold text-court-danger-light flex items-center gap-2">
-                  <AlertTriangle className="h-4 w-4" />
-                  Warnings
-                </h3>
-                <ul className="space-y-1">
-                  {caseItem.warnings.map((warning, i) => (
-                    <li key={i} className="text-base text-court-danger-light pl-6">
-                      • {warning}
-                    </li>
-                  ))}
-                </ul>
-              </div>
+        {/* Parties - clear, readable */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+          <div className={caseItem.matched_as === 'petitioner' ? 'text-foreground' : 'text-muted-foreground'}>
+            <span className="text-xs uppercase tracking-wide text-muted-foreground/70 block mb-1">
+              Petitioner
+            </span>
+            <p className="text-lg">{caseItem.petitioner || '—'}</p>
+            {caseItem.petitioner_lawyer && (
+              <p className="text-sm text-muted-foreground mt-1">
+                Adv. {caseItem.petitioner_lawyer}
+              </p>
             )}
+          </div>
+          <div className={caseItem.matched_as === 'respondent' ? 'text-foreground' : 'text-muted-foreground'}>
+            <span className="text-xs uppercase tracking-wide text-muted-foreground/70 block mb-1">
+              Respondent
+            </span>
+            <p className="text-lg">{caseItem.respondent || '—'}</p>
+            {caseItem.respondent_lawyer && (
+              <p className="text-sm text-muted-foreground mt-1">
+                Adv. {caseItem.respondent_lawyer}
+              </p>
+            )}
+          </div>
+        </div>
 
-            {/* Documents */}
-            <div className="space-y-3">
-              <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                <FileText className="h-4 w-4 text-primary" />
-                Documents ({caseItem.documents.length})
-              </h3>
-              {caseItem.documents.length === 0 ? (
-                <p className="text-base text-muted-foreground pl-6">
-                  No approved documents
-                </p>
-              ) : (
-                <div className="space-y-2 pl-6">
-                  {caseItem.documents.map((doc) => (
-                    <div
-                      key={doc.id}
-                      className={cn(
-                        'flex items-center justify-between p-3 rounded-lg bg-white/5',
-                        doc.is_primary && 'border-l-4 border-l-primary'
-                      )}
-                    >
-                      <div>
-                        <span className="text-base text-foreground">
-                          {DOCUMENT_TYPE_LABELS[doc.document_type as keyof typeof DOCUMENT_TYPE_LABELS] || doc.document_type}
-                        </span>
-                        <div className="flex gap-2 mt-1">
-                          <Badge variant="outline" className="text-xs">
-                            {DOCUMENT_LANGUAGE_LABELS[doc.language as keyof typeof DOCUMENT_LANGUAGE_LABELS] || doc.language}
-                          </Badge>
-                          <Badge variant="outline" className="text-xs">
-                            {DOCUMENT_FORMAT_LABELS[doc.format as keyof typeof DOCUMENT_FORMAT_LABELS] || doc.format}
-                          </Badge>
-                          {doc.legibility === 'POOR' && (
-                            <Badge variant="danger" className="text-xs">
-                              Poor Legibility
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-                      {doc.is_primary && (
-                        <Badge variant="gold" className="text-xs">PRIMARY</Badge>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+        {/* Judge */}
+        {caseItem.judge_names && (
+          <p className="text-base text-muted-foreground mb-4">
+            Before: {caseItem.judge_names}
+          </p>
+        )}
 
-            {/* Arguments */}
-            <div className="space-y-3">
-              <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                <List className="h-4 w-4 text-primary" />
-                Arguments ({caseItem.arguments.length})
-              </h3>
-              {caseItem.arguments.length === 0 ? (
-                <p className="text-base text-muted-foreground pl-6">
-                  No arguments prepared
-                </p>
-              ) : (
-                <ol className="space-y-2 pl-6">
-                  {caseItem.arguments.map((arg, index) => (
-                    <li key={arg.id} className="text-lg text-foreground">
-                      <span className="text-primary font-medium">{index + 1}.</span>{' '}
-                      {arg.title}
-                      <span className="text-sm text-muted-foreground ml-2">
-                        (p. {arg.linked_page_number})
-                      </span>
-                    </li>
-                  ))}
-                </ol>
-              )}
-            </div>
+        {/* Warnings - inline, muted */}
+        {hasWarnings && (
+          <div className="mb-4">
+            {caseItem.warnings.map((warning, i) => (
+              <p key={i} className="text-sm text-muted-foreground/80 flex items-center gap-2">
+                <span className="h-1 w-1 rounded-full bg-muted-foreground/50" />
+                {warning}
+              </p>
+            ))}
           </div>
         )}
+
+        {/* Document/argument counts - subtle */}
+        <div className="flex items-center gap-6 text-sm text-muted-foreground/60">
+          <span className="flex items-center gap-1.5">
+            <FileText className="h-4 w-4" />
+            {caseItem.documents.length}
+          </span>
+          <span className="flex items-center gap-1.5">
+            <List className="h-4 w-4" />
+            {caseItem.arguments.length}
+          </span>
+        </div>
       </div>
     );
   };
 
   return (
     <AuthGuard>
-      <div className="min-h-screen bg-black text-foreground">
-        {/* Snapshot status banner */}
+      <div className="min-h-screen bg-background text-foreground">
+        {/* Minimal header - no navigation, no exploration */}
         <div
           className={cn(
-            'sticky top-0 z-50 px-4 py-3 flex items-center justify-between',
+            'sticky top-0 z-50 px-6 py-4 flex items-center justify-between border-b',
             snapshot.is_stale
-              ? 'bg-court-warning/20 border-b border-court-warning/30'
-              : 'bg-card border-b border-border'
+              ? 'border-muted-foreground/30'
+              : 'border-border/50'
           )}
         >
-          <div className="flex items-center gap-3">
-            <Scale className="h-6 w-6 text-primary" />
+          <div className="flex items-center gap-4">
+            <Scale className="h-5 w-5 text-muted-foreground" />
             <div>
-              <h1 className="font-display font-bold text-lg">COURTROOM MODE</h1>
+              <h1 className="font-display text-lg text-foreground">Court</h1>
               <p className="text-xs text-muted-foreground flex items-center gap-2">
                 <Clock className="h-3 w-3" />
-                Snapshot: {format(new Date(snapshot.generated_at), 'HH:mm')}
+                {format(new Date(snapshot.generated_at), 'HH:mm')}
                 {snapshot.is_stale && (
-                  <Badge variant="secondary" className="text-xs bg-court-warning/20 text-court-warning">
-                    STALE
-                  </Badge>
+                  <span className="text-muted-foreground/70">• stale</span>
                 )}
               </p>
             </div>
@@ -267,10 +167,10 @@ export default function CourtroomMode() {
 
           <div className="flex items-center gap-3">
             {!isOnline && (
-              <Badge variant="secondary" className="flex items-center gap-1">
+              <span className="text-xs text-muted-foreground flex items-center gap-1">
                 <WifiOff className="h-3 w-3" />
-                OFFLINE
-              </Badge>
+                Offline
+              </span>
             )}
             {isOnline && (
               <Button
@@ -278,39 +178,42 @@ export default function CourtroomMode() {
                 size="sm"
                 onClick={() => regenerate()}
                 disabled={isRegenerating}
+                className="text-muted-foreground"
               >
-                <RefreshCw className={cn('h-4 w-4 mr-1', isRegenerating && 'animate-spin')} />
-                Refresh
+                <RefreshCw className={cn('h-4 w-4', isRegenerating && 'animate-spin')} />
               </Button>
             )}
             <Button
-              variant="outline"
+              variant="ghost"
               size="sm"
               onClick={() => navigate('/')}
+              className="text-muted-foreground"
             >
               Exit
             </Button>
           </div>
         </div>
 
-        {/* Case count summary */}
-        <div className="px-4 py-4 border-b border-border/30 bg-card/50">
-          <div className="flex items-center justify-between max-w-4xl mx-auto">
-            <span className="text-2xl font-display">
-              <span className="text-primary font-bold">{snapshot.total_cases}</span>{' '}
-              <span className="text-muted-foreground">
-                case{snapshot.total_cases !== 1 ? 's' : ''} today
+        {/* Case count - simple */}
+        <div className="px-6 py-6 border-b border-border/20">
+          <div className="max-w-3xl mx-auto flex items-baseline justify-between">
+            <div>
+              <span className="text-4xl font-display font-bold text-foreground">
+                {snapshot.total_cases}
               </span>
-            </span>
-            <span className="text-muted-foreground">
-              {format(new Date(), 'EEEE, d MMMM yyyy')}
+              <span className="text-xl text-muted-foreground ml-2">
+                case{snapshot.total_cases !== 1 ? 's' : ''}
+              </span>
+            </div>
+            <span className="text-sm text-muted-foreground">
+              {format(new Date(), 'EEEE, d MMMM')}
             </span>
           </div>
         </div>
 
-        {/* Cases list - vertical scroll */}
-        <ScrollArea className="h-[calc(100vh-140px)]">
-          <div className="max-w-4xl mx-auto px-4">
+        {/* Cases list - single vertical scroll, no interaction */}
+        <ScrollArea className="h-[calc(100vh-160px)]">
+          <div className="max-w-3xl mx-auto px-6">
             {snapshot.cases.map((caseItem) => (
               <CaseCard key={caseItem.id} caseItem={caseItem} />
             ))}
