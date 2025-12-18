@@ -342,22 +342,23 @@ async function handleTelegramUpdate(update: TelegramUpdate, supabase: any, botTo
 
 async function parsePdfWithAI(
   pdfContent: Uint8Array, 
-  _apiKey: string, // Not used anymore - using GOOGLE_AI_API_KEY instead
+  _apiKey: string, // Not used - using LOVABLE_API_KEY instead
   bench: string,
   listType: string
 ): Promise<{ cases: ParsedCase[], judgeNames: string }> {
   try {
     console.log(`[TELEGRAM] Starting AI parse, PDF size: ${pdfContent.length} bytes`);
     
-    // Get Google AI API key
-    const googleApiKey = Deno.env.get('GOOGLE_AI_API_KEY');
-    if (!googleApiKey) {
-      console.error('[TELEGRAM] GOOGLE_AI_API_KEY not configured');
+    // Get Lovable API key (pre-configured)
+    const lovableApiKey = Deno.env.get('LOVABLE_API_KEY');
+    if (!lovableApiKey) {
+      console.error('[TELEGRAM] LOVABLE_API_KEY not configured');
       return { cases: [], judgeNames: '' };
     }
     
-    // Convert PDF to base64 using Deno's standard library approach
+    // Convert PDF to base64 data URL
     const base64Pdf = encodeBase64(pdfContent);
+    const pdfDataUrl = `data:application/pdf;base64,${base64Pdf}`;
     console.log(`[TELEGRAM] Base64 encoded, length: ${base64Pdf.length}`);
     
     const prompt = `You are a legal document parser specialized in Indian High Court causelists.
@@ -391,7 +392,7 @@ Return ONLY a valid JSON object with this exact structure (no markdown, no code 
 
 Extract ALL cases from the document. If a field is not available, use null. Be thorough.`;
 
-    console.log('[TELEGRAM] Calling Google AI Studio...');
+    console.log('[TELEGRAM] Calling Lovable AI gateway...');
     
     // Use AbortController with 50 second timeout
     const controller = new AbortController();
@@ -402,27 +403,28 @@ Extract ALL cases from the document. If a field is not available, use null. Be t
     
     let response: Response;
     try {
-      response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${googleApiKey}`, {
+      response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
         method: 'POST',
         headers: {
+          'Authorization': `Bearer ${lovableApiKey}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          contents: [{
-            parts: [
-              { text: prompt },
-              { 
-                inline_data: {
-                  mime_type: 'application/pdf',
-                  data: base64Pdf
+          model: 'google/gemini-2.5-flash',
+          messages: [
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: prompt },
+                { 
+                  type: 'image_url',
+                  image_url: { url: pdfDataUrl }
                 }
-              }
-            ]
-          }],
-          generationConfig: {
-            maxOutputTokens: 16000,
-            temperature: 0.1,
-          }
+              ]
+            }
+          ],
+          max_tokens: 16000,
+          temperature: 0.1,
         }),
         signal: controller.signal,
       });
@@ -442,12 +444,12 @@ Extract ALL cases from the document. If a field is not available, use null. Be t
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('[TELEGRAM] Google AI API error:', response.status, errorText);
+      console.error('[TELEGRAM] Lovable AI error:', response.status, errorText);
       return { cases: [], judgeNames: '' };
     }
 
     const data = await response.json();
-    const content = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const content = data.choices?.[0]?.message?.content || '';
     
     console.log('[TELEGRAM] AI response length:', content.length);
     console.log('[TELEGRAM] AI response preview:', content.substring(0, 500));
