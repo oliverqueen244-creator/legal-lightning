@@ -7,16 +7,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Scale, Mail, Lock, User, AlertCircle, FileText } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
-import { useScrapeOnLogin } from '@/hooks/useScrapeOnLogin';
 import { toast } from 'sonner';
 
 export default function Auth() {
   const navigate = useNavigate();
-  const { signIn, signUp, isAuthenticated, profile, loading, user } = useAuth();
-  
-  // Only trigger scraper when user is fully authenticated (not during initial load)
-  // This prevents React queue errors during render
-  useScrapeOnLogin(isAuthenticated && !loading ? user?.id : undefined);
+  const { signIn, signUp, isAuthenticated, profile, loading } = useAuth();
   
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
@@ -237,7 +232,7 @@ export default function Auth() {
       </Card>
 
       {/* Documentation Links */}
-      <div className="mt-6 text-center space-y-2">
+      <div className="mt-6 text-center">
         <Link 
           to="/docs" 
           className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors group"
@@ -246,16 +241,6 @@ export default function Auth() {
           <span>View Documentation</span>
           <span className="text-xs text-muted-foreground/70">(Workflows, Features & Accessibility)</span>
         </Link>
-        <div>
-          <Link 
-            to="/scraper-docs" 
-            className="inline-flex items-center gap-2 text-sm text-amber-500/80 hover:text-amber-500 transition-colors group"
-          >
-            <AlertCircle className="h-4 w-4" aria-hidden="true" />
-            <span>Scraper Technical Documentation</span>
-            <span className="text-xs text-muted-foreground/70">(Error Analysis)</span>
-          </Link>
-        </div>
       </div>
     </div>
   );
