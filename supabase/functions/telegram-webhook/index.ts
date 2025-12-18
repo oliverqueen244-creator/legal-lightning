@@ -342,23 +342,22 @@ async function handleTelegramUpdate(update: TelegramUpdate, supabase: any, botTo
 
 async function parsePdfWithAI(
   pdfContent: Uint8Array, 
-  _apiKey: string, // Not used - using LOVABLE_API_KEY instead
+  _apiKey: string, // Not used - using GOOGLE_AI_API_KEY instead
   bench: string,
   listType: string
 ): Promise<{ cases: ParsedCase[], judgeNames: string }> {
   try {
     console.log(`[TELEGRAM] Starting AI parse, PDF size: ${pdfContent.length} bytes`);
     
-    // Get Lovable API key (pre-configured)
-    const lovableApiKey = Deno.env.get('LOVABLE_API_KEY');
-    if (!lovableApiKey) {
-      console.error('[TELEGRAM] LOVABLE_API_KEY not configured');
+    // Get Google AI Studio API key
+    const googleApiKey = Deno.env.get('GOOGLE_AI_API_KEY');
+    if (!googleApiKey) {
+      console.error('[TELEGRAM] GOOGLE_AI_API_KEY not configured');
       return { cases: [], judgeNames: '' };
     }
     
-    // Convert PDF to base64 data URL
+    // Convert PDF to base64
     const base64Pdf = encodeBase64(pdfContent);
-    const pdfDataUrl = `data:application/pdf;base64,${base64Pdf}`;
     console.log(`[TELEGRAM] Base64 encoded, length: ${base64Pdf.length}`);
     
     const prompt = `You are a legal document parser specialized in Indian High Court causelists.
@@ -392,39 +391,40 @@ Return ONLY a valid JSON object with this exact structure (no markdown, no code 
 
 Extract ALL cases from the document. If a field is not available, use null. Be thorough.`;
 
-    console.log('[TELEGRAM] Calling Lovable AI gateway...');
+    console.log('[TELEGRAM] Calling Google AI Studio API (gemini-1.5-flash)...');
     
-    // Use AbortController with 50 second timeout
+    // Use AbortController with 60 second timeout
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {
       console.log('[TELEGRAM] AI request timeout, aborting...');
       controller.abort();
-    }, 50000);
+    }, 60000);
     
     let response: Response;
     try {
-      response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${googleApiKey}`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${lovableApiKey}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'google/gemini-2.5-flash',
-          messages: [
+          contents: [
             {
-              role: 'user',
-              content: [
-                { type: 'text', text: prompt },
-                { 
-                  type: 'image_url',
-                  image_url: { url: pdfDataUrl }
+              parts: [
+                { text: prompt },
+                {
+                  inline_data: {
+                    mime_type: 'application/pdf',
+                    data: base64Pdf
+                  }
                 }
               ]
             }
           ],
-          max_tokens: 16000,
-          temperature: 0.1,
+          generationConfig: {
+            temperature: 0.1,
+            maxOutputTokens: 16000,
+          }
         }),
         signal: controller.signal,
       });
@@ -432,7 +432,7 @@ Extract ALL cases from the document. If a field is not available, use null. Be t
       clearTimeout(timeoutId);
       const err = fetchError as Error;
       if (err?.name === 'AbortError') {
-        console.error('[TELEGRAM] AI request timed out after 50 seconds');
+        console.error('[TELEGRAM] AI request timed out after 60 seconds');
         return { cases: [], judgeNames: '' };
       }
       console.error('[TELEGRAM] AI fetch error:', err?.message || fetchError);
@@ -440,16 +440,17 @@ Extract ALL cases from the document. If a field is not available, use null. Be t
     }
     
     clearTimeout(timeoutId);
-    console.log(`[TELEGRAM] AI response status: ${response.status}`);
+    console.log(`[TELEGRAM] Google AI response status: ${response.status}`);
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('[TELEGRAM] Lovable AI error:', response.status, errorText);
+      console.error('[TELEGRAM] Google AI Studio error:', response.status, errorText);
       return { cases: [], judgeNames: '' };
     }
 
     const data = await response.json();
-    let content = data.choices?.[0]?.message?.content || '';
+    // Google AI Studio response format is different
+    let content = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
     
     console.log('[TELEGRAM] AI response length:', content.length);
     console.log('[TELEGRAM] AI response preview:', content.substring(0, 500));
