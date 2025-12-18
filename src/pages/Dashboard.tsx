@@ -12,10 +12,12 @@ import { DateSelector } from '@/components/dashboard/DateSelector';
 import { Header } from '@/components/layout/Header';
 import { AuthGuard } from '@/components/layout/AuthGuard';
 import { MorningBriefPanel } from '@/components/morning-brief/MorningBriefPanel';
+import { PostCourtCapturePanel } from '@/components/post-court/PostCourtCapturePanel';
 import { useDocket } from '@/hooks/useDocket';
 import { useLiveBoard } from '@/hooks/useLiveBoard';
 import { useAuth } from '@/hooks/useAuth';
 import { useMorningBrief } from '@/hooks/useMorningBrief';
+import { usePendingCaptures } from '@/hooks/usePostCourtCapture';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -30,6 +32,7 @@ export default function Dashboard() {
   const { data: liveBoards, isLoading: liveBoardLoading } = useLiveBoard();
   const { role, profile } = useAuth();
   const { data: morningBrief, isLoading: briefLoading, refetch: refetchBrief } = useMorningBrief();
+  const { data: pendingCaptures } = usePendingCaptures();
   const [activeTab, setActiveTab] = useState('brief');
   
   // Format date for API calls
@@ -77,6 +80,13 @@ export default function Dashboard() {
     <AuthGuard>
       <div className="min-h-screen bg-background">
         <Header />
+
+        {/* Post-Court Capture - shows after court hours for pending cases */}
+        {pendingCaptures && pendingCaptures.length > 0 && (
+          <div className="container mx-auto px-4 pt-4">
+            <PostCourtCapturePanel />
+          </div>
+        )}
 
         {/* Main Content */}
         <main className="container mx-auto px-4 py-6">

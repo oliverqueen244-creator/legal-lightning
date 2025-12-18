@@ -14,6 +14,7 @@ import {
   ChevronRight,
   Clock,
   Scale,
+  BookMarked,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
@@ -85,6 +86,12 @@ export function MorningBriefPanel({ brief, isLoading, onRefresh }: MorningBriefP
                 <Badge variant="outline" className="text-xs">
                   <History className="h-3 w-3 mr-1" />
                   {caseItem.previousAppearances} prior
+                </Badge>
+              )}
+              {caseItem.lastHearingCaptured && (
+                <Badge variant="outline" className="text-xs text-muted-foreground border-muted-foreground/30">
+                  <BookMarked className="h-3 w-3 mr-1" />
+                  Captured
                 </Badge>
               )}
             </div>

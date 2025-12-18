@@ -420,6 +420,53 @@ export type Database = {
           },
         ]
       }
+      post_court_notes: {
+        Row: {
+          author_id: string
+          case_fingerprint: string
+          created_at: string
+          docket_id: string | null
+          hearing_date: string
+          id: string
+          next_direction: string | null
+          note_for_next: string | null
+          updated_at: string
+          what_happened: string | null
+        }
+        Insert: {
+          author_id: string
+          case_fingerprint: string
+          created_at?: string
+          docket_id?: string | null
+          hearing_date?: string
+          id?: string
+          next_direction?: string | null
+          note_for_next?: string | null
+          updated_at?: string
+          what_happened?: string | null
+        }
+        Update: {
+          author_id?: string
+          case_fingerprint?: string
+          created_at?: string
+          docket_id?: string | null
+          hearing_date?: string
+          id?: string
+          next_direction?: string | null
+          note_for_next?: string | null
+          updated_at?: string
+          what_happened?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "post_court_notes_docket_id_fkey"
+            columns: ["docket_id"]
+            isOneToOne: false
+            referencedRelation: "daily_court_docket"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           bar_registration_number: string | null

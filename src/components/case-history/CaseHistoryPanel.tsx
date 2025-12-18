@@ -9,6 +9,7 @@ import {
   List,
   ChevronRight,
   AlertTriangle,
+  BookMarked,
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -123,7 +124,38 @@ export function CaseHistoryPanel({
                 {entry.arguments.length} arg{entry.arguments.length !== 1 ? 's' : ''}
               </div>
             )}
+            {entry.postCourtNote && (
+              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                <BookMarked className="h-3 w-3" />
+                Note
+              </div>
+            )}
           </div>
+
+          {/* Post-Court Note - human-verified signal */}
+          {entry.postCourtNote && (
+            <div className="mt-2 p-2 rounded bg-muted/30 border border-border/30">
+              <p className="text-xs text-muted-foreground flex items-center gap-1 mb-1">
+                <BookMarked className="h-3 w-3" />
+                Post-Court Note
+              </p>
+              {entry.postCourtNote.what_happened && (
+                <p className="text-sm text-foreground">
+                  {entry.postCourtNote.what_happened}
+                </p>
+              )}
+              {entry.postCourtNote.next_direction && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Next: {entry.postCourtNote.next_direction}
+                </p>
+              )}
+              {entry.postCourtNote.note_for_next && (
+                <p className="text-xs text-muted-foreground/70 italic mt-1">
+                  {entry.postCourtNote.note_for_next}
+                </p>
+              )}
+            </div>
+          )}
         </div>
 
         {onSelectEntry && (

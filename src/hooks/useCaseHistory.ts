@@ -2,6 +2,14 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import type { DocketItem, CaseDocument, CaseArgument } from '@/types/database';
 
+export interface PostCourtNoteEntry {
+  id: string;
+  hearing_date: string;
+  what_happened: string | null;
+  next_direction: string | null;
+  note_for_next: string | null;
+}
+
 export interface CaseHistoryEntry {
   date: string;
   docket_id: string;
@@ -10,6 +18,7 @@ export interface CaseHistoryEntry {
   status: string;
   documents: CaseDocument[];
   arguments: CaseArgument[];
+  postCourtNote?: PostCourtNoteEntry;
 }
 
 export interface CaseHistory {
@@ -86,16 +95,36 @@ export function useCaseHistory(docketId: string) {
 
       if (argsError) throw argsError;
 
-      // Group by date
-      const entries: CaseHistoryEntry[] = (allDockets || []).map((docket) => ({
-        date: docket.date,
-        docket_id: docket.id,
-        item_no: docket.item_no || 0,
-        court_room_no: docket.court_room_no || '',
-        status: docket.status || 'pending',
-        documents: (allDocuments || []).filter((d) => d.docket_id === docket.id) as CaseDocument[],
-        arguments: (allArguments || []).filter((a) => a.docket_id === docket.id) as CaseArgument[],
-      }));
+      // Fetch post-court notes for this fingerprint
+      const { data: postCourtNotes, error: notesError } = await supabase
+        .from('post_court_notes')
+        .select('*')
+        .eq('case_fingerprint', fingerprint)
+        .order('hearing_date', { ascending: false });
+
+      if (notesError) throw notesError;
+
+      // Group by date and include post-court notes
+      const entries: CaseHistoryEntry[] = (allDockets || []).map((docket) => {
+        const note = (postCourtNotes || []).find(n => n.hearing_date === docket.date);
+        
+        return {
+          date: docket.date,
+          docket_id: docket.id,
+          item_no: docket.item_no || 0,
+          court_room_no: docket.court_room_no || '',
+          status: docket.status || 'pending',
+          documents: (allDocuments || []).filter((d) => d.docket_id === docket.id) as CaseDocument[],
+          arguments: (allArguments || []).filter((a) => a.docket_id === docket.id) as CaseArgument[],
+          postCourtNote: note ? {
+            id: note.id,
+            hearing_date: note.hearing_date,
+            what_happened: note.what_happened,
+            next_direction: note.next_direction,
+            note_for_next: note.note_for_next,
+          } : undefined,
+        };
+      });
 
       return {
         fingerprint,
