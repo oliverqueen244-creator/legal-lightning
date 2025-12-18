@@ -391,7 +391,7 @@ Return ONLY a valid JSON object with this exact structure (no markdown, no code 
 
 Extract ALL cases from the document. If a field is not available, use null. Be thorough.`;
 
-    console.log('[TELEGRAM] Calling Google AI Studio API (gemini-2.0-flash)...');
+    console.log('[TELEGRAM] Calling Google AI Studio API (gemini-2.5-flash)...');
     
     // Use AbortController with 60 second timeout
     const controller = new AbortController();
@@ -402,7 +402,7 @@ Extract ALL cases from the document. If a field is not available, use null. Be t
     
     let response: Response;
     try {
-      response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${googleApiKey}`, {
+      response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${googleApiKey}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
