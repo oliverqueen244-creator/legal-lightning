@@ -361,26 +361,71 @@ async function parsePdfWithAI(
     const pdfDataUrl = `data:application/pdf;base64,${base64Pdf}`;
     console.log(`[TELEGRAM] Base64 encoded, length: ${base64Pdf.length}`);
     
-    const prompt = `You are a legal document parser specialized in Indian High Court causelists.
+    // Step 1: Get metadata (judge names and total case count)
+    console.log('[TELEGRAM] Step 1: Getting metadata and case count...');
+    const metadataPrompt = `You are a legal document parser. Analyze this ${bench} Bench ${listType} causelist PDF.
 
-Parse this ${bench} Bench ${listType} causelist PDF and extract ALL case details.
+Extract ONLY:
+1. The names of presiding judges
+2. The TOTAL number of cases/items in the entire document
+
+Return ONLY a valid JSON object (no markdown):
+{
+  "judge_names": "Name of presiding judge(s)",
+  "total_cases": 150
+}`;
+
+    const metadataResponse = await callLovableAI(lovableApiKey, pdfDataUrl, metadataPrompt);
+    let judgeNames = '';
+    let totalCases = 0;
+    
+    if (metadataResponse) {
+      const metaMatch = metadataResponse.match(/\{[\s\S]*\}/);
+      if (metaMatch) {
+        try {
+          const meta = JSON.parse(metaMatch[0]);
+          judgeNames = meta.judge_names || '';
+          totalCases = parseInt(meta.total_cases) || 0;
+          console.log(`[TELEGRAM] Metadata: ${totalCases} cases, judges: ${judgeNames.substring(0, 50)}...`);
+        } catch (e) {
+          console.log('[TELEGRAM] Could not parse metadata, using defaults');
+          totalCases = 200; // Assume max
+        }
+      }
+    }
+    
+    if (totalCases === 0) totalCases = 200; // Default if not detected
+    
+    // Step 2: Parse cases in chunks of 40
+    const CHUNK_SIZE = 40;
+    const allCases: ParsedCase[] = [];
+    const chunks = Math.ceil(totalCases / CHUNK_SIZE);
+    
+    console.log(`[TELEGRAM] Step 2: Parsing ${totalCases} cases in ${chunks} chunks of ${CHUNK_SIZE}...`);
+    
+    for (let chunk = 0; chunk < chunks; chunk++) {
+      const startItem = chunk * CHUNK_SIZE + 1;
+      const endItem = Math.min((chunk + 1) * CHUNK_SIZE, totalCases);
+      
+      console.log(`[TELEGRAM] Parsing chunk ${chunk + 1}/${chunks}: items ${startItem}-${endItem}...`);
+      
+      const chunkPrompt = `You are a legal document parser for Indian High Court causelists.
+
+Parse this ${bench} Bench ${listType} causelist PDF and extract ONLY cases with item numbers from ${startItem} to ${endItem}.
 
 For each case, extract:
 - item_no: The serial/item number
-- case_number: Full case number (e.g., "S.B. Civil Writ Petition No. 1234/2024")
+- case_number: Full case number
 - petitioner: Name(s) of petitioner(s)
-- respondent: Name(s) of respondent(s)
+- respondent: Name(s) of respondent(s)  
 - petitioner_lawyer: Name(s) of advocate(s) for petitioner
 - respondent_lawyer: Name(s) of advocate(s) for respondent
 
-Also extract the judge names presiding over this court.
-
-Return ONLY a valid JSON object with this exact structure (no markdown, no code blocks):
+Return ONLY a valid JSON object (no markdown, no code blocks):
 {
-  "judge_names": "Name of presiding judge(s)",
   "cases": [
     {
-      "item_no": 1,
+      "item_no": ${startItem},
       "case_number": "...",
       "petitioner": "...",
       "respondent": "...",
@@ -390,166 +435,149 @@ Return ONLY a valid JSON object with this exact structure (no markdown, no code 
   ]
 }
 
-Extract ALL cases from the document. If a field is not available, use null. Be thorough.`;
+IMPORTANT: Only extract items ${startItem} to ${endItem}. If a field is not available, use null.`;
 
-    console.log('[TELEGRAM] Calling Lovable AI gateway (google/gemini-2.5-flash)...');
-    
-    // Use AbortController with 120 second timeout
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => {
-      console.log('[TELEGRAM] AI request timeout, aborting...');
-      controller.abort();
-    }, 120000);
-    
-    let response: Response;
-    try {
-      response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${lovableApiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'google/gemini-2.5-flash',
-          messages: [
-            {
-              role: 'user',
-              content: [
-                { type: 'text', text: prompt },
-                { 
-                  type: 'image_url',
-                  image_url: { url: pdfDataUrl }
-                }
-              ]
-            }
-          ],
-          max_tokens: 32000,
-          temperature: 0.1,
-        }),
-        signal: controller.signal,
-      });
-    } catch (fetchError: unknown) {
-      clearTimeout(timeoutId);
-      const err = fetchError as Error;
-      if (err?.name === 'AbortError') {
-        console.error('[TELEGRAM] AI request timed out after 120 seconds');
-        return { cases: [], judgeNames: '' };
-      }
-      console.error('[TELEGRAM] AI fetch error:', err?.message || fetchError);
-      return { cases: [], judgeNames: '' };
-    }
-    
-    clearTimeout(timeoutId);
-    console.log(`[TELEGRAM] Lovable AI response status: ${response.status}`);
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('[TELEGRAM] Lovable AI error:', response.status, errorText);
-      return { cases: [], judgeNames: '' };
-    }
-
-    const data = await response.json();
-    let content = data.choices?.[0]?.message?.content || '';
-    
-    console.log('[TELEGRAM] AI response length:', content.length);
-    console.log('[TELEGRAM] AI response preview:', content.substring(0, 500));
-    
-    // Strip markdown code blocks if present
-    content = content.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
-    
-    // Parse the JSON from the response
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      let jsonStr = jsonMatch[0];
+      const chunkResponse = await callLovableAI(lovableApiKey, pdfDataUrl, chunkPrompt);
       
-      // Try to fix truncated JSON by finding the last complete case object
-      try {
-        const parsed = JSON.parse(jsonStr);
-        const cases: ParsedCase[] = (parsed.cases || []).map((c: any) => ({
-          item_no: parseInt(c.item_no) || 0,
-          case_number: c.case_number || 'Unknown',
-          petitioner: c.petitioner || null,
-          respondent: c.respondent || null,
-          petitioner_lawyer: c.petitioner_lawyer || null,
-          respondent_lawyer: c.respondent_lawyer || null,
-          judge_names: c.judge_names || null,
-        }));
-        
-        console.log(`[TELEGRAM] Successfully parsed ${cases.length} cases`);
-        return { 
-          cases, 
-          judgeNames: parsed.judge_names || '' 
-        };
-      } catch (parseError) {
-        console.log('[TELEGRAM] JSON parse failed, attempting to salvage partial data...');
-        console.log('[TELEGRAM] Parse error:', parseError);
-        
-        // Try to extract judge_names
-        const judgeMatch = jsonStr.match(/"judge_names"\s*:\s*"([^"]+)"/);
-        const judgeNames = judgeMatch ? judgeMatch[1] : '';
-        console.log('[TELEGRAM] Extracted judge_names:', judgeNames.substring(0, 100));
-        
-        // Find all complete case objects by looking for closing braces
-        const cases: ParsedCase[] = [];
-        
-        // Split by case objects - look for patterns like {"item_no": N, ...}
-        const caseMatches = jsonStr.matchAll(/\{\s*"item_no"\s*:\s*(\d+)[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/g);
-        
-        for (const m of caseMatches) {
-          try {
-            const caseStr = m[0];
-            // Try to parse each case individually
-            const caseObj = JSON.parse(caseStr);
-            cases.push({
-              item_no: caseObj.item_no || 0,
-              case_number: caseObj.case_number || 'Unknown',
-              petitioner: caseObj.petitioner || undefined,
-              respondent: caseObj.respondent || undefined,
-              petitioner_lawyer: caseObj.petitioner_lawyer || undefined,
-              respondent_lawyer: caseObj.respondent_lawyer || undefined,
-              judge_names: undefined,
-            });
-          } catch {
-            // Individual case failed to parse, try regex extraction
-            const itemNo = parseInt(m[1]) || 0;
-            const caseNumMatch = m[0].match(/"case_number"\s*:\s*"([^"]*)"/);
-            const petMatch = m[0].match(/"petitioner"\s*:\s*"([^"]*)"/);
-            const respMatch = m[0].match(/"respondent"\s*:\s*"([^"]*)"/);
-            const petLawMatch = m[0].match(/"petitioner_lawyer"\s*:\s*"([^"]*)"/);
-            const respLawMatch = m[0].match(/"respondent_lawyer"\s*:\s*"([^"]*)"/);
-            
-            if (caseNumMatch) {
-              cases.push({
-                item_no: itemNo,
-                case_number: caseNumMatch[1] || 'Unknown',
-                petitioner: petMatch?.[1] || undefined,
-                respondent: respMatch?.[1] || undefined,
-                petitioner_lawyer: petLawMatch?.[1] || undefined,
-                respondent_lawyer: respLawMatch?.[1] || undefined,
-                judge_names: undefined,
-              });
-            }
-          }
-        }
-        
-        if (cases.length > 0) {
-          console.log(`[TELEGRAM] Salvaged ${cases.length} cases from partial JSON`);
-          return { cases, judgeNames };
-        }
-        
-        console.error('[TELEGRAM] Could not salvage any cases from response');
-        return { cases: [], judgeNames };
+      if (chunkResponse) {
+        const chunkCases = parseChunkResponse(chunkResponse);
+        console.log(`[TELEGRAM] Chunk ${chunk + 1}: extracted ${chunkCases.length} cases`);
+        allCases.push(...chunkCases);
+      }
+      
+      // Small delay between chunks to avoid rate limiting
+      if (chunk < chunks - 1) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+      
+      // Stop if we've extracted enough or no more cases found
+      if (allCases.length >= totalCases || (chunkResponse && parseChunkResponse(chunkResponse).length === 0)) {
+        console.log(`[TELEGRAM] Stopping early: extracted ${allCases.length} cases`);
+        break;
       }
     }
     
-    console.error('[TELEGRAM] Could not parse AI response as JSON');
-    console.log('[TELEGRAM] Full response:', content.substring(0, 1000));
-    return { cases: [], judgeNames: '' };
+    console.log(`[TELEGRAM] Total extracted: ${allCases.length} cases`);
+    return { cases: allCases, judgeNames };
     
   } catch (error) {
     console.error('[TELEGRAM] AI parsing error:', error);
     return { cases: [], judgeNames: '' };
   }
+}
+
+async function callLovableAI(apiKey: string, pdfDataUrl: string, prompt: string): Promise<string | null> {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 180000); // 3 min timeout
+    
+    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-2.5-pro',
+        messages: [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: prompt },
+              { type: 'image_url', image_url: { url: pdfDataUrl } }
+            ]
+          }
+        ],
+        max_tokens: 16000,
+        temperature: 0.1,
+      }),
+      signal: controller.signal,
+    });
+    
+    clearTimeout(timeoutId);
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('[TELEGRAM] Lovable AI error:', response.status, errorText);
+      return null;
+    }
+    
+    const data = await response.json();
+    let content = data.choices?.[0]?.message?.content || '';
+    content = content.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+    
+    console.log(`[TELEGRAM] AI response length: ${content.length}`);
+    return content;
+  } catch (error: unknown) {
+    const err = error as Error;
+    if (err?.name === 'AbortError') {
+      console.error('[TELEGRAM] AI request timed out');
+    } else {
+      console.error('[TELEGRAM] AI fetch error:', err?.message || error);
+    }
+    return null;
+  }
+}
+
+function parseChunkResponse(content: string): ParsedCase[] {
+  const cases: ParsedCase[] = [];
+  
+  const jsonMatch = content.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) return cases;
+  
+  const jsonStr = jsonMatch[0];
+  
+  try {
+    const parsed = JSON.parse(jsonStr);
+    return (parsed.cases || []).map((c: any) => ({
+      item_no: parseInt(c.item_no) || 0,
+      case_number: c.case_number || 'Unknown',
+      petitioner: c.petitioner || undefined,
+      respondent: c.respondent || undefined,
+      petitioner_lawyer: c.petitioner_lawyer || undefined,
+      respondent_lawyer: c.respondent_lawyer || undefined,
+      judge_names: undefined,
+    }));
+  } catch {
+    // Try to salvage partial data
+    const caseMatches = jsonStr.matchAll(/\{\s*"item_no"\s*:\s*(\d+)[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/g);
+    
+    for (const m of caseMatches) {
+      try {
+        const caseObj = JSON.parse(m[0]);
+        cases.push({
+          item_no: caseObj.item_no || 0,
+          case_number: caseObj.case_number || 'Unknown',
+          petitioner: caseObj.petitioner || undefined,
+          respondent: caseObj.respondent || undefined,
+          petitioner_lawyer: caseObj.petitioner_lawyer || undefined,
+          respondent_lawyer: caseObj.respondent_lawyer || undefined,
+          judge_names: undefined,
+        });
+      } catch {
+        const itemNo = parseInt(m[1]) || 0;
+        const caseNumMatch = m[0].match(/"case_number"\s*:\s*"([^"]*)"/);
+        if (caseNumMatch) {
+          const petMatch = m[0].match(/"petitioner"\s*:\s*"([^"]*)"/);
+          const respMatch = m[0].match(/"respondent"\s*:\s*"([^"]*)"/);
+          const petLawMatch = m[0].match(/"petitioner_lawyer"\s*:\s*"([^"]*)"/);
+          const respLawMatch = m[0].match(/"respondent_lawyer"\s*:\s*"([^"]*)"/);
+          
+          cases.push({
+            item_no: itemNo,
+            case_number: caseNumMatch[1] || 'Unknown',
+            petitioner: petMatch?.[1] || undefined,
+            respondent: respMatch?.[1] || undefined,
+            petitioner_lawyer: petLawMatch?.[1] || undefined,
+            respondent_lawyer: respLawMatch?.[1] || undefined,
+            judge_names: undefined,
+          });
+        }
+      }
+    }
+  }
+  
+  return cases;
 }
 
 // Helper function for base64 encoding
