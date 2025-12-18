@@ -2,17 +2,19 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, Scale, AlertTriangle } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ArrowLeft, Scale, AlertTriangle, FileText, List } from 'lucide-react';
 import { ArgumentsPanel } from '@/components/war-room/ArgumentsPanel';
 import { SmartPdfViewer } from '@/components/war-room/SmartPdfViewer';
 import { DocumentSelector } from '@/components/war-room/DocumentSelector';
+import { DocumentReviewPanel } from '@/components/documents/DocumentReviewPanel';
 import { WhisperNotification } from '@/components/war-room/WhisperNotification';
 import { WhisperDrawer } from '@/components/war-room/WhisperDrawer';
 import { AuthGuard } from '@/components/layout/AuthGuard';
 import { NetworkStatusPill } from '@/components/layout/NetworkStatusPill';
 import { useDocketItem } from '@/hooks/useDocket';
 import { useArguments } from '@/hooks/useArguments';
-import { useCaseDocuments } from '@/hooks/useCaseDocuments';
+import { useExtendedDocuments, useDocumentReview } from '@/hooks/useDocumentManagement';
 import { useLiveBoardForCourt } from '@/hooks/useLiveBoard';
 import type { CaseArgument } from '@/types/database';
 import { cn } from '@/lib/utils';
@@ -26,18 +28,33 @@ export default function WarRoom() {
   const [selectedArg, setSelectedArg] = useState<CaseArgument | null>(null);
   const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
   const [fontSize, setFontSize] = useState<'normal' | 'large' | 'xlarge'>('normal');
+  const [leftPanelTab, setLeftPanelTab] = useState<'arguments' | 'documents'>('arguments');
 
   const { data: docketItem, isLoading: docketLoading } = useDocketItem(caseId!);
   const { data: args } = useArguments(caseId!);
-  const { data: documents } = useCaseDocuments(caseId!);
+  const { data: documents, isLoading: docsLoading } = useExtendedDocuments(caseId!);
+  const { approveDocument, rejectDocument, setPrimaryDocument } = useDocumentReview(caseId!);
   const liveBoard = useLiveBoardForCourt(
     docketItem?.court_location ?? '',
     docketItem?.court_room_no ?? ''
   );
 
-  // Auto-select first document when loaded
+  // Auto-select first approved/primary document when loaded
   useEffect(() => {
     if (documents && documents.length > 0 && !selectedDocId) {
+      // Prefer primary documents first
+      const primaryDoc = documents.find((d) => d.is_primary && d.review_status === 'approved');
+      if (primaryDoc) {
+        setSelectedDocId(primaryDoc.id);
+        return;
+      }
+      // Then any approved document
+      const approvedDoc = documents.find((d) => d.review_status === 'approved');
+      if (approvedDoc) {
+        setSelectedDocId(approvedDoc.id);
+        return;
+      }
+      // Finally, any document
       setSelectedDocId(documents[0].id);
     }
   }, [documents, selectedDocId]);
@@ -51,9 +68,17 @@ export default function WarRoom() {
     setSelectedArg(arg);
   };
 
+  const handleViewDocument = (docId: string) => {
+    setSelectedDocId(docId);
+    setLeftPanelTab('arguments'); // Switch back to arguments when viewing doc
+  };
+
   // Get the PDF URL from selected document or fallback
-  const selectedDoc = documents?.find(d => d.id === selectedDocId);
+  const selectedDoc = documents?.find((d) => d.id === selectedDocId);
   const pdfUrl = selectedDoc?.file_url || FALLBACK_PDF_URL;
+
+  // Count pending documents
+  const pendingCount = documents?.filter((d) => d.review_status === 'pending').length || 0;
 
   if (docketLoading) {
     return (
@@ -154,7 +179,7 @@ export default function WarRoom() {
         {/* Document Selector */}
         {documents && documents.length > 1 && (
           <DocumentSelector
-            documents={documents}
+            documents={documents.filter((d) => d.review_status === 'approved' || d.is_primary)}
             selectedDocId={selectedDocId}
             onSelectDoc={setSelectedDocId}
           />
@@ -162,15 +187,51 @@ export default function WarRoom() {
 
         {/* Main Content - Split View */}
         <main id="main-content" className="flex-1 flex overflow-hidden" role="main">
-          {/* Left Panel: Arguments (30%) */}
-          <div className="w-[30%] border-r border-border">
-            <ArgumentsPanel
-              arguments={args ?? []}
-              selectedArg={selectedArg}
-              onSelectArg={handleSelectArg}
-              fontSize={fontSize}
-              onFontSizeChange={setFontSize}
-            />
+          {/* Left Panel: Tabs for Arguments & Document Review (30%) */}
+          <div className="w-[30%] border-r border-border flex flex-col">
+            <Tabs
+              value={leftPanelTab}
+              onValueChange={(v) => setLeftPanelTab(v as 'arguments' | 'documents')}
+              className="flex flex-col h-full"
+            >
+              <TabsList className="grid w-full grid-cols-2 m-2">
+                <TabsTrigger value="arguments" className="flex items-center gap-2">
+                  <List className="h-4 w-4" />
+                  Arguments
+                </TabsTrigger>
+                <TabsTrigger value="documents" className="flex items-center gap-2 relative">
+                  <FileText className="h-4 w-4" />
+                  Documents
+                  {pendingCount > 0 && (
+                    <Badge variant="danger" className="absolute -top-1 -right-1 h-5 w-5 p-0 flex items-center justify-center text-xs">
+                      {pendingCount}
+                    </Badge>
+                  )}
+                </TabsTrigger>
+              </TabsList>
+              
+              <TabsContent value="arguments" className="flex-1 m-0 overflow-hidden">
+                <ArgumentsPanel
+                  arguments={args ?? []}
+                  selectedArg={selectedArg}
+                  onSelectArg={handleSelectArg}
+                  fontSize={fontSize}
+                  onFontSizeChange={setFontSize}
+                />
+              </TabsContent>
+              
+              <TabsContent value="documents" className="flex-1 m-0 overflow-hidden p-2">
+                <DocumentReviewPanel
+                  documents={documents || []}
+                  onApprove={approveDocument}
+                  onReject={rejectDocument}
+                  onSetPrimary={setPrimaryDocument}
+                  onViewDocument={handleViewDocument}
+                  selectedDocId={selectedDocId}
+                  isLoading={docsLoading}
+                />
+              </TabsContent>
+            </Tabs>
           </div>
 
           {/* Right Panel: Smart PDF Viewer (70%) */}

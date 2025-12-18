@@ -53,23 +53,56 @@ export type Database = {
         Row: {
           doc_type: string | null
           docket_id: string | null
+          document_type: Database["public"]["Enums"]["document_type"] | null
           file_url: string | null
+          format: Database["public"]["Enums"]["document_format"] | null
           id: string
+          is_primary: boolean | null
+          language: Database["public"]["Enums"]["document_language"] | null
+          legibility: Database["public"]["Enums"]["document_legibility"] | null
+          pending_review: boolean | null
+          review_status: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
           uploaded_at: string | null
+          uploaded_by: string | null
+          version: number | null
         }
         Insert: {
           doc_type?: string | null
           docket_id?: string | null
+          document_type?: Database["public"]["Enums"]["document_type"] | null
           file_url?: string | null
+          format?: Database["public"]["Enums"]["document_format"] | null
           id?: string
+          is_primary?: boolean | null
+          language?: Database["public"]["Enums"]["document_language"] | null
+          legibility?: Database["public"]["Enums"]["document_legibility"] | null
+          pending_review?: boolean | null
+          review_status?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
           uploaded_at?: string | null
+          uploaded_by?: string | null
+          version?: number | null
         }
         Update: {
           doc_type?: string | null
           docket_id?: string | null
+          document_type?: Database["public"]["Enums"]["document_type"] | null
           file_url?: string | null
+          format?: Database["public"]["Enums"]["document_format"] | null
           id?: string
+          is_primary?: boolean | null
+          language?: Database["public"]["Enums"]["document_language"] | null
+          legibility?: Database["public"]["Enums"]["document_legibility"] | null
+          pending_review?: boolean | null
+          review_status?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
           uploaded_at?: string | null
+          uploaded_by?: string | null
+          version?: number | null
         }
         Relationships: [
           {
@@ -107,11 +140,13 @@ export type Database = {
       }
       daily_court_docket: {
         Row: {
+          case_fingerprint: string | null
           case_number: string | null
           court_location: string | null
           court_room_no: string | null
           created_at: string | null
           date: string
+          fingerprint_matched_at: string | null
           force_active: boolean | null
           id: string
           item_no: number | null
@@ -126,11 +161,13 @@ export type Database = {
           status: string | null
         }
         Insert: {
+          case_fingerprint?: string | null
           case_number?: string | null
           court_location?: string | null
           court_room_no?: string | null
           created_at?: string | null
           date?: string
+          fingerprint_matched_at?: string | null
           force_active?: boolean | null
           id?: string
           item_no?: number | null
@@ -145,11 +182,13 @@ export type Database = {
           status?: string | null
         }
         Update: {
+          case_fingerprint?: string | null
           case_number?: string | null
           court_location?: string | null
           court_room_no?: string | null
           created_at?: string | null
           date?: string
+          fingerprint_matched_at?: string | null
           force_active?: boolean | null
           id?: string
           item_no?: number | null
@@ -473,6 +512,15 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      generate_case_fingerprint: {
+        Args: {
+          p_case_number: string
+          p_court_location: string
+          p_petitioner: string
+          p_respondent: string
+        }
+        Returns: string
+      }
       get_user_role: {
         Args: { _user_id: string }
         Returns: Database["public"]["Enums"]["app_role"]
@@ -488,6 +536,17 @@ export type Database = {
     Enums: {
       app_role: "SENIOR" | "JUNIOR" | "CLERK" | "ADMIN"
       board_status: "hearing" | "passover" | "lunch" | "adjourned"
+      document_format: "TYPED" | "SCANNED" | "HANDWRITTEN"
+      document_language: "EN" | "HI" | "MIXED" | "UNKNOWN"
+      document_legibility: "CLEAR" | "AVERAGE" | "POOR"
+      document_type:
+        | "CAUSELIST_PDF"
+        | "PETITION"
+        | "REPLY"
+        | "REJOINDER"
+        | "ORDER"
+        | "ANNEXURES"
+        | "NOTES"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -617,6 +676,18 @@ export const Constants = {
     Enums: {
       app_role: ["SENIOR", "JUNIOR", "CLERK", "ADMIN"],
       board_status: ["hearing", "passover", "lunch", "adjourned"],
+      document_format: ["TYPED", "SCANNED", "HANDWRITTEN"],
+      document_language: ["EN", "HI", "MIXED", "UNKNOWN"],
+      document_legibility: ["CLEAR", "AVERAGE", "POOR"],
+      document_type: [
+        "CAUSELIST_PDF",
+        "PETITION",
+        "REPLY",
+        "REJOINDER",
+        "ORDER",
+        "ANNEXURES",
+        "NOTES",
+      ],
     },
   },
 } as const
