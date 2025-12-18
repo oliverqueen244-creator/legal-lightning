@@ -522,9 +522,20 @@ async function handleTelegramUpdate(update: TelegramUpdate, supabase: any, botTo
 // PHASE 2: PDF TO TEXT EXTRACTION
 // ============================================================================
 
+// Helper function to encode large Uint8Array to base64 without stack overflow
+function uint8ArrayToBase64(bytes: Uint8Array): string {
+  const CHUNK_SIZE = 0x8000; // 32KB chunks
+  let result = '';
+  for (let i = 0; i < bytes.length; i += CHUNK_SIZE) {
+    const chunk = bytes.subarray(i, i + CHUNK_SIZE);
+    result += String.fromCharCode.apply(null, Array.from(chunk));
+  }
+  return btoa(result);
+}
+
 async function extractPdfToText(pdfContent: Uint8Array, apiKey: string): Promise<string | null> {
   try {
-    const base64Pdf = btoa(String.fromCharCode(...pdfContent));
+    const base64Pdf = uint8ArrayToBase64(pdfContent);
     const pdfDataUrl = `data:application/pdf;base64,${base64Pdf}`;
     
     const prompt = `Extract ALL text content from this PDF document EXACTLY as it appears.
