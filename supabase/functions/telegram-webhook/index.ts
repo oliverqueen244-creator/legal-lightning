@@ -506,7 +506,21 @@ IMPORTANT: Only extract items ${startItem} to ${endItem}. If a field is not avai
   }
 }
 
+// Call Lovable AI (Gemini) first, fallback to OpenAI GPT-4o if it fails
 async function callLovableAI(apiKey: string, pdfDataUrl: string, prompt: string): Promise<string | null> {
+  // Try Gemini first
+  const geminiResult = await callGeminiAI(apiKey, pdfDataUrl, prompt);
+  if (geminiResult) {
+    return geminiResult;
+  }
+  
+  // Fallback to OpenAI GPT-4o
+  console.log('[TELEGRAM] Gemini failed, falling back to GPT-4o...');
+  const openaiResult = await callOpenAIGPT4o(pdfDataUrl, prompt);
+  return openaiResult;
+}
+
+async function callGeminiAI(apiKey: string, pdfDataUrl: string, prompt: string): Promise<string | null> {
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 180000); // 3 min timeout
@@ -538,7 +552,7 @@ async function callLovableAI(apiKey: string, pdfDataUrl: string, prompt: string)
     
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('[TELEGRAM] Lovable AI error:', response.status, errorText);
+      console.error('[TELEGRAM] Gemini AI error:', response.status, errorText);
       return null;
     }
     
@@ -546,14 +560,75 @@ async function callLovableAI(apiKey: string, pdfDataUrl: string, prompt: string)
     let content = data.choices?.[0]?.message?.content || '';
     content = content.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
     
-    console.log(`[TELEGRAM] AI response length: ${content.length}`);
+    console.log(`[TELEGRAM] Gemini response length: ${content.length}`);
     return content;
   } catch (error: unknown) {
     const err = error as Error;
     if (err?.name === 'AbortError') {
-      console.error('[TELEGRAM] AI request timed out');
+      console.error('[TELEGRAM] Gemini request timed out');
     } else {
-      console.error('[TELEGRAM] AI fetch error:', err?.message || error);
+      console.error('[TELEGRAM] Gemini fetch error:', err?.message || error);
+    }
+    return null;
+  }
+}
+
+async function callOpenAIGPT4o(pdfDataUrl: string, prompt: string): Promise<string | null> {
+  try {
+    const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
+    if (!openaiApiKey) {
+      console.log('[TELEGRAM] OPENAI_API_KEY not configured, skipping GPT-4o fallback');
+      return null;
+    }
+    
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 180000); // 3 min timeout
+    
+    console.log('[TELEGRAM] Calling OpenAI GPT-4o...');
+    
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${openaiApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o',
+        messages: [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: prompt },
+              { type: 'image_url', image_url: { url: pdfDataUrl } }
+            ]
+          }
+        ],
+        max_tokens: 16000,
+        temperature: 0.1,
+      }),
+      signal: controller.signal,
+    });
+    
+    clearTimeout(timeoutId);
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('[TELEGRAM] OpenAI GPT-4o error:', response.status, errorText);
+      return null;
+    }
+    
+    const data = await response.json();
+    let content = data.choices?.[0]?.message?.content || '';
+    content = content.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+    
+    console.log(`[TELEGRAM] GPT-4o response length: ${content.length}`);
+    return content;
+  } catch (error: unknown) {
+    const err = error as Error;
+    if (err?.name === 'AbortError') {
+      console.error('[TELEGRAM] GPT-4o request timed out');
+    } else {
+      console.error('[TELEGRAM] GPT-4o fetch error:', err?.message || error);
     }
     return null;
   }
