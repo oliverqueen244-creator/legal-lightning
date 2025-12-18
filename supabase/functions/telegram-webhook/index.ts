@@ -449,34 +449,73 @@ Extract ALL cases from the document. If a field is not available, use null. Be t
     }
 
     const data = await response.json();
-    const content = data.choices?.[0]?.message?.content || '';
+    let content = data.choices?.[0]?.message?.content || '';
     
     console.log('[TELEGRAM] AI response length:', content.length);
     console.log('[TELEGRAM] AI response preview:', content.substring(0, 500));
     
+    // Strip markdown code blocks if present
+    content = content.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+    
     // Parse the JSON from the response
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
-      const parsed = JSON.parse(jsonMatch[0]);
-      const cases: ParsedCase[] = (parsed.cases || []).map((c: any) => ({
-        item_no: parseInt(c.item_no) || 0,
-        case_number: c.case_number || 'Unknown',
-        petitioner: c.petitioner || null,
-        respondent: c.respondent || null,
-        petitioner_lawyer: c.petitioner_lawyer || null,
-        respondent_lawyer: c.respondent_lawyer || null,
-        judge_names: c.judge_names || null,
-      }));
+      let jsonStr = jsonMatch[0];
       
-      console.log(`[TELEGRAM] Successfully parsed ${cases.length} cases`);
-      return { 
-        cases, 
-        judgeNames: parsed.judge_names || '' 
-      };
+      // Try to fix truncated JSON by finding the last complete case object
+      try {
+        const parsed = JSON.parse(jsonStr);
+        const cases: ParsedCase[] = (parsed.cases || []).map((c: any) => ({
+          item_no: parseInt(c.item_no) || 0,
+          case_number: c.case_number || 'Unknown',
+          petitioner: c.petitioner || null,
+          respondent: c.respondent || null,
+          petitioner_lawyer: c.petitioner_lawyer || null,
+          respondent_lawyer: c.respondent_lawyer || null,
+          judge_names: c.judge_names || null,
+        }));
+        
+        console.log(`[TELEGRAM] Successfully parsed ${cases.length} cases`);
+        return { 
+          cases, 
+          judgeNames: parsed.judge_names || '' 
+        };
+      } catch (parseError) {
+        console.log('[TELEGRAM] JSON parse failed, attempting to salvage partial data...');
+        
+        // Try to extract judge_names before cases array
+        const judgeMatch = jsonStr.match(/"judge_names"\s*:\s*"([^"]+)"/);
+        const judgeNames = judgeMatch ? judgeMatch[1] : '';
+        
+        // Try to find all complete case objects
+        const casePattern = /\{\s*"item_no"\s*:\s*(\d+)\s*,\s*"case_number"\s*:\s*"([^"]*)"[^}]*"petitioner"\s*:\s*(?:"([^"]*)"|null)[^}]*"respondent"\s*:\s*(?:"([^"]*)"|null)[^}]*"petitioner_lawyer"\s*:\s*(?:"([^"]*)"|null)[^}]*"respondent_lawyer"\s*:\s*(?:"([^"]*)"|null)[^}]*\}/g;
+        
+        const cases: ParsedCase[] = [];
+        let match;
+        while ((match = casePattern.exec(jsonStr)) !== null) {
+          cases.push({
+            item_no: parseInt(match[1]) || 0,
+            case_number: match[2] || 'Unknown',
+            petitioner: match[3] || undefined,
+            respondent: match[4] || undefined,
+            petitioner_lawyer: match[5] || undefined,
+            respondent_lawyer: match[6] || undefined,
+            judge_names: undefined,
+          });
+        }
+        
+        if (cases.length > 0) {
+          console.log(`[TELEGRAM] Salvaged ${cases.length} cases from partial JSON`);
+          return { cases, judgeNames };
+        }
+        
+        console.error('[TELEGRAM] Could not salvage any cases from response');
+        return { cases: [], judgeNames };
+      }
     }
     
     console.error('[TELEGRAM] Could not parse AI response as JSON');
-    console.log('[TELEGRAM] Full response:', content);
+    console.log('[TELEGRAM] Full response:', content.substring(0, 1000));
     return { cases: [], judgeNames: '' };
     
   } catch (error) {
