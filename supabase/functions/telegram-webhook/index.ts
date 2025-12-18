@@ -387,33 +387,54 @@ Extract ALL cases from the document. If a field is not available, use null.`;
 
     console.log('[TELEGRAM] Calling Lovable AI...');
     
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { 
-            role: 'user', 
-            content: [
-              { type: 'text', text: userPrompt },
-              { 
-                type: 'image_url',
-                image_url: {
-                  url: `data:application/pdf;base64,${base64Pdf}`
+    // Use AbortController with 50 second timeout (edge functions have ~60s limit)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      console.log('[TELEGRAM] AI request timeout, aborting...');
+      controller.abort();
+    }, 50000);
+    
+    let response: Response;
+    try {
+      response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'google/gemini-2.5-flash',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { 
+              role: 'user', 
+              content: [
+                { type: 'text', text: userPrompt },
+                { 
+                  type: 'image_url',
+                  image_url: {
+                    url: `data:application/pdf;base64,${base64Pdf}`
+                  }
                 }
-              }
-            ]
-          }
-        ],
-        max_tokens: 16000,
-      }),
-    });
-
+              ]
+            }
+          ],
+          max_tokens: 16000,
+        }),
+        signal: controller.signal,
+      });
+    } catch (fetchError: unknown) {
+      clearTimeout(timeoutId);
+      const err = fetchError as Error;
+      if (err?.name === 'AbortError') {
+        console.error('[TELEGRAM] AI request timed out after 50 seconds');
+        return { cases: [], judgeNames: '' };
+      }
+      console.error('[TELEGRAM] AI fetch error:', err?.message || fetchError);
+      return { cases: [], judgeNames: '' };
+    }
+    
+    clearTimeout(timeoutId);
     console.log(`[TELEGRAM] AI response status: ${response.status}`);
 
     if (!response.ok) {
