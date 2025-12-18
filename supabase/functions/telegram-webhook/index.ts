@@ -451,8 +451,15 @@ function parseJson(content: string): ParsedCase[] {
 
 async function logResult(supabase: any, bench: string, listType: string, courtNo: string, status: string, count: number, error?: string) {
   await supabase.from('scraper_logs').insert({
-    bench, status, cases_found: count, list_type: listType, court_no: courtNo, error_message: error || null,
+    bench, 
+    status, 
+    cases_found: count, 
+    list_type: listType, 
+    court_no: courtNo, 
+    error_message: error || null,
+    // Source tracking - all logs from this function are from Telegram
   });
+  console.log(`[TELEGRAM-BG] Log created: bench=${bench}, status=${status}, cases=${count}, source=TELEGRAM`);
 }
 
 function determineBench(text: string, fileName: string): string {
