@@ -280,6 +280,60 @@ export type Database = {
           },
         ]
       }
+      document_processing_queue: {
+        Row: {
+          bench: string
+          chat_id: number
+          completed_at: string | null
+          court_no: string | null
+          created_at: string
+          error_message: string | null
+          file_id: string
+          file_name: string | null
+          id: string
+          list_type: string
+          message_date: string
+          started_at: string | null
+          status: string
+          telegram_message_id: number
+          telegram_update_id: number
+        }
+        Insert: {
+          bench: string
+          chat_id: number
+          completed_at?: string | null
+          court_no?: string | null
+          created_at?: string
+          error_message?: string | null
+          file_id: string
+          file_name?: string | null
+          id?: string
+          list_type: string
+          message_date: string
+          started_at?: string | null
+          status?: string
+          telegram_message_id: number
+          telegram_update_id: number
+        }
+        Update: {
+          bench?: string
+          chat_id?: number
+          completed_at?: string | null
+          court_no?: string | null
+          created_at?: string
+          error_message?: string | null
+          file_id?: string
+          file_name?: string | null
+          id?: string
+          list_type?: string
+          message_date?: string
+          started_at?: string | null
+          status?: string
+          telegram_message_id?: number
+          telegram_update_id?: number
+        }
+        Relationships: []
+      }
       judge_judgment_references: {
         Row: {
           added_at: string

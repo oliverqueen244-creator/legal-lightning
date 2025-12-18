@@ -55,6 +55,20 @@ interface PdfStructure {
   notes: string;
 }
 
+interface QueuedDocument {
+  id: string;
+  telegram_update_id: number;
+  telegram_message_id: number;
+  file_id: string;
+  file_name: string | null;
+  chat_id: number;
+  bench: string;
+  list_type: string;
+  court_no: string | null;
+  message_date: string;
+  status: string;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -95,10 +109,18 @@ serve(async (req) => {
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
+    // Process queue action - called to process next item
+    if (url.searchParams.get('action') === 'process-queue') {
+      console.log('[TELEGRAM] Process queue triggered');
+      await processNextInQueue(supabase, botToken!, lovableApiKey, supabaseUrl);
+      return new Response(JSON.stringify({ ok: true, action: 'process-queue' }), 
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
     const body = await req.json();
     
     if ('update_id' in body) {
-      return await handleTelegramUpdate(body as TelegramUpdate, supabase, botToken!, lovableApiKey);
+      return await handleTelegramUpdate(body as TelegramUpdate, supabase, botToken!, lovableApiKey, supabaseUrl);
     }
     
     return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
@@ -110,7 +132,7 @@ serve(async (req) => {
   }
 });
 
-async function handleTelegramUpdate(update: TelegramUpdate, supabase: any, botToken: string, lovableApiKey?: string) {
+async function handleTelegramUpdate(update: TelegramUpdate, supabase: any, botToken: string, lovableApiKey?: string, supabaseUrl?: string) {
   console.log('[TELEGRAM] Received update:', update.update_id);
 
   const message = update.message || update.channel_post;
@@ -132,172 +154,324 @@ async function handleTelegramUpdate(update: TelegramUpdate, supabase: any, botTo
     return new Response(JSON.stringify({ ok: true, skipped: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
 
+  // If no document, skip queuing
+  if (!message.document) {
+    return new Response(JSON.stringify({ ok: true, skipped: true, reason: 'no_document' }), 
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
+
   const bench = determineBench(text, fileName);
   const listType = determineListType(text, fileName);
   const courtNo = extractCourtNumber(text, fileName);
-  const date = extractDate(text, fileName, new Date(message.date * 1000).toISOString());
+  const messageDate = new Date(message.date * 1000).toISOString();
 
-  console.log(`[TELEGRAM] Processing: bench=${bench}, type=${listType}, court=${courtNo}, date=${date}`);
+  console.log(`[TELEGRAM] Queueing document: bench=${bench}, type=${listType}, court=${courtNo}`);
 
-  // Background task for PDF processing
-  const backgroundTask = async () => {
-    const startTime = Date.now();
-    console.log(`[TELEGRAM-BG] ========== STARTING PIPELINE ==========`);
-    
-    try {
-      // PHASE 1: Download PDF
-      let pdfContent: Uint8Array | null = null;
-      let fileUrl = '';
-      
-      if (message.document && botToken) {
-        console.log(`[TELEGRAM-BG] PHASE 1: PDF INGESTION`);
-        const getFileUrl = `https://api.telegram.org/bot${botToken}/getFile?file_id=${message.document.file_id}`;
-        const fileResponse = await fetch(getFileUrl);
-        const fileData = await fileResponse.json();
-        
-        if (fileData.ok && fileData.result.file_path) {
-          fileUrl = `https://api.telegram.org/file/bot${botToken}/${fileData.result.file_path}`;
-          const pdfResponse = await fetch(fileUrl);
-          if (pdfResponse.ok) {
-            pdfContent = new Uint8Array(await pdfResponse.arrayBuffer());
-            console.log(`[TELEGRAM-BG] ✓ PDF downloaded: ${pdfContent.length} bytes`);
-          }
-        }
-      }
+  // Add to queue instead of processing immediately
+  const { data: queuedItem, error: queueError } = await supabase
+    .from('document_processing_queue')
+    .upsert({
+      telegram_update_id: update.update_id,
+      telegram_message_id: message.message_id,
+      file_id: message.document.file_id,
+      file_name: fileName || null,
+      chat_id: message.chat.id,
+      bench,
+      list_type: listType,
+      court_no: courtNo || null,
+      message_date: messageDate,
+      status: 'pending',
+    }, {
+      onConflict: 'telegram_update_id',
+      ignoreDuplicates: true,
+    })
+    .select()
+    .single();
 
-      if (!pdfContent || !lovableApiKey) {
-        console.log('[TELEGRAM-BG] ✗ No PDF or API key');
-        await logResult(supabase, bench, listType, courtNo, 'error', 0, 'No PDF or API key');
-        return;
-      }
-
-      // Encode PDF to base64
-      const base64Pdf = uint8ArrayToBase64(pdfContent);
-      const pdfDataUrl = `data:application/pdf;base64,${base64Pdf}`;
-      console.log(`[TELEGRAM-BG] ✓ PDF encoded: ${base64Pdf.length} chars`);
-
-      // PHASE 2: Structure Detection
-      console.log(`[TELEGRAM-BG] PHASE 2: STRUCTURE DETECTION`);
-      const pdfStructure = await detectStructure(pdfDataUrl, lovableApiKey);
-      
-      let judgeNames = '';
-      if (pdfStructure) {
-        console.log(`[TELEGRAM-BG] ✓ Detected ${pdfStructure.total_courts_detected} courts, safe_split=${pdfStructure.safe_for_court_based_split}`);
-        judgeNames = pdfStructure.courts.map((c: CourtSection) => c.judge_names).filter(Boolean).join('; ');
-      }
-
-      // PHASE 3: Parse Cases
-      const useCourtSplit = pdfStructure?.safe_for_court_based_split && pdfStructure.courts.length > 1;
-      console.log(`[TELEGRAM-BG] PHASE 3: STRATEGY = ${useCourtSplit ? 'COURT_SPLIT' : 'SINGLE_SHOT'}`);
-
-      let allCases: ParsedCase[] = [];
-
-      if (useCourtSplit && pdfStructure) {
-        // Court-based parallel parsing
-        console.log(`[TELEGRAM-BG] PHASE 4: PARALLEL PARSING (${pdfStructure.courts.length} courts)`);
-        
-        const BATCH_SIZE = 4;
-        for (let i = 0; i < pdfStructure.courts.length; i += BATCH_SIZE) {
-          const batch = pdfStructure.courts.slice(i, i + BATCH_SIZE);
-          console.log(`[TELEGRAM-BG] Batch ${Math.floor(i/BATCH_SIZE)+1}: ${batch.map((c: CourtSection) => c.court_identifier).join(', ')}`);
-          
-          const results = await Promise.all(
-            batch.map((court: CourtSection) => parseCourt(pdfDataUrl, court, lovableApiKey, bench))
-          );
-          
-          for (let j = 0; j < results.length; j++) {
-            console.log(`[TELEGRAM-BG] ✓ ${batch[j].court_identifier}: ${results[j].length} cases`);
-            allCases.push(...results[j]);
-          }
-          
-          if (i + BATCH_SIZE < pdfStructure.courts.length) {
-            await new Promise(r => setTimeout(r, 300));
-          }
-        }
-      } else {
-        // Single-shot parsing
-        console.log(`[TELEGRAM-BG] PHASE 4: SINGLE-SHOT PARSING`);
-        const CHUNK_SIZE = 50;
-        const maxItems = 1000;
-        
-        for (let chunk = 0; chunk < Math.ceil(maxItems / CHUNK_SIZE); chunk++) {
-          const startItem = chunk * CHUNK_SIZE + 1;
-          const endItem = (chunk + 1) * CHUNK_SIZE;
-          
-          const chunkCases = await parseChunk(pdfDataUrl, startItem, endItem, lovableApiKey, bench, listType);
-          console.log(`[TELEGRAM-BG] Chunk ${chunk+1}: ${chunkCases.length} cases`);
-          allCases.push(...chunkCases);
-          
-          if (chunkCases.length === 0 && chunk > 2) break;
-          if (chunk < 19) await new Promise(r => setTimeout(r, 300));
-        }
-      }
-
-      // PHASE 5: Validate and Insert
-      console.log(`[TELEGRAM-BG] PHASE 5: VALIDATION & INSERT`);
-      const validCases = allCases.filter(c => c.item_no > 0 && c.case_number && c.case_number !== 'Unknown');
-      console.log(`[TELEGRAM-BG] Validated ${validCases.length}/${allCases.length} cases`);
-
-      // Upload PDF
-      let storedPdfUrl = '';
-      const storagePath = `causelists/${date}/${bench}/${courtNo}_${listType}_${message.message_id}.pdf`;
-      const { error: uploadError } = await supabase.storage.from('causelist-pdfs')
-        .upload(storagePath, pdfContent, { contentType: 'application/pdf', upsert: true });
-      
-      if (!uploadError) {
-        const { data: publicUrl } = supabase.storage.from('causelist-pdfs').getPublicUrl(storagePath);
-        storedPdfUrl = publicUrl.publicUrl;
-      }
-
-      // Insert with deduplication
-      let insertedCount = 0;
-      if (validCases.length > 0) {
-        const { data: existing } = await supabase.from('daily_court_docket')
-          .select('item_no, court_room_no').eq('date', date).eq('court_location', bench).eq('list_type', listType);
-        
-        const existingKeys = new Set((existing || []).map((c: any) => `${c.item_no}_${c.court_room_no || ''}`));
-        const newCases = validCases.filter(c => !existingKeys.has(`${c.item_no}_${c.court_room_no || ''}`));
-        
-        if (newCases.length > 0) {
-          const toInsert = newCases.map(c => ({
-            date, court_location: bench, list_type: listType,
-            court_room_no: c.court_room_no || courtNo, item_no: c.item_no,
-            case_number: c.case_number, petitioner: c.petitioner, respondent: c.respondent,
-            petitioner_lawyer: c.petitioner_lawyer, respondent_lawyer: c.respondent_lawyer,
-            judge_names: c.judge_names || judgeNames,
-            source_url: storedPdfUrl || fileUrl || `telegram:${message.message_id}`,
-            status: 'pending',
-          }));
-
-          for (let i = 0; i < toInsert.length; i += 100) {
-            const { data, error } = await supabase.from('daily_court_docket').insert(toInsert.slice(i, i + 100)).select();
-            if (!error) insertedCount += data?.length || 0;
-          }
-        }
-      }
-
-      await logResult(supabase, bench, listType, courtNo, validCases.length > 0 ? 'success' : 'partial', insertedCount);
-      
-      console.log(`[TELEGRAM-BG] ========== COMPLETE ==========`);
-      console.log(`[TELEGRAM-BG] Parsed: ${validCases.length}, Inserted: ${insertedCount}, Duration: ${Date.now() - startTime}ms`);
-      
-    } catch (error) {
-      console.error('[TELEGRAM-BG] Error:', error);
-      await logResult(supabase, bench, listType, courtNo, 'error', 0, error instanceof Error ? error.message : 'Unknown');
+  if (queueError) {
+    // Check if it's a duplicate (already queued)
+    if (queueError.code === '23505') {
+      console.log('[TELEGRAM] Document already in queue, skipping');
+      return new Response(JSON.stringify({ ok: true, queued: false, reason: 'duplicate' }), 
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
-  };
-
-  // @ts-ignore
-  if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime.waitUntil) {
-    // @ts-ignore
-    EdgeRuntime.waitUntil(backgroundTask());
-    console.log('[TELEGRAM] Background task started');
+    console.error('[TELEGRAM] Queue error:', queueError);
   } else {
-    await backgroundTask();
+    console.log(`[TELEGRAM] Document queued: ${queuedItem?.id}`);
   }
 
-  return new Response(JSON.stringify({ ok: true, processing: true }), 
+  // Check if any document is currently processing
+  const { data: processingDoc } = await supabase
+    .from('document_processing_queue')
+    .select('id')
+    .eq('status', 'processing')
+    .limit(1)
+    .maybeSingle();
+
+  // If nothing is processing, start processing the queue
+  if (!processingDoc) {
+    console.log('[TELEGRAM] No document processing, starting queue processor');
+    
+    // Start background task to process queue
+    const backgroundTask = async () => {
+      await processNextInQueue(supabase, botToken, lovableApiKey, supabaseUrl);
+    };
+
+    // @ts-ignore
+    if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime.waitUntil) {
+      // @ts-ignore
+      EdgeRuntime.waitUntil(backgroundTask());
+    } else {
+      await backgroundTask();
+    }
+  } else {
+    console.log(`[TELEGRAM] Document ${processingDoc.id} is already processing, will be picked up after`);
+  }
+
+  return new Response(JSON.stringify({ ok: true, queued: true }), 
     { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+}
+
+// ============================================================================
+// SEQUENTIAL QUEUE PROCESSOR
+// ============================================================================
+
+async function processNextInQueue(supabase: any, botToken: string, lovableApiKey?: string, supabaseUrl?: string) {
+  console.log('[TELEGRAM-QUEUE] Checking for next document to process...');
+
+  // First, check if anything is already processing (safety check)
+  const { data: currentlyProcessing } = await supabase
+    .from('document_processing_queue')
+    .select('id, started_at')
+    .eq('status', 'processing')
+    .limit(1)
+    .maybeSingle();
+
+  if (currentlyProcessing) {
+    // Check if it's been processing for too long (stuck - more than 10 minutes)
+    const startedAt = new Date(currentlyProcessing.started_at);
+    const minutesProcessing = (Date.now() - startedAt.getTime()) / (1000 * 60);
+    
+    if (minutesProcessing > 10) {
+      console.log(`[TELEGRAM-QUEUE] Document ${currentlyProcessing.id} stuck for ${minutesProcessing.toFixed(1)} min, marking as error`);
+      await supabase
+        .from('document_processing_queue')
+        .update({ status: 'error', error_message: 'Processing timeout', completed_at: new Date().toISOString() })
+        .eq('id', currentlyProcessing.id);
+    } else {
+      console.log(`[TELEGRAM-QUEUE] Document ${currentlyProcessing.id} still processing (${minutesProcessing.toFixed(1)} min), waiting...`);
+      return;
+    }
+  }
+
+  // Get next pending document (oldest first)
+  const { data: nextDoc, error: fetchError } = await supabase
+    .from('document_processing_queue')
+    .select('*')
+    .eq('status', 'pending')
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (fetchError) {
+    console.error('[TELEGRAM-QUEUE] Error fetching next document:', fetchError);
+    return;
+  }
+
+  if (!nextDoc) {
+    console.log('[TELEGRAM-QUEUE] No pending documents in queue');
+    return;
+  }
+
+  console.log(`[TELEGRAM-QUEUE] Processing document: ${nextDoc.id} (update_id: ${nextDoc.telegram_update_id})`);
+
+  // Mark as processing
+  await supabase
+    .from('document_processing_queue')
+    .update({ status: 'processing', started_at: new Date().toISOString() })
+    .eq('id', nextDoc.id);
+
+  try {
+    // Process the document
+    await processDocument(nextDoc as QueuedDocument, supabase, botToken, lovableApiKey);
+
+    // Mark as completed
+    await supabase
+      .from('document_processing_queue')
+      .update({ status: 'completed', completed_at: new Date().toISOString() })
+      .eq('id', nextDoc.id);
+
+    console.log(`[TELEGRAM-QUEUE] Document ${nextDoc.id} completed successfully`);
+
+  } catch (error) {
+    console.error(`[TELEGRAM-QUEUE] Document ${nextDoc.id} failed:`, error);
+    
+    await supabase
+      .from('document_processing_queue')
+      .update({ 
+        status: 'error', 
+        error_message: error instanceof Error ? error.message : 'Unknown error',
+        completed_at: new Date().toISOString() 
+      })
+      .eq('id', nextDoc.id);
+  }
+
+  // Check if there are more pending documents and process them
+  const { data: pendingCount } = await supabase
+    .from('document_processing_queue')
+    .select('id', { count: 'exact', head: true })
+    .eq('status', 'pending');
+
+  if (pendingCount && pendingCount.length > 0) {
+    console.log(`[TELEGRAM-QUEUE] ${pendingCount.length} more documents pending, processing next...`);
+    // Small delay before processing next
+    await new Promise(r => setTimeout(r, 1000));
+    await processNextInQueue(supabase, botToken, lovableApiKey, supabaseUrl);
+  } else {
+    console.log('[TELEGRAM-QUEUE] All documents processed');
+  }
+}
+
+async function processDocument(doc: QueuedDocument, supabase: any, botToken: string, lovableApiKey?: string) {
+  const startTime = Date.now();
+  console.log(`[TELEGRAM-DOC] ========== STARTING PIPELINE ==========`);
+  console.log(`[TELEGRAM-DOC] Document: ${doc.file_name || doc.file_id}`);
+  
+  const date = extractDate('', doc.file_name || '', doc.message_date);
+  
+  // PHASE 1: Download PDF
+  let pdfContent: Uint8Array | null = null;
+  let fileUrl = '';
+  
+  console.log(`[TELEGRAM-DOC] PHASE 1: PDF INGESTION`);
+  const getFileUrl = `https://api.telegram.org/bot${botToken}/getFile?file_id=${doc.file_id}`;
+  const fileResponse = await fetch(getFileUrl);
+  const fileData = await fileResponse.json();
+  
+  if (fileData.ok && fileData.result.file_path) {
+    fileUrl = `https://api.telegram.org/file/bot${botToken}/${fileData.result.file_path}`;
+    const pdfResponse = await fetch(fileUrl);
+    if (pdfResponse.ok) {
+      pdfContent = new Uint8Array(await pdfResponse.arrayBuffer());
+      console.log(`[TELEGRAM-DOC] ✓ PDF downloaded: ${pdfContent.length} bytes`);
+    }
+  }
+
+  if (!pdfContent || !lovableApiKey) {
+    console.log('[TELEGRAM-DOC] ✗ No PDF or API key');
+    await logResult(supabase, doc.bench, doc.list_type, doc.court_no || 'ALL', 'error', 0, 'No PDF or API key');
+    throw new Error('No PDF content or API key');
+  }
+
+  // Encode PDF to base64
+  const base64Pdf = uint8ArrayToBase64(pdfContent);
+  const pdfDataUrl = `data:application/pdf;base64,${base64Pdf}`;
+  console.log(`[TELEGRAM-DOC] ✓ PDF encoded: ${base64Pdf.length} chars`);
+
+  // PHASE 2: Structure Detection
+  console.log(`[TELEGRAM-DOC] PHASE 2: STRUCTURE DETECTION`);
+  const pdfStructure = await detectStructure(pdfDataUrl, lovableApiKey);
+  
+  let judgeNames = '';
+  if (pdfStructure) {
+    console.log(`[TELEGRAM-DOC] ✓ Detected ${pdfStructure.total_courts_detected} courts, safe_split=${pdfStructure.safe_for_court_based_split}`);
+    judgeNames = pdfStructure.courts.map((c: CourtSection) => c.judge_names).filter(Boolean).join('; ');
+  }
+
+  // PHASE 3: Parse Cases
+  const useCourtSplit = pdfStructure?.safe_for_court_based_split && pdfStructure.courts.length > 1;
+  console.log(`[TELEGRAM-DOC] PHASE 3: STRATEGY = ${useCourtSplit ? 'COURT_SPLIT' : 'SINGLE_SHOT'}`);
+
+  let allCases: ParsedCase[] = [];
+
+  if (useCourtSplit && pdfStructure) {
+    // Court-based parallel parsing
+    console.log(`[TELEGRAM-DOC] PHASE 4: PARALLEL PARSING (${pdfStructure.courts.length} courts)`);
+    
+    const BATCH_SIZE = 4;
+    for (let i = 0; i < pdfStructure.courts.length; i += BATCH_SIZE) {
+      const batch = pdfStructure.courts.slice(i, i + BATCH_SIZE);
+      console.log(`[TELEGRAM-DOC] Batch ${Math.floor(i/BATCH_SIZE)+1}: ${batch.map((c: CourtSection) => c.court_identifier).join(', ')}`);
+      
+      const results = await Promise.all(
+        batch.map((court: CourtSection) => parseCourt(pdfDataUrl, court, lovableApiKey, doc.bench))
+      );
+      
+      for (let j = 0; j < results.length; j++) {
+        console.log(`[TELEGRAM-DOC] ✓ ${batch[j].court_identifier}: ${results[j].length} cases`);
+        allCases.push(...results[j]);
+      }
+      
+      if (i + BATCH_SIZE < pdfStructure.courts.length) {
+        await new Promise(r => setTimeout(r, 300));
+      }
+    }
+  } else {
+    // Single-shot parsing
+    console.log(`[TELEGRAM-DOC] PHASE 4: SINGLE-SHOT PARSING`);
+    const CHUNK_SIZE = 50;
+    const maxItems = 1000;
+    
+    for (let chunk = 0; chunk < Math.ceil(maxItems / CHUNK_SIZE); chunk++) {
+      const startItem = chunk * CHUNK_SIZE + 1;
+      const endItem = (chunk + 1) * CHUNK_SIZE;
+      
+      const chunkCases = await parseChunk(pdfDataUrl, startItem, endItem, lovableApiKey, doc.bench, doc.list_type);
+      console.log(`[TELEGRAM-DOC] Chunk ${chunk+1}: ${chunkCases.length} cases`);
+      allCases.push(...chunkCases);
+      
+      if (chunkCases.length === 0 && chunk > 2) break;
+      if (chunk < 19) await new Promise(r => setTimeout(r, 300));
+    }
+  }
+
+  // PHASE 5: Validate and Insert
+  console.log(`[TELEGRAM-DOC] PHASE 5: VALIDATION & INSERT`);
+  const validCases = allCases.filter(c => c.item_no > 0 && c.case_number && c.case_number !== 'Unknown');
+  console.log(`[TELEGRAM-DOC] Validated ${validCases.length}/${allCases.length} cases`);
+
+  // Upload PDF
+  let storedPdfUrl = '';
+  const storagePath = `causelists/${date}/${doc.bench}/${doc.court_no || 'ALL'}_${doc.list_type}_${doc.telegram_message_id}.pdf`;
+  const { error: uploadError } = await supabase.storage.from('causelist-pdfs')
+    .upload(storagePath, pdfContent, { contentType: 'application/pdf', upsert: true });
+  
+  if (!uploadError) {
+    const { data: publicUrl } = supabase.storage.from('causelist-pdfs').getPublicUrl(storagePath);
+    storedPdfUrl = publicUrl.publicUrl;
+  }
+
+  // Insert with deduplication
+  let insertedCount = 0;
+  if (validCases.length > 0) {
+    const { data: existing } = await supabase.from('daily_court_docket')
+      .select('item_no, court_room_no').eq('date', date).eq('court_location', doc.bench).eq('list_type', doc.list_type);
+    
+    const existingKeys = new Set((existing || []).map((c: any) => `${c.item_no}_${c.court_room_no || ''}`));
+    const newCases = validCases.filter(c => !existingKeys.has(`${c.item_no}_${c.court_room_no || ''}`));
+    
+    if (newCases.length > 0) {
+      const toInsert = newCases.map(c => ({
+        date, court_location: doc.bench, list_type: doc.list_type,
+        court_room_no: c.court_room_no || doc.court_no || 'ALL', item_no: c.item_no,
+        case_number: c.case_number, petitioner: c.petitioner, respondent: c.respondent,
+        petitioner_lawyer: c.petitioner_lawyer, respondent_lawyer: c.respondent_lawyer,
+        judge_names: c.judge_names || judgeNames,
+        source_url: storedPdfUrl || fileUrl || `telegram:${doc.telegram_message_id}`,
+        status: 'pending',
+      }));
+
+      for (let i = 0; i < toInsert.length; i += 100) {
+        const { data, error } = await supabase.from('daily_court_docket').insert(toInsert.slice(i, i + 100)).select();
+        if (!error) insertedCount += data?.length || 0;
+      }
+    }
+  }
+
+  await logResult(supabase, doc.bench, doc.list_type, doc.court_no || 'ALL', validCases.length > 0 ? 'success' : 'partial', insertedCount);
+  
+  console.log(`[TELEGRAM-DOC] ========== COMPLETE ==========`);
+  console.log(`[TELEGRAM-DOC] Parsed: ${validCases.length}, Inserted: ${insertedCount}, Duration: ${Date.now() - startTime}ms`);
 }
 
 // ============================================================================
@@ -332,7 +506,7 @@ OUTPUT STRICT JSON:
     const match = content.match(/\{[\s\S]*\}/);
     return match ? JSON.parse(match[0]) : null;
   } catch (e) {
-    console.error('[TELEGRAM-BG] Structure error:', e);
+    console.error('[TELEGRAM-DOC] Structure error:', e);
     return null;
   }
 }
@@ -378,7 +552,7 @@ JSON: {"cases": [{"item_no": N, "case_number": "...", "petitioner": "...", "resp
         })));
       }
     } catch (e) {
-      console.error(`[TELEGRAM-BG] Court chunk error:`, e);
+      console.error(`[TELEGRAM-DOC] Court chunk error:`, e);
     }
     
     if (i < Math.ceil(count / CHUNK) - 1) await new Promise(r => setTimeout(r, 200));
@@ -457,9 +631,8 @@ async function logResult(supabase: any, bench: string, listType: string, courtNo
     list_type: listType, 
     court_no: courtNo, 
     error_message: error || null,
-    // Source tracking - all logs from this function are from Telegram
   });
-  console.log(`[TELEGRAM-BG] Log created: bench=${bench}, status=${status}, cases=${count}, source=TELEGRAM`);
+  console.log(`[TELEGRAM-DOC] Log created: bench=${bench}, status=${status}, cases=${count}`);
 }
 
 function determineBench(text: string, fileName: string): string {
