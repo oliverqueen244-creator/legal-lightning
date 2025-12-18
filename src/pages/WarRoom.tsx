@@ -173,8 +173,8 @@ export default function WarRoom() {
               
               <div className="flex items-center gap-3">
                 <NetworkStatusPill />
-                <Badge variant="gold" className="text-sm">
-                  SENIOR MODE
+                <Badge variant="secondary" className="text-sm">
+                  PREPARE
                 </Badge>
               </div>
             </div>
@@ -202,11 +202,11 @@ export default function WarRoom() {
               <TabsList className="grid w-full grid-cols-3 m-2">
                 <TabsTrigger value="arguments" className="flex items-center gap-2">
                   <List className="h-4 w-4" />
-                  Args
+                  Arguments
                 </TabsTrigger>
                 <TabsTrigger value="documents" className="flex items-center gap-2 relative">
                   <FileText className="h-4 w-4" />
-                  Docs
+                  Documents
                   {pendingCount > 0 && (
                     <Badge variant="danger" className="absolute -top-1 -right-1 h-5 w-5 p-0 flex items-center justify-center text-xs">
                       {pendingCount}
@@ -217,7 +217,7 @@ export default function WarRoom() {
                   <History className="h-4 w-4" />
                   History
                   {hasHistoryData?.hasHistory && (
-                    <Badge variant="gold" className="absolute -top-1 -right-1 h-5 w-5 p-0 flex items-center justify-center text-xs">
+                    <Badge variant="outline" className="absolute -top-1 -right-1 h-5 w-5 p-0 flex items-center justify-center text-xs text-muted-foreground">
                       {hasHistoryData.previousCount}
                     </Badge>
                   )}

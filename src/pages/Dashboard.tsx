@@ -95,13 +95,13 @@ export default function Dashboard() {
                   onRefreshComplete={refetch}
                 />
                 <Button
-                  variant="gold"
+                  variant="outline"
                   size="sm"
                   onClick={() => navigate('/courtroom')}
                   className="ml-auto flex items-center gap-2"
                 >
                   <Gavel className="h-4 w-4" />
-                  Enter Courtroom
+                  Court Mode
                 </Button>
               </div>
               
@@ -109,7 +109,7 @@ export default function Dashboard() {
                 <TabsList className="grid w-full grid-cols-4 mb-4">
                   <TabsTrigger value="brief" className="flex items-center gap-2">
                     <Sun className="h-3 w-3" />
-                    Brief
+                    Today
                     {morningBrief && morningBrief.summary.high_risk_count > 0 && (
                       <Badge variant="danger" className="ml-1 h-5 w-5 p-0 flex items-center justify-center text-xs">
                         {morningBrief.summary.high_risk_count}
@@ -125,7 +125,7 @@ export default function Dashboard() {
                   </TabsTrigger>
                   <TabsTrigger value="supplementary" className="flex items-center gap-2">
                     <div className="h-2 w-2 rounded-full bg-court-warning animate-pulse" />
-                    Supp.
+                    Urgent
                     {supplementaryItems.length > 0 && (
                       <Badge variant="danger" className="ml-1 flex items-center gap-1">
                         <AlertCircle className="h-3 w-3" />
@@ -135,7 +135,7 @@ export default function Dashboard() {
                   </TabsTrigger>
                   <TabsTrigger value="search" className="flex items-center gap-2">
                     <Search className="h-3 w-3" />
-                    Search
+                    Find
                   </TabsTrigger>
                 </TabsList>
 
