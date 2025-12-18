@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Scale, Calendar, FileText, Settings, Activity, FileCheck, Database } from 'lucide-react';
+import { ArrowLeft, Scale, Calendar, FileText, Settings, Activity, FileCheck, Database, Gavel } from 'lucide-react';
 import { AuthGuard } from '@/components/layout/AuthGuard';
 import { useAuth } from '@/hooks/useAuth';
 import { DocketManager } from '@/components/admin/DocketManager';
@@ -11,6 +11,7 @@ import { CourtConfig } from '@/components/admin/CourtConfig';
 import { SyncMonitorPanel } from '@/components/admin/SyncMonitorPanel';
 import { DataValidationPanel } from '@/components/admin/DataValidationPanel';
 import { CauseListScraper } from '@/components/admin/CauseListScraper';
+import { JudgmentReferencesManager } from '@/components/admin/JudgmentReferencesManager';
 
 export default function Admin() {
   const navigate = useNavigate();
@@ -75,7 +76,7 @@ export default function Admin() {
         {/* Main Content */}
         <main className="flex-1 container mx-auto px-4 py-6">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-            <TabsList className="grid w-full max-w-4xl grid-cols-6">
+            <TabsList className="grid w-full max-w-5xl grid-cols-7">
               <TabsTrigger value="scraper" className="flex items-center gap-2">
                 <Database className="h-4 w-4" />
                 <span className="hidden sm:inline">Scraper</span>
@@ -87,6 +88,10 @@ export default function Admin() {
               <TabsTrigger value="arguments" className="flex items-center gap-2">
                 <FileText className="h-4 w-4" />
                 <span className="hidden sm:inline">Arguments</span>
+              </TabsTrigger>
+              <TabsTrigger value="judgments" className="flex items-center gap-2">
+                <Gavel className="h-4 w-4" />
+                <span className="hidden sm:inline">Judgments</span>
               </TabsTrigger>
               <TabsTrigger value="courts" className="flex items-center gap-2">
                 <Settings className="h-4 w-4" />
@@ -112,6 +117,10 @@ export default function Admin() {
 
             <TabsContent value="arguments" className="space-y-4">
               <ArgumentsManager />
+            </TabsContent>
+
+            <TabsContent value="judgments" className="space-y-4">
+              <JudgmentReferencesManager />
             </TabsContent>
 
             <TabsContent value="courts" className="space-y-4">
