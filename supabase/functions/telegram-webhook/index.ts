@@ -6,7 +6,6 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-webhook-secret',
 };
 
-// Telegram Bot API types
 interface TelegramUpdate {
   update_id: number;
   message?: TelegramBotMessage;
@@ -35,7 +34,6 @@ interface TelegramBotMessage {
   };
 }
 
-// Legacy Python script types
 interface LegacyMessage {
   message_id: number;
   date: string;
@@ -52,6 +50,16 @@ interface LegacyPayload {
   message?: LegacyMessage;
 }
 
+interface ParsedCase {
+  item_no: number;
+  case_number: string;
+  petitioner?: string;
+  respondent?: string;
+  petitioner_lawyer?: string;
+  respondent_lawyer?: string;
+  judge_names?: string;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -60,6 +68,7 @@ serve(async (req) => {
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
   const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
   const botToken = Deno.env.get('TELEGRAM_BOT_TOKEN');
+  const lovableApiKey = Deno.env.get('LOVABLE_API_KEY');
   const supabase = createClient(supabaseUrl, supabaseKey);
 
   try {
@@ -119,11 +128,11 @@ serve(async (req) => {
     
     // Check if this is a Telegram Bot API update (has update_id)
     if ('update_id' in body) {
-      return await handleTelegramUpdate(body as TelegramUpdate, supabase, botToken!);
+      return await handleTelegramUpdate(body as TelegramUpdate, supabase, botToken!, lovableApiKey);
     }
     
     // Otherwise treat as legacy Python script payload
-    return await handleLegacyPayload(body as LegacyPayload, supabase, req);
+    return await handleLegacyPayload(body as LegacyPayload, supabase, req, lovableApiKey);
 
   } catch (error) {
     console.error('[TELEGRAM] Error:', error);
@@ -134,7 +143,7 @@ serve(async (req) => {
   }
 });
 
-async function handleTelegramUpdate(update: TelegramUpdate, supabase: any, botToken: string) {
+async function handleTelegramUpdate(update: TelegramUpdate, supabase: any, botToken: string, lovableApiKey?: string) {
   console.log('[TELEGRAM] Received update:', update.update_id);
 
   const message = update.message || update.channel_post;
@@ -149,6 +158,10 @@ async function handleTelegramUpdate(update: TelegramUpdate, supabase: any, botTo
   
   console.log(`[TELEGRAM] Message from ${message.chat.title || message.chat.id}: ${text.substring(0, 100)}`);
 
+  // Check if this is a PDF document (likely a causelist)
+  const isPdf = message.document?.mime_type === 'application/pdf' || 
+                fileName.toLowerCase().endsWith('.pdf');
+
   // Check if this is a causelist
   const lowerText = text.toLowerCase();
   const lowerFile = fileName.toLowerCase();
@@ -157,7 +170,7 @@ async function handleTelegramUpdate(update: TelegramUpdate, supabase: any, botTo
     lowerText.includes('cause list') ||
     lowerText.includes('वादसूची') ||
     lowerFile.includes('causelist') ||
-    lowerFile.endsWith('.pdf');
+    isPdf;
 
   if (!isCauselist && !message.document) {
     console.log('[TELEGRAM] Not a causelist message, skipping');
@@ -174,8 +187,10 @@ async function handleTelegramUpdate(update: TelegramUpdate, supabase: any, botTo
 
   console.log(`[TELEGRAM] Processing: bench=${bench}, type=${listType}, court=${courtNo}, date=${date}`);
 
-  // Get file URL if document exists
+  // Get file URL and download PDF if document exists
   let fileUrl = '';
+  let pdfContent: Uint8Array | null = null;
+  
   if (message.document && botToken) {
     try {
       const fileResponse = await fetch(
@@ -185,50 +200,238 @@ async function handleTelegramUpdate(update: TelegramUpdate, supabase: any, botTo
       
       if (fileData.ok && fileData.result.file_path) {
         fileUrl = `https://api.telegram.org/file/bot${botToken}/${fileData.result.file_path}`;
-        console.log(`[TELEGRAM] File URL obtained`);
+        console.log(`[TELEGRAM] File URL obtained, downloading PDF...`);
+        
+        // Download the PDF
+        const pdfResponse = await fetch(fileUrl);
+        if (pdfResponse.ok) {
+          pdfContent = new Uint8Array(await pdfResponse.arrayBuffer());
+          console.log(`[TELEGRAM] PDF downloaded, size: ${pdfContent.length} bytes`);
+        }
       }
     } catch (err) {
-      console.error('[TELEGRAM] Error getting file:', err);
+      console.error('[TELEGRAM] Error getting/downloading file:', err);
     }
   }
 
-  // Store in database
-  const { data, error } = await supabase
-    .from('daily_court_docket')
-    .insert({
-      date: date,
+  // If we have PDF content and Lovable API key, parse with AI
+  let parsedCases: ParsedCase[] = [];
+  let judgeNames = '';
+  
+  if (pdfContent && lovableApiKey) {
+    console.log('[TELEGRAM] Parsing PDF with AI...');
+    const parseResult = await parsePdfWithAI(pdfContent, lovableApiKey, bench, listType);
+    parsedCases = parseResult.cases;
+    judgeNames = parseResult.judgeNames;
+    console.log(`[TELEGRAM] AI extracted ${parsedCases.length} cases`);
+  }
+
+  // Upload PDF to Supabase storage
+  let storedPdfUrl = '';
+  if (pdfContent) {
+    const storagePath = `causelists/${date}/${bench}/${courtNo}_${listType}_${message.message_id}.pdf`;
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from('causelist-pdfs')
+      .upload(storagePath, pdfContent, {
+        contentType: 'application/pdf',
+        upsert: true
+      });
+    
+    if (!uploadError) {
+      const { data: publicUrl } = supabase.storage.from('causelist-pdfs').getPublicUrl(storagePath);
+      storedPdfUrl = publicUrl.publicUrl;
+      console.log(`[TELEGRAM] PDF stored at: ${storedPdfUrl}`);
+    } else {
+      console.error('[TELEGRAM] Storage error:', uploadError);
+    }
+  }
+
+  // Store cases in database
+  let insertedCount = 0;
+  
+  if (parsedCases.length > 0) {
+    // Insert all parsed cases
+    const casesToInsert = parsedCases.map(c => ({
+      date,
       court_location: bench,
       list_type: listType,
       court_room_no: courtNo,
-      source_url: fileUrl || `telegram:${message.message_id}`,
+      item_no: c.item_no,
+      case_number: c.case_number,
+      petitioner: c.petitioner,
+      respondent: c.respondent,
+      petitioner_lawyer: c.petitioner_lawyer,
+      respondent_lawyer: c.respondent_lawyer,
+      judge_names: judgeNames || c.judge_names,
+      source_url: storedPdfUrl || fileUrl || `telegram:${message.message_id}`,
       status: 'pending',
-      case_number: `TELEGRAM_${message.message_id}`,
-      item_no: 0,
-    })
-    .select();
+    }));
 
-  if (error) {
-    console.error('[TELEGRAM] Database error:', error);
+    const { data, error } = await supabase
+      .from('daily_court_docket')
+      .insert(casesToInsert)
+      .select();
+
+    if (error) {
+      console.error('[TELEGRAM] Database error:', error);
+    } else {
+      insertedCount = data?.length || 0;
+      console.log(`[TELEGRAM] Inserted ${insertedCount} cases`);
+    }
   } else {
-    console.log(`[TELEGRAM] Created docket entry: ${data?.[0]?.id}`);
+    // No parsed cases - store a placeholder entry
+    const { data, error } = await supabase
+      .from('daily_court_docket')
+      .insert({
+        date,
+        court_location: bench,
+        list_type: listType,
+        court_room_no: courtNo,
+        source_url: storedPdfUrl || fileUrl || `telegram:${message.message_id}`,
+        status: 'pending_parse',
+        case_number: `PENDING_${message.message_id}`,
+        item_no: 0,
+      })
+      .select();
+
+    if (error) {
+      console.error('[TELEGRAM] Database error:', error);
+    } else {
+      insertedCount = 1;
+      console.log(`[TELEGRAM] Created placeholder docket entry: ${data?.[0]?.id}`);
+    }
   }
 
   // Log to scraper_logs
   await supabase.from('scraper_logs').insert({
-    bench: bench,
-    status: 'success',
-    cases_found: 1,
+    bench,
+    status: parsedCases.length > 0 ? 'success' : 'partial',
+    cases_found: insertedCount,
     list_type: listType,
     court_no: courtNo,
   });
 
   return new Response(
-    JSON.stringify({ ok: true, processed: true, docket_id: data?.[0]?.id }),
+    JSON.stringify({ 
+      ok: true, 
+      processed: true, 
+      cases_parsed: parsedCases.length,
+      cases_inserted: insertedCount 
+    }),
     { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
   );
 }
 
-async function handleLegacyPayload(payload: LegacyPayload, supabase: any, req: Request) {
+async function parsePdfWithAI(
+  pdfContent: Uint8Array, 
+  apiKey: string,
+  bench: string,
+  listType: string
+): Promise<{ cases: ParsedCase[], judgeNames: string }> {
+  try {
+    // Convert PDF to base64
+    const base64Pdf = btoa(String.fromCharCode(...pdfContent));
+    
+    const systemPrompt = `You are a legal document parser specialized in Indian High Court causelists.
+Extract ALL cases from the PDF causelist. For each case, extract:
+- item_no: The serial/item number
+- case_number: Full case number (e.g., "S.B. Civil Writ Petition No. 1234/2024")
+- petitioner: Name(s) of petitioner(s)
+- respondent: Name(s) of respondent(s)
+- petitioner_lawyer: Name(s) of advocate(s) for petitioner
+- respondent_lawyer: Name(s) of advocate(s) for respondent
+
+Also extract the judge names presiding over this court.
+
+Be thorough - extract EVERY case listed in the document.`;
+
+    const userPrompt = `Parse this ${bench} Bench ${listType} causelist PDF and extract all case details.
+Return the data as a JSON object with this structure:
+{
+  "judge_names": "Name of presiding judge(s)",
+  "cases": [
+    {
+      "item_no": 1,
+      "case_number": "...",
+      "petitioner": "...",
+      "respondent": "...",
+      "petitioner_lawyer": "...",
+      "respondent_lawyer": "..."
+    }
+  ]
+}
+
+Extract ALL cases from the document. If a field is not available, use null.`;
+
+    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-2.5-flash',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { 
+            role: 'user', 
+            content: [
+              { type: 'text', text: userPrompt },
+              { 
+                type: 'file',
+                file: {
+                  filename: 'causelist.pdf',
+                  file_data: `data:application/pdf;base64,${base64Pdf}`
+                }
+              }
+            ]
+          }
+        ],
+        max_tokens: 16000,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('[TELEGRAM] AI API error:', response.status, errorText);
+      return { cases: [], judgeNames: '' };
+    }
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content || '';
+    
+    console.log('[TELEGRAM] AI response length:', content.length);
+    
+    // Parse the JSON from the response
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]);
+      const cases: ParsedCase[] = (parsed.cases || []).map((c: any) => ({
+        item_no: parseInt(c.item_no) || 0,
+        case_number: c.case_number || 'Unknown',
+        petitioner: c.petitioner || null,
+        respondent: c.respondent || null,
+        petitioner_lawyer: c.petitioner_lawyer || null,
+        respondent_lawyer: c.respondent_lawyer || null,
+        judge_names: c.judge_names || null,
+      }));
+      
+      return { 
+        cases, 
+        judgeNames: parsed.judge_names || '' 
+      };
+    }
+    
+    console.error('[TELEGRAM] Could not parse AI response as JSON');
+    return { cases: [], judgeNames: '' };
+    
+  } catch (error) {
+    console.error('[TELEGRAM] AI parsing error:', error);
+    return { cases: [], judgeNames: '' };
+  }
+}
+
+async function handleLegacyPayload(payload: LegacyPayload, supabase: any, req: Request, lovableApiKey?: string) {
   const webhookSecret = Deno.env.get('TRIGGER_SECRET');
   const providedSecret = req.headers.get('x-webhook-secret');
   
@@ -253,7 +456,7 @@ async function handleLegacyPayload(payload: LegacyPayload, supabase: any, req: R
   }
 
   if (payload.action === 'new_message' && payload.message) {
-    const result = await processLegacyMessage(payload.message, supabase);
+    const result = await processLegacyMessage(payload.message, supabase, lovableApiKey);
     return new Response(JSON.stringify({
       success: true,
       processed: 1,
@@ -266,7 +469,7 @@ async function handleLegacyPayload(payload: LegacyPayload, supabase: any, req: R
   if (payload.action === 'batch_messages' && payload.messages) {
     let totalCases = 0;
     for (const message of payload.messages) {
-      const result = await processLegacyMessage(message, supabase);
+      const result = await processLegacyMessage(message, supabase, lovableApiKey);
       totalCases += result.cases;
     }
 
@@ -292,7 +495,7 @@ async function handleLegacyPayload(payload: LegacyPayload, supabase: any, req: R
   });
 }
 
-async function processLegacyMessage(message: LegacyMessage, supabase: any): Promise<{ cases: number }> {
+async function processLegacyMessage(message: LegacyMessage, supabase: any, lovableApiKey?: string): Promise<{ cases: number }> {
   const lowerText = (message.text || '').toLowerCase();
   const isPdf = message.file_name?.toLowerCase().endsWith('.pdf') || 
                 lowerText.includes('causelist');
@@ -306,6 +509,49 @@ async function processLegacyMessage(message: LegacyMessage, supabase: any): Prom
   const courtNo = extractCourtNumber(message.text || '', message.file_name || '');
   const date = extractDate(message.text || '', message.file_name || '', message.date);
 
+  // Try to download and parse PDF if URL is available
+  if (message.file_url && lovableApiKey) {
+    try {
+      const pdfResponse = await fetch(message.file_url);
+      if (pdfResponse.ok) {
+        const pdfContent = new Uint8Array(await pdfResponse.arrayBuffer());
+        console.log(`[TELEGRAM] Legacy: Downloaded PDF, size: ${pdfContent.length} bytes`);
+        
+        const parseResult = await parsePdfWithAI(pdfContent, lovableApiKey, bench, listType);
+        
+        if (parseResult.cases.length > 0) {
+          const casesToInsert = parseResult.cases.map(c => ({
+            date,
+            court_location: bench,
+            list_type: listType,
+            court_room_no: courtNo,
+            item_no: c.item_no,
+            case_number: c.case_number,
+            petitioner: c.petitioner,
+            respondent: c.respondent,
+            petitioner_lawyer: c.petitioner_lawyer,
+            respondent_lawyer: c.respondent_lawyer,
+            judge_names: parseResult.judgeNames || c.judge_names,
+            source_url: message.file_url,
+            status: 'pending',
+          }));
+
+          const { data, error } = await supabase
+            .from('daily_court_docket')
+            .insert(casesToInsert)
+            .select();
+
+          if (!error) {
+            return { cases: data?.length || 0 };
+          }
+        }
+      }
+    } catch (err) {
+      console.error('[TELEGRAM] Legacy PDF parse error:', err);
+    }
+  }
+
+  // Fallback: just store the file reference
   if (message.file_url) {
     await supabase.from('daily_court_docket').insert({
       date,
