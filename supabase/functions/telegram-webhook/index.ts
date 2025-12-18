@@ -194,27 +194,42 @@ async function handleTelegramUpdate(update: TelegramUpdate, supabase: any, botTo
   let fileUrl = '';
   let pdfContent: Uint8Array | null = null;
   
+  console.log(`[TELEGRAM] Checking PDF download: document=${!!message.document}, botToken=${!!botToken}`);
+  
   if (message.document && botToken) {
     try {
-      const fileResponse = await fetch(
-        `https://api.telegram.org/bot${botToken}/getFile?file_id=${message.document.file_id}`
-      );
+      console.log(`[TELEGRAM] Getting file info for file_id: ${message.document.file_id}`);
+      const getFileUrl = `https://api.telegram.org/bot${botToken}/getFile?file_id=${message.document.file_id}`;
+      console.log(`[TELEGRAM] Calling: ${getFileUrl.substring(0, 50)}...`);
+      
+      const fileResponse = await fetch(getFileUrl);
       const fileData = await fileResponse.json();
+      
+      console.log(`[TELEGRAM] getFile response:`, JSON.stringify(fileData));
       
       if (fileData.ok && fileData.result.file_path) {
         fileUrl = `https://api.telegram.org/file/bot${botToken}/${fileData.result.file_path}`;
-        console.log(`[TELEGRAM] File URL obtained, downloading PDF...`);
+        console.log(`[TELEGRAM] File URL obtained: ${fileUrl.substring(0, 60)}...`);
         
         // Download the PDF
+        console.log(`[TELEGRAM] Downloading PDF...`);
         const pdfResponse = await fetch(fileUrl);
+        console.log(`[TELEGRAM] PDF response status: ${pdfResponse.status}`);
+        
         if (pdfResponse.ok) {
           pdfContent = new Uint8Array(await pdfResponse.arrayBuffer());
           console.log(`[TELEGRAM] PDF downloaded, size: ${pdfContent.length} bytes`);
+        } else {
+          console.error(`[TELEGRAM] PDF download failed: ${pdfResponse.status} ${pdfResponse.statusText}`);
         }
+      } else {
+        console.error(`[TELEGRAM] getFile failed:`, JSON.stringify(fileData));
       }
     } catch (err) {
       console.error('[TELEGRAM] Error getting/downloading file:', err);
     }
+  } else {
+    console.log(`[TELEGRAM] Skipping PDF download - no document or no botToken`);
   }
 
   // If we have PDF content and Lovable API key, parse with AI
