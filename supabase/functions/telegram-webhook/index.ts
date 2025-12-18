@@ -145,6 +145,7 @@ serve(async (req) => {
 
 async function handleTelegramUpdate(update: TelegramUpdate, supabase: any, botToken: string, lovableApiKey?: string) {
   console.log('[TELEGRAM] Received update:', update.update_id);
+  console.log('[TELEGRAM] Full update:', JSON.stringify(update, null, 2));
 
   const message = update.message || update.channel_post;
   if (!message) {
@@ -157,6 +158,8 @@ async function handleTelegramUpdate(update: TelegramUpdate, supabase: any, botTo
   const fileName = message.document?.file_name || '';
   
   console.log(`[TELEGRAM] Message from ${message.chat.title || message.chat.id}: ${text.substring(0, 100)}`);
+  console.log(`[TELEGRAM] Has document: ${!!message.document}, file_id: ${message.document?.file_id || 'none'}`);
+  console.log(`[TELEGRAM] Bot token available: ${!!botToken}, Lovable API key available: ${!!lovableApiKey}`);
 
   // Check if this is a PDF document (likely a causelist)
   const isPdf = message.document?.mime_type === 'application/pdf' || 
