@@ -250,12 +250,14 @@ async function updateLiveBoardCache(
 }
 
 async function markAllCourtsNotSitting(supabase: any): Promise<void> {
+  // Update all courts by filtering on court_location (both benches)
   const { error } = await supabase
     .from("live_board_cache")
     .update({ 
       is_active: false,
       status: 'not_sitting'
-    });
+    })
+    .in("court_location", ["JODHPUR", "JAIPUR"]);
   
   if (error) {
     console.error("Error marking all courts as not sitting:", error);
