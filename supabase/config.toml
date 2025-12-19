@@ -38,3 +38,6 @@ verify_jwt = false
 
 [functions.parse-case]
 verify_jwt = false
+
+[functions.test-firecrawl-pdf]
+verify_jwt = false
