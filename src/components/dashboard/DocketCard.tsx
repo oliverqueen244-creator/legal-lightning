@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { format } from 'date-fns';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Scale, Clock, AlertTriangle, ChevronRight, SkipForward, Coffee, Ban, Zap, Play } from 'lucide-react';
+import { Scale, Clock, AlertTriangle, ChevronRight, SkipForward, Coffee, Ban, Zap, Play, Calendar } from 'lucide-react';
 import type { DocketItem, LiveBoardCache, BoardStatus } from '@/types/database';
 import { cn } from '@/lib/utils';
 import type { AppRole } from '@/hooks/useAuth';
@@ -16,9 +17,10 @@ interface DocketCardProps {
   liveBoard?: LiveBoardCache;
   userRole?: AppRole | null;
   onForceActive?: (itemId: string) => void;
+  showDate?: boolean;
 }
 
-export function DocketCard({ item, liveBoard, userRole, onForceActive }: DocketCardProps) {
+export function DocketCard({ item, liveBoard, userRole, onForceActive, showDate }: DocketCardProps) {
   const navigate = useNavigate();
   const [isForcing, setIsForcing] = useState(false);
   
@@ -133,6 +135,12 @@ export function DocketCard({ item, liveBoard, userRole, onForceActive }: DocketC
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-2 flex-wrap">
+              {showDate && item.date && (
+                <Badge variant="outline" className="flex items-center gap-1">
+                  <Calendar className="h-3 w-3" />
+                  {format(new Date(item.date), 'EEE, MMM d')}
+                </Badge>
+              )}
               {isSupplementary && (
                 <Badge variant="supplementary">SUPPLEMENTARY</Badge>
               )}
