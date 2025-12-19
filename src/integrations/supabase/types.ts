@@ -114,6 +114,101 @@ export type Database = {
           },
         ]
       }
+      case_parse_queue: {
+        Row: {
+          cases_parsed: number | null
+          completed_at: string | null
+          created_at: string | null
+          error_message: string | null
+          id: string
+          item_range: string | null
+          matched_alias: string
+          page_range: string | null
+          profile_id: string
+          raw_causelist_id: string
+          started_at: string | null
+          status: string | null
+        }
+        Insert: {
+          cases_parsed?: number | null
+          completed_at?: string | null
+          created_at?: string | null
+          error_message?: string | null
+          id?: string
+          item_range?: string | null
+          matched_alias: string
+          page_range?: string | null
+          profile_id: string
+          raw_causelist_id: string
+          started_at?: string | null
+          status?: string | null
+        }
+        Update: {
+          cases_parsed?: number | null
+          completed_at?: string | null
+          created_at?: string | null
+          error_message?: string | null
+          id?: string
+          item_range?: string | null
+          matched_alias?: string
+          page_range?: string | null
+          profile_id?: string
+          raw_causelist_id?: string
+          started_at?: string | null
+          status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "case_parse_queue_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "case_parse_queue_raw_causelist_id_fkey"
+            columns: ["raw_causelist_id"]
+            isOneToOne: false
+            referencedRelation: "raw_causelists"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cause_list_notes: {
+        Row: {
+          created_at: string | null
+          id: string
+          note_text: string
+          note_type: string | null
+          page_number: number | null
+          raw_causelist_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          note_text: string
+          note_type?: string | null
+          page_number?: number | null
+          raw_causelist_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          note_text?: string
+          note_type?: string | null
+          page_number?: number | null
+          raw_causelist_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cause_list_notes_raw_causelist_id_fkey"
+            columns: ["raw_causelist_id"]
+            isOneToOne: false
+            referencedRelation: "raw_causelists"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       court_metadata: {
         Row: {
           bench: string
@@ -530,6 +625,48 @@ export type Database = {
           },
         ]
       }
+      profile_scan_log: {
+        Row: {
+          aliases_searched: string[] | null
+          id: string
+          matches_found: number | null
+          profile_id: string
+          raw_causelist_id: string
+          scanned_at: string | null
+        }
+        Insert: {
+          aliases_searched?: string[] | null
+          id?: string
+          matches_found?: number | null
+          profile_id: string
+          raw_causelist_id: string
+          scanned_at?: string | null
+        }
+        Update: {
+          aliases_searched?: string[] | null
+          id?: string
+          matches_found?: number | null
+          profile_id?: string
+          raw_causelist_id?: string
+          scanned_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profile_scan_log_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "profile_scan_log_raw_causelist_id_fkey"
+            columns: ["raw_causelist_id"]
+            isOneToOne: false
+            referencedRelation: "raw_causelists"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           bar_registration_number: string | null
@@ -563,6 +700,51 @@ export type Database = {
           onboarding_completed?: boolean | null
           role?: string | null
           whatsapp_number?: string | null
+        }
+        Relationships: []
+      }
+      raw_causelists: {
+        Row: {
+          bench: string
+          created_at: string | null
+          file_name: string | null
+          file_size_bytes: number | null
+          id: string
+          list_date: string
+          list_type: string
+          page_count: number | null
+          status: string | null
+          storage_path: string
+          telegram_message_id: number | null
+          text_content: string | null
+        }
+        Insert: {
+          bench: string
+          created_at?: string | null
+          file_name?: string | null
+          file_size_bytes?: number | null
+          id?: string
+          list_date: string
+          list_type: string
+          page_count?: number | null
+          status?: string | null
+          storage_path: string
+          telegram_message_id?: number | null
+          text_content?: string | null
+        }
+        Update: {
+          bench?: string
+          created_at?: string | null
+          file_name?: string | null
+          file_size_bytes?: number | null
+          id?: string
+          list_date?: string
+          list_type?: string
+          page_count?: number | null
+          status?: string | null
+          storage_path?: string
+          telegram_message_id?: number | null
+          text_content?: string | null
         }
         Relationships: []
       }

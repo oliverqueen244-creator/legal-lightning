@@ -26,3 +26,15 @@ verify_jwt = false
 
 [functions.scrape-live-board]
 verify_jwt = false
+
+[functions.download-causelists]
+verify_jwt = false
+
+[functions.extract-causelist-notes]
+verify_jwt = false
+
+[functions.scan-lawyer-names]
+verify_jwt = false
+
+[functions.parse-case]
+verify_jwt = false
