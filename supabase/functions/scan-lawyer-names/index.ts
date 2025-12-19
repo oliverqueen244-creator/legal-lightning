@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
-import { extractText } from "https://esm.sh/unpdf@0.12.1";
+
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -11,7 +11,7 @@ const corsHeaders = {
  * ACCOUNT-WISE NAME SCAN (CRITICAL)
  * 
  * This function runs per profile per causelist:
- * 1. Extract plain text from PDF using unpdf (no AI needed)
+ * 1. Extract plain text from PDF using pdf.co API (handles large PDFs)
  * 2. Search for profile's aliases (case-insensitive string match)
  * 3. If match found: enqueue parsing task
  * 4. If no match: STOP, do nothing
@@ -26,23 +26,84 @@ interface ScanRequest {
   causelist_id?: string;
 }
 
-// Extract text using unpdf library (fast, free, no API limits)
+// Extract text using pdf.co API (handles large PDFs externally)
 async function extractTextFromPDF(pdfArrayBuffer: ArrayBuffer): Promise<string> {
+  const pdfCoApiKey = Deno.env.get('PDF_CO_API_KEY');
+  
+  if (!pdfCoApiKey) {
+    console.error('[SCAN-LAWYER-NAMES] PDF_CO_API_KEY not configured');
+    return '';
+  }
+
   try {
-    console.log('[SCAN-LAWYER-NAMES] Extracting text with unpdf...');
+    console.log('[SCAN-LAWYER-NAMES] Extracting text with pdf.co API...');
     const startTime = Date.now();
     
-    const { text, totalPages } = await extractText(pdfArrayBuffer);
+    // Step 1: Upload the PDF file to pdf.co
+    console.log('[SCAN-LAWYER-NAMES] Uploading PDF to pdf.co...');
+    const formData = new FormData();
+    const blob = new Blob([pdfArrayBuffer], { type: 'application/pdf' });
+    formData.append('file', blob, 'document.pdf');
     
-    // Join text array into single string
-    const fullText = Array.isArray(text) ? text.join('\n') : text;
+    const uploadResponse = await fetch('https://api.pdf.co/v1/file/upload', {
+      method: 'POST',
+      headers: {
+        'x-api-key': pdfCoApiKey,
+      },
+      body: formData,
+    });
+
+    if (!uploadResponse.ok) {
+      const errorText = await uploadResponse.text();
+      console.error(`[SCAN-LAWYER-NAMES] pdf.co upload error: ${uploadResponse.status} - ${errorText}`);
+      return '';
+    }
+
+    const uploadResult = await uploadResponse.json();
     
+    if (uploadResult.error) {
+      console.error(`[SCAN-LAWYER-NAMES] pdf.co upload error: ${uploadResult.message}`);
+      return '';
+    }
+
+    const fileUrl = uploadResult.url;
+    console.log(`[SCAN-LAWYER-NAMES] PDF uploaded, extracting text...`);
+
+    // Step 2: Convert PDF to text using the uploaded URL
+    const extractResponse = await fetch('https://api.pdf.co/v1/pdf/convert/to/text', {
+      method: 'POST',
+      headers: {
+        'x-api-key': pdfCoApiKey,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        url: fileUrl,
+        inline: true,
+        pages: '',
+        async: false,
+      }),
+    });
+
+    if (!extractResponse.ok) {
+      const errorText = await extractResponse.text();
+      console.error(`[SCAN-LAWYER-NAMES] pdf.co extract error: ${extractResponse.status} - ${errorText}`);
+      return '';
+    }
+
+    const extractResult = await extractResponse.json();
+    
+    if (extractResult.error) {
+      console.error(`[SCAN-LAWYER-NAMES] pdf.co extract error: ${extractResult.message}`);
+      return '';
+    }
+
+    const fullText = extractResult.body || '';
     const elapsed = Date.now() - startTime;
-    console.log(`[SCAN-LAWYER-NAMES] Extracted ${fullText.length} chars from ${totalPages} pages in ${elapsed}ms`);
+    console.log(`[SCAN-LAWYER-NAMES] Extracted ${fullText.length} chars in ${elapsed}ms via pdf.co`);
     
     return fullText;
   } catch (error) {
-    console.error('[SCAN-LAWYER-NAMES] unpdf extraction error:', error);
+    console.error('[SCAN-LAWYER-NAMES] pdf.co extraction error:', error);
     return '';
   }
 }
