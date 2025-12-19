@@ -19,11 +19,12 @@ import { useLiveBoard } from '@/hooks/useLiveBoard';
 import { useAuth } from '@/hooks/useAuth';
 import { useMorningBrief } from '@/hooks/useMorningBrief';
 import { usePendingCaptures } from '@/hooks/usePostCourtCapture';
+import { useUpcomingCases } from '@/hooks/useUpcomingCases';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Scale, AlertCircle, Search, Sun, Gavel } from 'lucide-react';
+import { Scale, AlertCircle, Search, Sun, Gavel, Calendar } from 'lucide-react';
 import { LiveBoardSimulator } from '@/components/dashboard/LiveBoardSimulator';
 
 export default function Dashboard() {
@@ -34,6 +35,7 @@ export default function Dashboard() {
   const { role, profile } = useAuth();
   const { data: morningBrief, isLoading: briefLoading, refetch: refetchBrief } = useMorningBrief();
   const { data: pendingCaptures } = usePendingCaptures();
+  const { data: upcomingCases, isLoading: upcomingLoading } = useUpcomingCases();
   const [activeTab, setActiveTab] = useState('brief');
   
   // Format date for API calls
@@ -52,6 +54,14 @@ export default function Dashboard() {
 
   // Filter docket items by user's selected bench(es)
   const filteredDocket = docket?.filter((item) => {
+    if (userBenches.length === 0) return true;
+    return userBenches.some(bench => 
+      item.court_location?.toUpperCase().includes(bench)
+    );
+  }) ?? [];
+
+  // Filter upcoming cases by user's selected bench(es)
+  const filteredUpcoming = upcomingCases?.filter((item) => {
     if (userBenches.length === 0) return true;
     return userBenches.some(bench => 
       item.court_location?.toUpperCase().includes(bench)
@@ -117,7 +127,7 @@ export default function Dashboard() {
               </div>
               
               <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-                <TabsList className="grid w-full grid-cols-4 mb-4">
+                <TabsList className="grid w-full grid-cols-5 mb-4">
                   <TabsTrigger value="brief" className="flex items-center gap-2">
                     <Sun className="h-3 w-3" />
                     Today
@@ -141,6 +151,15 @@ export default function Dashboard() {
                       <Badge variant="danger" className="ml-1 flex items-center gap-1">
                         <AlertCircle className="h-3 w-3" />
                         {supplementaryItems.length}
+                      </Badge>
+                    )}
+                  </TabsTrigger>
+                  <TabsTrigger value="upcoming" className="flex items-center gap-2">
+                    <Calendar className="h-3 w-3" />
+                    Upcoming
+                    {filteredUpcoming.length > 0 && (
+                      <Badge variant="secondary" className="ml-1">
+                        {filteredUpcoming.length}
                       </Badge>
                     )}
                   </TabsTrigger>
@@ -231,6 +250,48 @@ export default function Dashboard() {
                           liveBoard={getLiveBoardForItem(item)}
                           userRole={role}
                           onForceActive={handleForceActive}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </TabsContent>
+
+                <TabsContent value="upcoming" className="space-y-3 mt-0">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Calendar className="h-4 w-4 text-primary" />
+                    <h2 className="font-display text-lg font-semibold text-foreground tracking-wide">
+                      Upcoming Cases
+                    </h2>
+                    <span className="text-muted-foreground text-sm">
+                      ({filteredUpcoming.length} matters)
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mb-4">
+                    📅 Cases scheduled for future dates from published causelists
+                  </p>
+                  
+                  {upcomingLoading ? (
+                    <div className="space-y-3">
+                      {[1, 2, 3].map((i) => (
+                        <Skeleton key={i} className="h-28 w-full rounded-lg" />
+                      ))}
+                    </div>
+                  ) : filteredUpcoming.length === 0 ? (
+                    <div className="text-center py-12 text-muted-foreground glass-card rounded-lg">
+                      <Calendar className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                      <p>No upcoming cases found</p>
+                      <p className="text-xs mt-2">Cases will appear here when causelists for future dates are published</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {filteredUpcoming.map((item) => (
+                        <DocketCard
+                          key={item.id}
+                          item={item}
+                          liveBoard={undefined}
+                          userRole={role}
+                          onForceActive={handleForceActive}
+                          showDate={true}
                         />
                       ))}
                     </div>

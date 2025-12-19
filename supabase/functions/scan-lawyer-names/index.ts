@@ -47,6 +47,38 @@ async function extractTextFromPDF(pdfArrayBuffer: ArrayBuffer): Promise<string> 
   }
 }
 
+// Extract causelist date from PDF text content
+function extractCauselistDate(textContent: string): string | null {
+  // Common date patterns in Indian causelists
+  const patterns = [
+    // "Thursday Dated : 18/12/2025" or "Dated : 18/12/2025"
+    /Dated\s*:\s*(\d{1,2})\/(\d{1,2})\/(\d{4})/i,
+    // "Date: 18-12-2025" or "Date : 18-12-2025"
+    /Date\s*:\s*(\d{1,2})-(\d{1,2})-(\d{4})/i,
+    // "18.12.2025" at start of line
+    /^(\d{1,2})\.(\d{1,2})\.(\d{4})/m,
+    // "Cause List for 18/12/2025"
+    /Cause\s*List\s*(?:for|dated?)\s*(\d{1,2})\/(\d{1,2})\/(\d{4})/i,
+    // "Daily Causelist" followed by date
+    /Daily\s*Causelist.*?(\d{1,2})\/(\d{1,2})\/(\d{4})/is,
+  ];
+
+  for (const pattern of patterns) {
+    const match = textContent.match(pattern);
+    if (match) {
+      const day = match[1].padStart(2, '0');
+      const month = match[2].padStart(2, '0');
+      const year = match[3];
+      const dateStr = `${year}-${month}-${day}`;
+      console.log(`[SCAN-LAWYER-NAMES] Extracted date from PDF: ${dateStr}`);
+      return dateStr;
+    }
+  }
+
+  console.log('[SCAN-LAWYER-NAMES] Could not extract date from PDF content');
+  return null;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -142,16 +174,39 @@ serve(async (req) => {
         const arrayBuffer = await pdfData.arrayBuffer();
         textContent = await extractTextFromPDF(arrayBuffer);
 
-        // Cache the text (limit to 500KB for storage)
+        // Cache the text and extract date from PDF content
         if (textContent) {
+          // Extract the actual date from the PDF content
+          const extractedDate = extractCauselistDate(textContent);
+          
+          const updateData: Record<string, any> = { 
+            text_content: textContent.substring(0, 500000), 
+            status: 'scanning' 
+          };
+          
+          if (extractedDate) {
+            updateData.list_date = extractedDate;
+            console.log(`[SCAN-LAWYER-NAMES] Updated causelist date to: ${extractedDate}`);
+          }
+          
           await supabase
             .from('raw_causelists')
-            .update({ text_content: textContent.substring(0, 500000), status: 'scanning' })
+            .update(updateData)
             .eq('id', causelist.id);
           console.log('[SCAN-LAWYER-NAMES] Text cached successfully');
         } else {
           console.error('[SCAN-LAWYER-NAMES] Failed to extract text from PDF');
           continue;
+        }
+      } else {
+        // Even if text is cached, try to extract and update date if not already set
+        const extractedDate = extractCauselistDate(textContent);
+        if (extractedDate && extractedDate !== causelist.list_date) {
+          await supabase
+            .from('raw_causelists')
+            .update({ list_date: extractedDate })
+            .eq('id', causelist.id);
+          console.log(`[SCAN-LAWYER-NAMES] Updated cached causelist date to: ${extractedDate}`);
         }
       }
 
