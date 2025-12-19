@@ -77,7 +77,7 @@ serve(async (req) => {
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
   const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
   const botToken = Deno.env.get('TELEGRAM_BOT_TOKEN');
-  const lovableApiKey = Deno.env.get('LOVABLE_API_KEY');
+  const googleApiKey = Deno.env.get('GOOGLE_AI_API_KEY');
   const supabase = createClient(supabaseUrl, supabaseKey);
 
   try {
@@ -112,7 +112,7 @@ serve(async (req) => {
     // Process queue action - called to process next item
     if (url.searchParams.get('action') === 'process-queue') {
       console.log('[TELEGRAM] Process queue triggered');
-      await processNextInQueue(supabase, botToken!, lovableApiKey, supabaseUrl);
+      await processNextInQueue(supabase, botToken!, googleApiKey, supabaseUrl);
       return new Response(JSON.stringify({ ok: true, action: 'process-queue' }), 
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
@@ -120,7 +120,7 @@ serve(async (req) => {
     const body = await req.json();
     
     if ('update_id' in body) {
-      return await handleTelegramUpdate(body as TelegramUpdate, supabase, botToken!, lovableApiKey, supabaseUrl);
+      return await handleTelegramUpdate(body as TelegramUpdate, supabase, botToken!, googleApiKey, supabaseUrl);
     }
     
     return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
@@ -132,7 +132,7 @@ serve(async (req) => {
   }
 });
 
-async function handleTelegramUpdate(update: TelegramUpdate, supabase: any, botToken: string, lovableApiKey?: string, supabaseUrl?: string) {
+async function handleTelegramUpdate(update: TelegramUpdate, supabase: any, botToken: string, googleApiKey?: string, supabaseUrl?: string) {
   console.log('[TELEGRAM] Received update:', update.update_id);
 
   const message = update.message || update.channel_post;
@@ -214,7 +214,7 @@ async function handleTelegramUpdate(update: TelegramUpdate, supabase: any, botTo
     
     // Start background task to process queue
     const backgroundTask = async () => {
-      await processNextInQueue(supabase, botToken, lovableApiKey, supabaseUrl);
+      await processNextInQueue(supabase, botToken, googleApiKey, supabaseUrl);
     };
 
     // @ts-ignore
@@ -236,7 +236,7 @@ async function handleTelegramUpdate(update: TelegramUpdate, supabase: any, botTo
 // SEQUENTIAL QUEUE PROCESSOR
 // ============================================================================
 
-async function processNextInQueue(supabase: any, botToken: string, lovableApiKey?: string, supabaseUrl?: string) {
+async function processNextInQueue(supabase: any, botToken: string, googleApiKey?: string, supabaseUrl?: string) {
   console.log('[TELEGRAM-QUEUE] Checking for next document to process...');
 
   // First, check if anything is already processing (safety check)
@@ -293,7 +293,7 @@ async function processNextInQueue(supabase: any, botToken: string, lovableApiKey
 
   try {
     // Process the document
-    await processDocument(nextDoc as QueuedDocument, supabase, botToken, lovableApiKey);
+    await processDocument(nextDoc as QueuedDocument, supabase, botToken, googleApiKey);
 
     // Mark as completed
     await supabase
@@ -327,13 +327,13 @@ async function processNextInQueue(supabase: any, botToken: string, lovableApiKey
     // Small delay before processing next
     await new Promise(r => setTimeout(r, 2000));
     // Continue processing in the same execution context
-    await processNextInQueue(supabase, botToken, lovableApiKey, supabaseUrl);
+    await processNextInQueue(supabase, botToken, googleApiKey, supabaseUrl);
   } else {
     console.log('[TELEGRAM-QUEUE] All documents processed');
   }
 }
 
-async function processDocument(doc: QueuedDocument, supabase: any, botToken: string, lovableApiKey?: string) {
+async function processDocument(doc: QueuedDocument, supabase: any, botToken: string, googleApiKey?: string) {
   const startTime = Date.now();
   console.log(`[TELEGRAM-DOC] ========== STARTING PIPELINE ==========`);
   console.log(`[TELEGRAM-DOC] Document: ${doc.file_name || doc.file_id}`);
@@ -358,20 +358,19 @@ async function processDocument(doc: QueuedDocument, supabase: any, botToken: str
     }
   }
 
-  if (!pdfContent || !lovableApiKey) {
+  if (!pdfContent || !googleApiKey) {
     console.log('[TELEGRAM-DOC] ✗ No PDF or API key');
     await logResult(supabase, doc.bench, doc.list_type, doc.court_no || 'ALL', 'error', 0, 'No PDF or API key');
     throw new Error('No PDF content or API key');
   }
 
-  // Encode PDF to base64
+  // Encode PDF to base64 (native PDF support in Google AI)
   const base64Pdf = uint8ArrayToBase64(pdfContent);
-  const pdfDataUrl = `data:application/pdf;base64,${base64Pdf}`;
   console.log(`[TELEGRAM-DOC] ✓ PDF encoded: ${base64Pdf.length} chars`);
 
   // PHASE 2: Structure Detection
   console.log(`[TELEGRAM-DOC] PHASE 2: STRUCTURE DETECTION`);
-  const pdfStructure = await detectStructure(pdfDataUrl, lovableApiKey);
+  const pdfStructure = await detectStructure(base64Pdf, googleApiKey);
   
   let judgeNames = '';
   if (pdfStructure) {
@@ -395,7 +394,7 @@ async function processDocument(doc: QueuedDocument, supabase: any, botToken: str
       console.log(`[TELEGRAM-DOC] Batch ${Math.floor(i/BATCH_SIZE)+1}: ${batch.map((c: CourtSection) => c.court_identifier).join(', ')}`);
       
       const results = await Promise.all(
-        batch.map((court: CourtSection) => parseCourt(pdfDataUrl, court, lovableApiKey, doc.bench))
+        batch.map((court: CourtSection) => parseCourt(base64Pdf, court, googleApiKey, doc.bench))
       );
       
       for (let j = 0; j < results.length; j++) {
@@ -417,7 +416,7 @@ async function processDocument(doc: QueuedDocument, supabase: any, botToken: str
       const startItem = chunk * CHUNK_SIZE + 1;
       const endItem = (chunk + 1) * CHUNK_SIZE;
       
-      const chunkCases = await parseChunk(pdfDataUrl, startItem, endItem, lovableApiKey, doc.bench, doc.list_type);
+      const chunkCases = await parseChunk(base64Pdf, startItem, endItem, googleApiKey, doc.bench, doc.list_type);
       console.log(`[TELEGRAM-DOC] Chunk ${chunk+1}: ${chunkCases.length} cases`);
       allCases.push(...chunkCases);
       
@@ -476,34 +475,37 @@ async function processDocument(doc: QueuedDocument, supabase: any, botToken: str
 }
 
 // ============================================================================
-// AI FUNCTIONS
+// AI FUNCTIONS - Google AI Studio Direct API
 // ============================================================================
 
-async function detectStructure(pdfDataUrl: string, apiKey: string): Promise<PdfStructure | null> {
+async function detectStructure(base64Pdf: string, apiKey: string): Promise<PdfStructure | null> {
   try {
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
-        messages: [{
-          role: 'user',
-          content: [
-            { type: 'text', text: `Analyze this causelist PDF structure. Identify all courts/benches.
+        contents: [{
+          parts: [
+            { text: `Analyze this causelist PDF structure. Identify all courts/benches.
 For each: court_identifier, judge_names, start_item_no, end_item_no, items_contiguous.
 OUTPUT STRICT JSON:
 {"total_courts_detected": N, "item_numbering_type_global": "continuous_global", "courts": [{"court_identifier": "Court No. 1", "judge_names": "...", "start_item_no": 1, "end_item_no": 150, "items_contiguous": true}], "courts_interleaved": false, "safe_for_court_based_split": true, "notes": ""}` },
-            { type: 'image_url', image_url: { url: pdfDataUrl } }
+            { inline_data: { mime_type: 'application/pdf', data: base64Pdf } }
           ]
         }],
-        max_tokens: 8000,
-        temperature: 0,
+        generationConfig: {
+          maxOutputTokens: 8000,
+          temperature: 0,
+        },
       }),
     });
 
-    if (!response.ok) return null;
+    if (!response.ok) {
+      console.error('[TELEGRAM-DOC] Structure API error:', response.status, await response.text());
+      return null;
+    }
     const data = await response.json();
-    const content = data.choices?.[0]?.message?.content || '';
+    const content = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
     const match = content.match(/\{[\s\S]*\}/);
     return match ? JSON.parse(match[0]) : null;
   } catch (e) {
@@ -512,7 +514,7 @@ OUTPUT STRICT JSON:
   }
 }
 
-async function parseCourt(pdfDataUrl: string, court: CourtSection, apiKey: string, bench: string): Promise<ParsedCase[]> {
+async function parseCourt(base64Pdf: string, court: CourtSection, apiKey: string, bench: string): Promise<ParsedCase[]> {
   const allCases: ParsedCase[] = [];
   const count = court.end_item_no - court.start_item_no + 1;
   const CHUNK = 50;
@@ -522,28 +524,28 @@ async function parseCourt(pdfDataUrl: string, court: CourtSection, apiKey: strin
     const end = Math.min(court.start_item_no + (i + 1) * CHUNK - 1, court.end_item_no);
     
     try {
-      const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: 'google/gemini-2.5-flash',
-          messages: [{
-            role: 'user',
-            content: [
-              { type: 'text', text: `Parse ${bench} causelist PDF. ONLY ${court.court_identifier}, items ${start}-${end}.
+          contents: [{
+            parts: [
+              { text: `Parse ${bench} causelist PDF. ONLY ${court.court_identifier}, items ${start}-${end}.
 Extract: item_no, case_number, petitioner, respondent, petitioner_lawyer, respondent_lawyer.
 JSON: {"cases": [{"item_no": N, "case_number": "...", "petitioner": "...", "respondent": "...", "petitioner_lawyer": "...", "respondent_lawyer": "..."}]}` },
-              { type: 'image_url', image_url: { url: pdfDataUrl } }
+              { inline_data: { mime_type: 'application/pdf', data: base64Pdf } }
             ]
           }],
-          max_tokens: 16000,
-          temperature: 0,
+          generationConfig: {
+            maxOutputTokens: 16000,
+            temperature: 0,
+          },
         }),
       });
 
       if (response.ok) {
         const data = await response.json();
-        let content = data.choices?.[0]?.message?.content || '';
+        let content = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
         content = content.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
         const cases = parseJson(content);
         allCases.push(...cases.map(c => ({
@@ -551,6 +553,8 @@ JSON: {"cases": [{"item_no": N, "case_number": "...", "petitioner": "...", "resp
           judge_names: court.judge_names,
           court_room_no: court.court_identifier.replace(/Court\s*No\.?\s*:?\s*/i, '').trim(),
         })));
+      } else {
+        console.error('[TELEGRAM-DOC] Court parse error:', response.status);
       }
     } catch (e) {
       console.error(`[TELEGRAM-DOC] Court chunk error:`, e);
@@ -562,32 +566,36 @@ JSON: {"cases": [{"item_no": N, "case_number": "...", "petitioner": "...", "resp
   return allCases;
 }
 
-async function parseChunk(pdfDataUrl: string, start: number, end: number, apiKey: string, bench: string, listType: string): Promise<ParsedCase[]> {
+async function parseChunk(base64Pdf: string, start: number, end: number, apiKey: string, bench: string, listType: string): Promise<ParsedCase[]> {
   try {
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
-        messages: [{
-          role: 'user',
-          content: [
-            { type: 'text', text: `Parse ${bench} ${listType} causelist PDF. Items ${start}-${end} ONLY.
+        contents: [{
+          parts: [
+            { text: `Parse ${bench} ${listType} causelist PDF. Items ${start}-${end} ONLY.
 Extract: item_no, case_number, petitioner, respondent, petitioner_lawyer, respondent_lawyer.
 JSON: {"cases": [...]}` },
-            { type: 'image_url', image_url: { url: pdfDataUrl } }
+            { inline_data: { mime_type: 'application/pdf', data: base64Pdf } }
           ]
         }],
-        max_tokens: 16000,
-        temperature: 0,
+        generationConfig: {
+          maxOutputTokens: 16000,
+          temperature: 0,
+        },
       }),
     });
 
-    if (!response.ok) return [];
+    if (!response.ok) {
+      console.error('[TELEGRAM-DOC] Chunk parse error:', response.status);
+      return [];
+    }
     const data = await response.json();
-    let content = data.choices?.[0]?.message?.content || '';
+    let content = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
     return parseJson(content.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim());
   } catch (e) {
+    console.error('[TELEGRAM-DOC] Chunk error:', e);
     return [];
   }
 }
