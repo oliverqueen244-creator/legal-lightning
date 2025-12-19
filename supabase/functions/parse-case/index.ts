@@ -304,7 +304,7 @@ IMPORTANT:
 - Return empty array [] if no matching cases found
 
 Causelist text:
-${textContent.substring(0, 200000)}`;
+${textContent}`;
 
     const aiResult = await callAIWithFallback(systemPrompt, userPrompt);
 
