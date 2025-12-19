@@ -41,3 +41,6 @@ verify_jwt = false
 
 [functions.test-firecrawl-pdf]
 verify_jwt = false
+
+[functions.test-pdf-parse]
+verify_jwt = false
