@@ -99,8 +99,8 @@ serve(async (req) => {
       .from('raw_causelists')
       .select('id, storage_path, text_content, bench, list_type, list_date')
       .in('status', ['downloaded', 'notes_extracted', 'scanning'])
-      .order('created_at', { ascending: false })
-      .limit(5);
+      .order('created_at', { ascending: true })
+      .limit(1);
 
     if (body.causelist_id) {
       causelistQuery = supabase
@@ -159,6 +159,12 @@ serve(async (req) => {
       let textContent = causelist.text_content;
 
       if (!textContent) {
+        // Mark as extracting FIRST to prevent duplicate processing
+        await supabase
+          .from('raw_causelists')
+          .update({ status: 'extracting' })
+          .eq('id', causelist.id);
+        
         console.log('[SCAN-LAWYER-NAMES] No cached text, extracting from PDF...');
         
         const { data: pdfData, error: downloadError } = await supabase.storage
@@ -167,6 +173,7 @@ serve(async (req) => {
 
         if (downloadError || !pdfData) {
           console.error(`[SCAN-LAWYER-NAMES] Failed to download PDF: ${downloadError?.message}`);
+          await supabase.from('raw_causelists').update({ status: 'download_error' }).eq('id', causelist.id);
           continue;
         }
 
@@ -174,30 +181,30 @@ serve(async (req) => {
         const arrayBuffer = await pdfData.arrayBuffer();
         textContent = await extractTextFromPDF(arrayBuffer);
 
-        // Cache the text and extract date from PDF content
-        if (textContent) {
-          // Extract the actual date from the PDF content
-          const extractedDate = extractCauselistDate(textContent);
-          
-          const updateData: Record<string, any> = { 
-            text_content: textContent.substring(0, 500000), 
-            status: 'scanning' 
-          };
-          
-          if (extractedDate) {
-            updateData.list_date = extractedDate;
-            console.log(`[SCAN-LAWYER-NAMES] Updated causelist date to: ${extractedDate}`);
-          }
-          
-          await supabase
-            .from('raw_causelists')
-            .update(updateData)
-            .eq('id', causelist.id);
-          console.log('[SCAN-LAWYER-NAMES] Text cached successfully');
-        } else {
+        if (!textContent) {
           console.error('[SCAN-LAWYER-NAMES] Failed to extract text from PDF');
+          await supabase.from('raw_causelists').update({ status: 'extract_error' }).eq('id', causelist.id);
           continue;
         }
+
+        // Extract date and save text immediately
+        const extractedDate = extractCauselistDate(textContent);
+        console.log(`[SCAN-LAWYER-NAMES] Extracted date: ${extractedDate}, saving ${textContent.length} chars`);
+        
+        const { error: saveError } = await supabase
+          .from('raw_causelists')
+          .update({ 
+            text_content: textContent.substring(0, 500000), 
+            status: 'scanned',
+            list_date: extractedDate || causelist.list_date
+          })
+          .eq('id', causelist.id);
+
+        if (saveError) {
+          console.error(`[SCAN-LAWYER-NAMES] Failed to save text: ${saveError.message}`);
+          continue;
+        }
+        console.log('[SCAN-LAWYER-NAMES] Text saved successfully');
       } else {
         // Even if text is cached, try to extract and update date if not already set
         const extractedDate = extractCauselistDate(textContent);

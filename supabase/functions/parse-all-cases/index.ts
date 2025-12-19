@@ -185,16 +185,14 @@ Extract ALL cases, even partial information. Return ONLY the JSON array, no othe
             const batch = casesToInsert.slice(i, i + 50);
             const { data: inserted, error: insertError } = await supabase
               .from('daily_court_docket')
-              .upsert(batch, { 
-                onConflict: 'case_fingerprint',
-                ignoreDuplicates: true 
-              })
+              .insert(batch)
               .select('id');
 
             if (insertError) {
               console.error(`[PARSE-ALL-CASES] Insert error: ${insertError.message}`);
             } else {
               totalCasesInserted += inserted?.length || 0;
+              console.log(`[PARSE-ALL-CASES] Inserted batch of ${inserted?.length || 0} cases`);
             }
           }
         }
