@@ -33,6 +33,12 @@ const statusConfig: Record<SyncStatus, { icon: string; label: string; color: str
     label: 'UNKNOWN',
     color: 'text-muted-foreground',
     bgColor: 'bg-muted/20'
+  },
+  not_in_session: {
+    icon: '🌙',
+    label: 'OFFLINE',
+    color: 'text-muted-foreground',
+    bgColor: 'bg-muted/20'
   }
 };
 

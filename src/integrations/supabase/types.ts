@@ -408,6 +408,7 @@ export type Database = {
           court_no: string
           cross_court_from: string | null
           current_item: number | null
+          is_active: boolean | null
           is_supplementary_running: boolean | null
           last_updated: string | null
           list_type: string | null
@@ -419,6 +420,7 @@ export type Database = {
           court_no: string
           cross_court_from?: string | null
           current_item?: number | null
+          is_active?: boolean | null
           is_supplementary_running?: boolean | null
           last_updated?: string | null
           list_type?: string | null
@@ -430,6 +432,7 @@ export type Database = {
           court_no?: string
           cross_court_from?: string | null
           current_item?: number | null
+          is_active?: boolean | null
           is_supplementary_running?: boolean | null
           last_updated?: string | null
           list_type?: string | null

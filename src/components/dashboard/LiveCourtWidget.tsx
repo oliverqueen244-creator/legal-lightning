@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
-import { Gavel, Clock, Coffee, SkipForward, Ban, AlertTriangle } from 'lucide-react';
+import { Gavel, Clock, Coffee, SkipForward, Ban, AlertTriangle, Moon } from 'lucide-react';
 import type { BoardStatus, LiveBoardCache } from '@/types/database';
 import { SyncStatusBadge, SyncTimestamp } from './SyncStatusBadge';
 import { useCourtSyncHealth } from '@/hooks/useSyncHealth';
+import { isCourtHours } from '@/hooks/useLiveBoard';
 
 interface LiveCourtWidgetProps {
   courtRoom: string;
@@ -28,6 +29,8 @@ export function LiveCourtWidget({
   const [isAnimating, setIsAnimating] = useState(false);
   
   const syncHealth = useCourtSyncHealth(courtLocation, courtRoom, liveBoard);
+  const courtHoursStatus = isCourtHours();
+  const isActive = liveBoard?.is_active ?? false;
 
   // Animate number changes
   useEffect(() => {
@@ -44,12 +47,33 @@ export function LiveCourtWidget({
   const distance = myItemNumber ? myItemNumber - currentItem : null;
   
   // Enhanced panic logic: Different thresholds for daily vs supplementary
+  // Only trigger panic if court is active and in session
   const panicThreshold = isSupplementary ? 10 : 5;
-  const isPanic = distance !== null && distance > 0 && distance <= panicThreshold;
-  const isMyTurn = distance === 0;
-  const isCritical = distance !== null && distance > 0 && distance <= 3;
+  const isPanic = distance !== null && distance > 0 && distance <= panicThreshold && isActive && courtHoursStatus.inSession;
+  const isMyTurn = distance === 0 && isActive && courtHoursStatus.inSession;
+  const isCritical = distance !== null && distance > 0 && distance <= 3 && isActive && courtHoursStatus.inSession;
 
   const getStatusConfig = () => {
+    // Court not in session
+    if (!courtHoursStatus.inSession || status === 'not_sitting') {
+      return {
+        icon: Moon,
+        label: 'NOT IN SESSION',
+        bgClass: 'bg-muted/30',
+        borderClass: 'border-muted/50',
+      };
+    }
+    
+    // Court in session but not active (not sitting today)
+    if (!isActive) {
+      return {
+        icon: Ban,
+        label: 'NOT SITTING TODAY',
+        bgClass: 'bg-muted/30',
+        borderClass: 'border-muted/50',
+      };
+    }
+    
     switch (status) {
       case 'passover':
         return {
@@ -85,6 +109,9 @@ export function LiveCourtWidget({
   const statusConfig = getStatusConfig();
   const StatusIcon = statusConfig.icon;
 
+  // Determine if we should show the stale warning
+  const showStaleWarning = syncHealth.status === 'stale' && isActive && courtHoursStatus.inSession;
+
   return (
     <div
       className={`
@@ -93,6 +120,7 @@ export function LiveCourtWidget({
         ${isCritical ? 'border-2 border-court-danger-light' : ''}
         ${isMyTurn ? 'gold-glow border-primary' : ''}
         ${status === 'passover' ? 'card-passover' : ''}
+        ${!isActive || !courtHoursStatus.inSession ? 'opacity-75' : ''}
         ${statusConfig.bgClass} ${statusConfig.borderClass}
       `}
       role="region"
@@ -100,7 +128,7 @@ export function LiveCourtWidget({
       aria-live="polite"
     >
       {/* Background glow effect */}
-      {status === 'hearing' && (
+      {status === 'hearing' && isActive && courtHoursStatus.inSession && (
         <div 
           className="absolute inset-0 opacity-20 pointer-events-none"
           style={{
@@ -110,16 +138,16 @@ export function LiveCourtWidget({
       )}
 
       {/* Stale Data Warning Banner */}
-      {syncHealth.status === 'stale' && (
+      {showStaleWarning && (
         <div className="absolute top-0 left-0 right-0 bg-destructive/90 text-destructive-foreground text-xs text-center py-1 px-2 z-20">
           ⚠️ Data may be outdated ({syncHealth.staleSeconds}s since last sync)
         </div>
       )}
 
       {/* Header */}
-      <div className={`flex items-center justify-between mb-6 relative z-10 ${syncHealth.status === 'stale' ? 'mt-4' : ''}`}>
+      <div className={`flex items-center justify-between mb-6 relative z-10 ${showStaleWarning ? 'mt-4' : ''}`}>
         <div className="flex items-center gap-3">
-          <StatusIcon className="h-6 w-6 text-primary" aria-hidden="true" />
+          <StatusIcon className={`h-6 w-6 ${isActive && courtHoursStatus.inSession ? 'text-primary' : 'text-muted-foreground'}`} aria-hidden="true" />
           <div>
             <h2 className="font-display text-xl md:text-2xl font-bold text-foreground tracking-wide">
               COURTROOM {courtRoom}
@@ -130,54 +158,71 @@ export function LiveCourtWidget({
         
         <div className="flex flex-col items-end gap-1">
           <div className="flex items-center gap-2">
-            <SyncStatusBadge 
-              status={syncHealth.status} 
-              staleSeconds={syncHealth.staleSeconds}
-              size="sm"
-              showLabel={true}
-            />
+            {courtHoursStatus.inSession && isActive && (
+              <SyncStatusBadge 
+                status={syncHealth.status} 
+                staleSeconds={syncHealth.staleSeconds}
+                size="sm"
+                showLabel={true}
+              />
+            )}
             {isSupplementary && (
               <Badge variant="supplementary" className="text-xs">
                 SUPPLEMENTARY
               </Badge>
             )}
             <Badge 
-              variant={status === 'hearing' ? 'default' : 'secondary'}
+              variant={status === 'hearing' && isActive ? 'default' : 'secondary'}
               className={`
                 text-xs font-semibold px-3 py-1
                 ${status === 'passover' ? 'bg-muted text-muted-foreground' : ''}
                 ${status === 'lunch' ? 'bg-court-warning/20 text-court-warning' : ''}
-                ${status === 'adjourned' ? 'bg-muted/50 text-muted-foreground' : ''}
+                ${status === 'adjourned' || !isActive || !courtHoursStatus.inSession ? 'bg-muted/50 text-muted-foreground' : ''}
               `}
             >
               {statusConfig.label}
             </Badge>
           </div>
-          {liveBoard && (
+          {liveBoard && isActive && courtHoursStatus.inSession && (
             <SyncTimestamp lastUpdated={liveBoard.last_updated} />
           )}
         </div>
       </div>
 
-      {/* Giant Item Number */}
+      {/* Giant Item Number or Not In Session Message */}
       <div className="text-center py-8 relative z-10">
-        <p className="text-sm text-muted-foreground uppercase tracking-widest mb-2">
-          Current Item
-        </p>
-        <div 
-          className={`
-            giant-number transition-all duration-300
-            ${isAnimating ? 'opacity-0 translate-y-4' : 'opacity-100 translate-y-0'}
-            ${status === 'passover' ? 'text-muted-foreground' : ''}
-          `}
-          aria-label={`Item number ${displayedItem}`}
-        >
-          {displayedItem}
-        </div>
+        {!courtHoursStatus.inSession ? (
+          <>
+            <Moon className="h-16 w-16 text-muted-foreground mx-auto mb-3 opacity-50" />
+            <p className="text-muted-foreground text-lg">Courts not in session</p>
+            <p className="text-sm text-muted-foreground mt-1">{courtHoursStatus.reason}</p>
+          </>
+        ) : !isActive ? (
+          <>
+            <Ban className="h-16 w-16 text-muted-foreground mx-auto mb-3 opacity-50" />
+            <p className="text-muted-foreground text-lg">Court not sitting today</p>
+          </>
+        ) : (
+          <>
+            <p className="text-sm text-muted-foreground uppercase tracking-widest mb-2">
+              Current Item
+            </p>
+            <div 
+              className={`
+                giant-number transition-all duration-300
+                ${isAnimating ? 'opacity-0 translate-y-4' : 'opacity-100 translate-y-0'}
+                ${status === 'passover' ? 'text-muted-foreground' : ''}
+              `}
+              aria-label={`Item number ${displayedItem}`}
+            >
+              {displayedItem}
+            </div>
+          </>
+        )}
       </div>
 
-      {/* My case distance indicator */}
-      {myItemNumber && (
+      {/* My case distance indicator - only show during active court session */}
+      {myItemNumber && isActive && courtHoursStatus.inSession && (
         <div 
           className={`
             mt-4 p-4 rounded-lg text-center relative z-10

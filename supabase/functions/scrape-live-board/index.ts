@@ -14,6 +14,60 @@ interface CourtStatus {
   status: string;
 }
 
+// Check if current time (in IST) is within court hours
+function isCourtHours(): { inSession: boolean; reason: string } {
+  const now = new Date();
+  
+  // Convert to IST (UTC+5:30)
+  const istOffset = 5.5 * 60 * 60 * 1000;
+  const istTime = new Date(now.getTime() + istOffset);
+  
+  const hours = istTime.getUTCHours();
+  const minutes = istTime.getUTCMinutes();
+  const dayOfWeek = istTime.getUTCDay(); // 0 = Sunday
+  const timeInMinutes = hours * 60 + minutes;
+  
+  // Courts closed on Sunday
+  if (dayOfWeek === 0) {
+    return { inSession: false, reason: "Sunday - Courts closed" };
+  }
+  
+  // Determine if summer schedule (Apr 15 - Jun 27)
+  const month = istTime.getUTCMonth() + 1; // 1-12
+  const day = istTime.getUTCDate();
+  
+  const isSummer = (month === 4 && day >= 15) || 
+                   (month === 5) || 
+                   (month === 6 && day <= 27);
+  
+  // Add 15-minute buffer before and 30-minute buffer after
+  const bufferBefore = 15;
+  const bufferAfter = 30;
+  
+  if (isSummer) {
+    // Summer hours: 8 AM - 1 PM IST
+    const startTime = 8 * 60 - bufferBefore; // 7:45 AM
+    const endTime = 13 * 60 + bufferAfter; // 1:30 PM
+    
+    if (timeInMinutes >= startTime && timeInMinutes <= endTime) {
+      return { inSession: true, reason: "Summer session (8 AM - 1 PM)" };
+    }
+    return { inSession: false, reason: `Outside summer hours (8 AM - 1 PM). Current IST: ${hours}:${minutes.toString().padStart(2, '0')}` };
+  } else {
+    // Winter hours: 10:30 AM - 1 PM + 2 PM - 4:30 PM IST
+    const morningStart = 10 * 60 + 30 - bufferBefore; // 10:15 AM
+    const morningEnd = 13 * 60 + bufferAfter; // 1:30 PM
+    const afternoonStart = 14 * 60 - bufferBefore; // 1:45 PM
+    const afternoonEnd = 16 * 60 + 30 + bufferAfter; // 5:00 PM
+    
+    if ((timeInMinutes >= morningStart && timeInMinutes <= morningEnd) ||
+        (timeInMinutes >= afternoonStart && timeInMinutes <= afternoonEnd)) {
+      return { inSession: true, reason: "Winter session" };
+    }
+    return { inSession: false, reason: `Outside winter hours. Current IST: ${hours}:${minutes.toString().padStart(2, '0')}` };
+  }
+}
+
 // Parse item format: "293(S)", "75(D)", "[C-9] 645 (S)", "516-517(S)", "ADJ", "L.BREAK"
 function parseItemNumber(itemStr: string): {
   current_item: number;
@@ -142,6 +196,19 @@ async function scrapeBoard(url: string, location: string): Promise<CourtStatus[]
   }
 }
 
+async function markAllCourtsInactive(supabase: any, location: string): Promise<void> {
+  const { error } = await supabase
+    .from("live_board_cache")
+    .update({ is_active: false })
+    .eq("court_location", location);
+  
+  if (error) {
+    console.error(`Error marking ${location} courts inactive:`, error);
+  } else {
+    console.log(`[${location}] Marked all courts as inactive`);
+  }
+}
+
 async function updateLiveBoardCache(
   supabase: any,
   location: string,
@@ -149,6 +216,10 @@ async function updateLiveBoardCache(
 ): Promise<void> {
   const now = new Date().toISOString();
   
+  // First mark all courts for this location as inactive
+  await markAllCourtsInactive(supabase, location);
+  
+  // Then upsert the active courts with is_active = true
   for (const court of courts) {
     const { error } = await supabase
       .from("live_board_cache")
@@ -163,6 +234,7 @@ async function updateLiveBoardCache(
           status: court.status,
           last_updated: now,
           source_timestamp: now,
+          is_active: true, // Mark as active since it's currently on the display board
         },
         {
           onConflict: "court_location,court_no",
@@ -174,7 +246,22 @@ async function updateLiveBoardCache(
     }
   }
   
-  console.log(`[${location}] Updated ${courts.length} courts in cache`);
+  console.log(`[${location}] Updated ${courts.length} active courts in cache`);
+}
+
+async function markAllCourtsNotSitting(supabase: any): Promise<void> {
+  const { error } = await supabase
+    .from("live_board_cache")
+    .update({ 
+      is_active: false,
+      status: 'not_sitting'
+    });
+  
+  if (error) {
+    console.error("Error marking all courts as not sitting:", error);
+  } else {
+    console.log("Marked all courts as not sitting (outside court hours)");
+  }
 }
 
 async function logSyncStatus(
@@ -204,6 +291,28 @@ Deno.serve(async (req) => {
   const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const supabase = createClient(supabaseUrl, supabaseKey);
 
+  // Check if we're within court hours
+  const courtHoursCheck = isCourtHours();
+  console.log(`Court hours check: ${courtHoursCheck.inSession ? 'IN SESSION' : 'CLOSED'} - ${courtHoursCheck.reason}`);
+  
+  if (!courtHoursCheck.inSession) {
+    // Mark all courts as not sitting and return early
+    await markAllCourtsNotSitting(supabase);
+    
+    return new Response(
+      JSON.stringify({
+        success: true,
+        message: "Courts not in session",
+        reason: courtHoursCheck.reason,
+        scrapes: 0,
+        courts_marked_inactive: true
+      }),
+      {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      }
+    );
+  }
+
   const JODHPUR_URL = "https://hcraj.nic.in/displayboard/jodhpur.php";
   const JAIPUR_URL = "https://hcraj.nic.in/displayboard/jaipur.php";
   
@@ -230,7 +339,7 @@ Deno.serve(async (req) => {
       
       const scrapeLatency = Date.now() - scrapeStart;
       
-      // Update database in parallel
+      // Update database in parallel (this now marks inactive first, then updates active)
       await Promise.all([
         updateLiveBoardCache(supabase, "JODHPUR", jodhpurCourts),
         updateLiveBoardCache(supabase, "JAIPUR", jaipurCourts),
@@ -275,6 +384,7 @@ Deno.serve(async (req) => {
       duration_ms: totalDuration,
       jodhpur_courts: totalJodhpurCourts,
       jaipur_courts: totalJaipurCourts,
+      court_session: courtHoursCheck.reason,
     }),
     {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

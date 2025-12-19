@@ -38,7 +38,7 @@ export interface DocketItem {
   created_at: string;
 }
 
-export type BoardStatus = 'hearing' | 'passover' | 'lunch' | 'adjourned';
+export type BoardStatus = 'hearing' | 'passover' | 'lunch' | 'adjourned' | 'not_sitting';
 
 export interface LiveBoardCache {
   court_location: string;
@@ -47,6 +47,7 @@ export interface LiveBoardCache {
   status: BoardStatus;
   is_supplementary_running: boolean;
   last_updated: string;
+  is_active: boolean;
 }
 
 export interface CaseDocument {
