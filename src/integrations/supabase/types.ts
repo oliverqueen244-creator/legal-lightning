@@ -406,27 +406,33 @@ export type Database = {
         Row: {
           court_location: string
           court_no: string
+          cross_court_from: string | null
           current_item: number | null
           is_supplementary_running: boolean | null
           last_updated: string | null
+          list_type: string | null
           source_timestamp: string | null
           status: string | null
         }
         Insert: {
           court_location: string
           court_no: string
+          cross_court_from?: string | null
           current_item?: number | null
           is_supplementary_running?: boolean | null
           last_updated?: string | null
+          list_type?: string | null
           source_timestamp?: string | null
           status?: string | null
         }
         Update: {
           court_location?: string
           court_no?: string
+          cross_court_from?: string | null
           current_item?: number | null
           is_supplementary_running?: boolean | null
           last_updated?: string | null
+          list_type?: string | null
           source_timestamp?: string | null
           status?: string | null
         }
