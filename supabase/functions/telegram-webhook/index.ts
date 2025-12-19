@@ -21,7 +21,7 @@ interface TelegramBotMessage {
   date: number;
   text?: string;
   caption?: string;
-  document?: { file_id: string; file_name?: string; mime_type?: string };
+  document?: { file_id: string; file_name?: string; mime_type?: string; file_size?: number };
   photo?: Array<{ file_id: string }>;
   chat: { id: number; title?: string; type: string };
   forward_from_chat?: { id: number; title?: string };
@@ -154,7 +154,6 @@ async function handleTelegramUpdate(update: TelegramUpdate, supabase: any, botTo
     return new Response(JSON.stringify({ ok: true, skipped: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
 
-  // If no document, skip queuing
   if (!message.document) {
     return new Response(JSON.stringify({ ok: true, skipped: true, reason: 'no_document' }), 
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
@@ -162,74 +161,53 @@ async function handleTelegramUpdate(update: TelegramUpdate, supabase: any, botTo
 
   const bench = determineBench(text, fileName);
   const listType = determineListType(text, fileName);
-  const courtNo = extractCourtNumber(text, fileName);
   const messageDate = new Date(message.date * 1000).toISOString();
+  const listDate = extractDate(text, fileName, messageDate);
 
-  console.log(`[TELEGRAM] Queueing document: bench=${bench}, type=${listType}, court=${courtNo}`);
+  console.log(`[TELEGRAM] Delegating to download-causelists: bench=${bench}, type=${listType}, date=${listDate}`);
 
-  // Add to queue instead of processing immediately
-  const { data: queuedItem, error: queueError } = await supabase
-    .from('document_processing_queue')
-    .upsert({
-      telegram_update_id: update.update_id,
-      telegram_message_id: message.message_id,
-      file_id: message.document.file_id,
-      file_name: fileName || null,
-      chat_id: message.chat.id,
-      bench,
-      list_type: listType,
-      court_no: courtNo || null,
-      message_date: messageDate,
-      status: 'pending',
-    }, {
-      onConflict: 'telegram_update_id',
-      ignoreDuplicates: true,
-    })
-    .select()
-    .single();
+  // NEW: Delegate to download-causelists function (account-wise ingestion pipeline)
+  try {
+    const downloadResponse = await fetch(`${supabaseUrl}/functions/v1/download-causelists`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`
+      },
+      body: JSON.stringify({
+        document: {
+          file_id: message.document.file_id,
+          file_name: fileName,
+          file_size: message.document.file_size
+        },
+        message_id: message.message_id,
+        bench,
+        list_type: listType,
+        list_date: listDate
+      })
+    });
 
-  if (queueError) {
-    // Check if it's a duplicate (already queued)
-    if (queueError.code === '23505') {
-      console.log('[TELEGRAM] Document already in queue, skipping');
-      return new Response(JSON.stringify({ ok: true, queued: false, reason: 'duplicate' }), 
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    const downloadResult = await downloadResponse.json();
+    console.log('[TELEGRAM] download-causelists result:', downloadResult);
+
+    if (!downloadResult.success) {
+      console.error('[TELEGRAM] download-causelists failed:', downloadResult.error);
+      return new Response(JSON.stringify({ ok: false, error: downloadResult.error }), 
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
-    console.error('[TELEGRAM] Queue error:', queueError);
-  } else {
-    console.log(`[TELEGRAM] Document queued: ${queuedItem?.id}`);
+
+    // Success - PDF stored, notes extraction triggered, cron will handle scanning/parsing
+    return new Response(JSON.stringify({ 
+      ok: true, 
+      causelist_id: downloadResult.causelist_id,
+      message: 'PDF stored. Account-wise scanning and parsing will run via cron.'
+    }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+
+  } catch (error) {
+    console.error('[TELEGRAM] Error calling download-causelists:', error);
+    return new Response(JSON.stringify({ ok: false, error: error instanceof Error ? error.message : 'Unknown error' }), 
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
-
-  // Check if any document is currently processing
-  const { data: processingDoc } = await supabase
-    .from('document_processing_queue')
-    .select('id')
-    .eq('status', 'processing')
-    .limit(1)
-    .maybeSingle();
-
-  // If nothing is processing, start processing the queue
-  if (!processingDoc) {
-    console.log('[TELEGRAM] No document processing, starting queue processor');
-    
-    // Start background task to process queue
-    const backgroundTask = async () => {
-      await processNextInQueue(supabase, botToken, googleApiKey, supabaseUrl);
-    };
-
-    // @ts-ignore
-    if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime.waitUntil) {
-      // @ts-ignore
-      EdgeRuntime.waitUntil(backgroundTask());
-    } else {
-      await backgroundTask();
-    }
-  } else {
-    console.log(`[TELEGRAM] Document ${processingDoc.id} is already processing, will be picked up after`);
-  }
-
-  return new Response(JSON.stringify({ ok: true, queued: true }), 
-    { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 }
 
 // ============================================================================
