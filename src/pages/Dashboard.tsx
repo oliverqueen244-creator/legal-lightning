@@ -8,6 +8,7 @@ import { CaseTimeEstimator } from '@/components/dashboard/CaseTimeEstimator';
 import { LawyerSearchPanel } from '@/components/dashboard/LawyerSearchPanel';
 import { ScraperStatusWidget } from '@/components/dashboard/ScraperStatusWidget';
 import { CourtMetadataWidget } from '@/components/dashboard/CourtMetadataWidget';
+import { CauseListNotesWidget } from '@/components/dashboard/CauseListNotesWidget';
 import { DateSelector } from '@/components/dashboard/DateSelector';
 import { Header } from '@/components/layout/Header';
 import { AuthGuard } from '@/components/layout/AuthGuard';
@@ -274,6 +275,12 @@ export default function Dashboard() {
                 ) : (
                   <LiveTicker liveBoards={filteredLiveBoards} />
                 )}
+                
+                {/* Cause List Notes - Registry announcements */}
+                <CauseListNotesWidget 
+                  date={formattedDate} 
+                  bench={profile?.bench || undefined} 
+                />
                 
                 {/* Court Metadata Widget - Shows active courts */}
                 <CourtMetadataWidget bench={profile?.bench || undefined} />
