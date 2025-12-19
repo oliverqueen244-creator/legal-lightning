@@ -59,57 +59,57 @@ function parseItemNumber(itemStr: string): {
 function parseDisplayBoard(html: string, courtLocation: string): CourtStatus[] {
   const results: CourtStatus[] = [];
   
-  // Match table rows with court number and item number
-  // The HTML structure has rows with court number in first cell and item in second
-  const tableRowRegex = /<tr[^>]*>[\s\S]*?<td[^>]*>[\s\S]*?(\d+)[\s\S]*?<\/td>[\s\S]*?<td[^>]*>([\s\S]*?)<\/td>[\s\S]*?<\/tr>/gi;
+  // Find the tbody with class "mytbody" which contains the court data
+  const tbodyMatch = html.match(/<tbody class="mytbody">([\s\S]*?)<\/tbody>/i);
   
-  let match;
-  while ((match = tableRowRegex.exec(html)) !== null) {
-    const courtNo = match[1].trim();
-    const itemCell = match[2].replace(/<[^>]*>/g, "").trim(); // Strip HTML tags
+  if (tbodyMatch) {
+    const tbodyContent = tbodyMatch[1];
     
-    if (courtNo && itemCell) {
-      const parsed = parseItemNumber(itemCell);
-      results.push({
-        court_no: courtNo,
-        ...parsed,
-      });
-    }
-  }
-  
-  // Alternative parsing if the regex didn't work well
-  if (results.length === 0) {
-    // Try a simpler approach - look for patterns like "Court 1" or just number followed by item
-    const simpleRegex = /(?:Court|C\.?\s*No\.?|Court\s*No\.?)\s*[-:]?\s*(\d+)[^<\d]*?(\d+(?:\s*-\s*\d+)?(?:\s*\([SD]\))?|ADJ|L\.?BREAK|P\/O)/gi;
+    // Match each row - the structure is:
+    // <tr><td>Court Number</td><td>Item Number</td></tr>
+    const rowRegex = /<tr[^>]*>[\s\S]*?<td[^>]*>([\s\S]*?)<\/td>[\s\S]*?<td[^>]*>([\s\S]*?)<\/td>[\s\S]*?<\/tr>/gi;
     
-    while ((match = simpleRegex.exec(html)) !== null) {
-      const courtNo = match[1].trim();
-      const itemStr = match[2].trim();
-      const parsed = parseItemNumber(itemStr);
-      results.push({
-        court_no: courtNo,
-        ...parsed,
-      });
-    }
-  }
-  
-  // If still no results, try parsing the raw text content
-  if (results.length === 0) {
-    // Split by newlines and look for number patterns
-    const lines = html.replace(/<[^>]*>/g, "\n").split("\n").filter(l => l.trim());
-    
-    for (let i = 0; i < lines.length - 1; i++) {
-      const courtMatch = lines[i].match(/^\s*(\d{1,2})\s*$/);
-      if (courtMatch) {
-        const nextLine = lines[i + 1];
-        if (nextLine && /\d|ADJ|BREAK/i.test(nextLine)) {
-          const parsed = parseItemNumber(nextLine);
-          results.push({
-            court_no: courtMatch[1],
-            ...parsed,
-          });
-        }
+    let match;
+    while ((match = rowRegex.exec(tbodyContent)) !== null) {
+      // Extract text content, removing HTML tags
+      const courtNoRaw = match[1].replace(/<[^>]*>/g, "").trim();
+      const itemRaw = match[2].replace(/<[^>]*>/g, "").trim();
+      
+      // Extract just the number from court cell
+      const courtNoMatch = courtNoRaw.match(/(\d+)/);
+      const courtNo = courtNoMatch ? courtNoMatch[1] : "";
+      
+      if (courtNo && itemRaw) {
+        const parsed = parseItemNumber(itemRaw);
+        results.push({
+          court_no: courtNo,
+          ...parsed,
+        });
+        console.log(`[${courtLocation}] Court ${courtNo}: "${itemRaw}" -> item=${parsed.current_item}, supp=${parsed.is_supplementary_running}, cross=${parsed.cross_court_from}`);
       }
+    }
+  }
+  
+  // Fallback: try matching td pairs directly if tbody approach failed
+  if (results.length === 0) {
+    console.log(`[${courtLocation}] Fallback parsing...`);
+    
+    // Look for consecutive td pairs in table
+    const tdPairRegex = /<td[^>]*>[\s]*(\d{1,2})[\s]*<\/td>[\s\S]*?<td[^>]*>([\s\S]*?)<\/td>/gi;
+    
+    let match;
+    while ((match = tdPairRegex.exec(html)) !== null) {
+      const courtNo = match[1].trim();
+      const itemRaw = match[2].replace(/<[^>]*>/g, "").trim();
+      
+      // Skip if item doesn't look like a valid item number
+      if (!/\d|ADJ|BREAK|P\/O/i.test(itemRaw)) continue;
+      
+      const parsed = parseItemNumber(itemRaw);
+      results.push({
+        court_no: courtNo,
+        ...parsed,
+      });
     }
   }
 
