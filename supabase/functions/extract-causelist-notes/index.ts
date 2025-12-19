@@ -15,6 +15,134 @@ const NOTE_PATTERNS = [
   { pattern: /NOTICE\s*[:\-]\s*([^\n]+(?:\n(?![A-Z]{2,})[^\n]+)*)/gi, type: 'NOTE' },
 ];
 
+// Extract text using Google AI Studio (primary)
+async function extractWithGoogleAI(pdfBase64: string): Promise<string | null> {
+  const apiKey = Deno.env.get('GOOGLE_AI_API_KEY');
+  if (!apiKey) {
+    console.log('[EXTRACT-NOTES] GOOGLE_AI_API_KEY not configured');
+    return null;
+  }
+
+  try {
+    console.log('[EXTRACT-NOTES] Trying Google AI Studio...');
+    
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{
+            parts: [
+              { text: 'Extract ALL text content from the first 3 pages of this PDF document. Return ONLY the raw text, no formatting or commentary.' },
+              {
+                inline_data: {
+                  mime_type: 'application/pdf',
+                  data: pdfBase64
+                }
+              }
+            ]
+          }],
+          generationConfig: {
+            maxOutputTokens: 4000,
+            temperature: 0.1
+          }
+        })
+      }
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('[EXTRACT-NOTES] Google AI error:', response.status, errorText);
+      return null;
+    }
+
+    const result = await response.json();
+    const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
+    
+    if (text) {
+      console.log('[EXTRACT-NOTES] Google AI extraction successful');
+      return text;
+    }
+    return null;
+  } catch (error) {
+    console.error('[EXTRACT-NOTES] Google AI exception:', error);
+    return null;
+  }
+}
+
+// Extract text using OpenAI (fallback)
+async function extractWithOpenAI(pdfBase64: string): Promise<string | null> {
+  const apiKey = Deno.env.get('OPENAI_API_KEY');
+  if (!apiKey) {
+    console.log('[EXTRACT-NOTES] OPENAI_API_KEY not configured');
+    return null;
+  }
+
+  try {
+    console.log('[EXTRACT-NOTES] Trying OpenAI fallback...');
+    
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a document text extractor. Extract ALL text content from the provided PDF document. Focus on the first 3 pages. Return ONLY the raw text, no formatting or commentary.'
+          },
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: 'Extract all text from the first 3 pages of this PDF document. Return only the raw text.' },
+              {
+                type: 'image_url',
+                image_url: { url: `data:application/pdf;base64,${pdfBase64}` }
+              }
+            ]
+          }
+        ],
+        max_tokens: 4000
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('[EXTRACT-NOTES] OpenAI error:', response.status, errorText);
+      return null;
+    }
+
+    const result = await response.json();
+    const text = result.choices?.[0]?.message?.content;
+    
+    if (text) {
+      console.log('[EXTRACT-NOTES] OpenAI extraction successful');
+      return text;
+    }
+    return null;
+  } catch (error) {
+    console.error('[EXTRACT-NOTES] OpenAI exception:', error);
+    return null;
+  }
+}
+
+// Main extraction with fallback chain
+async function extractTextFromPDF(pdfBase64: string): Promise<string> {
+  // Try Google AI first
+  let text = await extractWithGoogleAI(pdfBase64);
+  
+  // Fallback to OpenAI if Google fails
+  if (!text) {
+    text = await extractWithOpenAI(pdfBase64);
+  }
+  
+  return text || '';
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -60,62 +188,14 @@ serve(async (req) => {
         throw new Error(`Failed to download PDF: ${downloadError?.message}`);
       }
 
-      // Use Lovable AI for text extraction from first few pages
-      const apiKey = Deno.env.get('LOVABLE_API_KEY');
-      if (!apiKey) {
-        throw new Error('LOVABLE_API_KEY not configured');
-      }
-
-      // Convert PDF to base64 for AI processing
+      // Convert PDF to base64
       const pdfBase64 = btoa(
         new Uint8Array(await pdfData.arrayBuffer())
           .reduce((data, byte) => data + String.fromCharCode(byte), '')
       );
 
-      console.log('[EXTRACT-NOTES] Extracting text from PDF using AI...');
-      
-      const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          model: 'google/gemini-2.5-flash',
-          messages: [
-            {
-              role: 'system',
-              content: 'You are a document text extractor. Extract ALL text content from the provided PDF document. Focus on the first 3 pages. Return ONLY the raw text, no formatting or commentary.'
-            },
-            {
-              role: 'user',
-              content: [
-                {
-                  type: 'text',
-                  text: 'Extract all text from the first 3 pages of this PDF document. Return only the raw text.'
-                },
-                {
-                  type: 'image_url',
-                  image_url: {
-                    url: `data:application/pdf;base64,${pdfBase64}`
-                  }
-                }
-              ]
-            }
-          ],
-          max_tokens: 4000
-        })
-      });
-
-      if (!aiResponse.ok) {
-        const errorText = await aiResponse.text();
-        console.error('[EXTRACT-NOTES] AI extraction failed:', errorText);
-        // Don't fail completely, just skip notes extraction
-        textContent = '';
-      } else {
-        const aiResult = await aiResponse.json();
-        textContent = aiResult.choices?.[0]?.message?.content || '';
-      }
+      console.log('[EXTRACT-NOTES] Extracting text from PDF...');
+      textContent = await extractTextFromPDF(pdfBase64);
 
       // Cache the extracted text
       if (textContent) {
@@ -123,6 +203,9 @@ serve(async (req) => {
           .from('raw_causelists')
           .update({ text_content: textContent.substring(0, 50000) }) // Limit storage
           .eq('id', causelist_id);
+        console.log('[EXTRACT-NOTES] Text cached successfully');
+      } else {
+        console.log('[EXTRACT-NOTES] No text extracted from PDF');
       }
     }
 

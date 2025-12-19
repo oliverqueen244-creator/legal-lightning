@@ -10,20 +10,147 @@ const corsHeaders = {
  * ACCOUNT-WISE NAME SCAN (CRITICAL)
  * 
  * This function runs per profile per causelist:
- * 1. Extract plain text from PDF (NO AI)
+ * 1. Extract plain text from PDF (Google AI primary, OpenAI fallback)
  * 2. Search for profile's aliases (case-insensitive string match)
  * 3. If match found: enqueue parsing task
  * 4. If no match: STOP, do nothing
  * 
  * ❌ NO case number extraction
  * ❌ NO party identification
- * ❌ NO LLM calls
  * ❌ NO inserts to daily_court_docket
  */
 
 interface ScanRequest {
-  profile_id?: string; // Optional: scan specific profile
-  causelist_id?: string; // Optional: scan specific causelist
+  profile_id?: string;
+  causelist_id?: string;
+}
+
+// Extract text using Google AI Studio (primary)
+async function extractWithGoogleAI(pdfBase64: string): Promise<string | null> {
+  const apiKey = Deno.env.get('GOOGLE_AI_API_KEY');
+  if (!apiKey) {
+    console.log('[SCAN-LAWYER-NAMES] GOOGLE_AI_API_KEY not configured');
+    return null;
+  }
+
+  try {
+    console.log('[SCAN-LAWYER-NAMES] Trying Google AI Studio...');
+    
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{
+            parts: [
+              { text: 'Extract ALL text from this PDF. Return only raw text, preserve lawyer names and case numbers. No commentary.' },
+              {
+                inline_data: {
+                  mime_type: 'application/pdf',
+                  data: pdfBase64
+                }
+              }
+            ]
+          }],
+          generationConfig: {
+            maxOutputTokens: 30000,
+            temperature: 0.1
+          }
+        })
+      }
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('[SCAN-LAWYER-NAMES] Google AI error:', response.status, errorText);
+      return null;
+    }
+
+    const result = await response.json();
+    const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
+    
+    if (text) {
+      console.log('[SCAN-LAWYER-NAMES] Google AI extraction successful');
+      return text;
+    }
+    return null;
+  } catch (error) {
+    console.error('[SCAN-LAWYER-NAMES] Google AI exception:', error);
+    return null;
+  }
+}
+
+// Extract text using OpenAI (fallback)
+async function extractWithOpenAI(pdfBase64: string): Promise<string | null> {
+  const apiKey = Deno.env.get('OPENAI_API_KEY');
+  if (!apiKey) {
+    console.log('[SCAN-LAWYER-NAMES] OPENAI_API_KEY not configured');
+    return null;
+  }
+
+  try {
+    console.log('[SCAN-LAWYER-NAMES] Trying OpenAI fallback...');
+    
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content: 'Extract ALL text from this PDF. Return only raw text, preserve lawyer names and case numbers. No commentary.'
+          },
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: 'Extract all text from this PDF document.' },
+              {
+                type: 'image_url',
+                image_url: { url: `data:application/pdf;base64,${pdfBase64}` }
+              }
+            ]
+          }
+        ],
+        max_tokens: 16000
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('[SCAN-LAWYER-NAMES] OpenAI error:', response.status, errorText);
+      return null;
+    }
+
+    const result = await response.json();
+    const text = result.choices?.[0]?.message?.content;
+    
+    if (text) {
+      console.log('[SCAN-LAWYER-NAMES] OpenAI extraction successful');
+      return text;
+    }
+    return null;
+  } catch (error) {
+    console.error('[SCAN-LAWYER-NAMES] OpenAI exception:', error);
+    return null;
+  }
+}
+
+// Main extraction with fallback chain
+async function extractTextFromPDF(pdfBase64: string): Promise<string> {
+  // Try Google AI first
+  let text = await extractWithGoogleAI(pdfBase64);
+  
+  // Fallback to OpenAI if Google fails
+  if (!text) {
+    text = await extractWithOpenAI(pdfBase64);
+  }
+  
+  return text || '';
 }
 
 serve(async (req) => {
@@ -117,56 +244,25 @@ serve(async (req) => {
           continue;
         }
 
-        // Use Lovable AI for text extraction
-        const apiKey = Deno.env.get('LOVABLE_API_KEY');
-        if (!apiKey) {
-          console.error('[SCAN-LAWYER-NAMES] LOVABLE_API_KEY not configured');
-          continue;
-        }
-
+        // Convert PDF to base64
         const pdfBase64 = btoa(
           new Uint8Array(await pdfData.arrayBuffer())
             .reduce((data, byte) => data + String.fromCharCode(byte), '')
         );
 
-        const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${apiKey}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            model: 'google/gemini-2.5-flash',
-            messages: [
-              {
-                role: 'system',
-                content: 'Extract ALL text from this PDF. Return only raw text, preserve lawyer names and case numbers. No commentary.'
-              },
-              {
-                role: 'user',
-                content: [
-                  { type: 'text', text: 'Extract all text from this PDF document.' },
-                  { type: 'image_url', image_url: { url: `data:application/pdf;base64,${pdfBase64}` } }
-                ]
-              }
-            ],
-            max_tokens: 30000
-          })
-        });
-
-        if (!aiResponse.ok) {
-          console.error('[SCAN-LAWYER-NAMES] AI extraction failed');
-          continue;
-        }
-
-        const aiResult = await aiResponse.json();
-        textContent = aiResult.choices?.[0]?.message?.content || '';
+        textContent = await extractTextFromPDF(pdfBase64);
 
         // Cache the text
-        await supabase
-          .from('raw_causelists')
-          .update({ text_content: textContent.substring(0, 100000), status: 'scanning' })
-          .eq('id', causelist.id);
+        if (textContent) {
+          await supabase
+            .from('raw_causelists')
+            .update({ text_content: textContent.substring(0, 100000), status: 'scanning' })
+            .eq('id', causelist.id);
+          console.log('[SCAN-LAWYER-NAMES] Text cached successfully');
+        } else {
+          console.error('[SCAN-LAWYER-NAMES] Failed to extract text from PDF');
+          continue;
+        }
       }
 
       const textLower = textContent.toLowerCase();
