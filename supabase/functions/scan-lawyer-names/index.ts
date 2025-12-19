@@ -98,7 +98,7 @@ serve(async (req) => {
     let causelistQuery = supabase
       .from('raw_causelists')
       .select('id, storage_path, text_content, bench, list_type, list_date')
-      .in('status', ['notes_extracted', 'scanning'])
+      .in('status', ['downloaded', 'notes_extracted', 'scanning'])
       .order('created_at', { ascending: false })
       .limit(5);
 
@@ -285,6 +285,19 @@ serve(async (req) => {
         .from('raw_causelists')
         .update({ status: 'scanned' })
         .eq('id', causelist.id);
+
+      // Trigger parse-all-cases to extract all cases from this causelist
+      const parseUrl = `${supabaseUrl}/functions/v1/parse-all-cases`;
+      fetch(parseUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${supabaseServiceKey}`
+        },
+        body: JSON.stringify({ causelist_id: causelist.id })
+      }).then(() => {
+        console.log(`[SCAN-LAWYER-NAMES] Triggered parse-all-cases for ${causelist.id}`);
+      }).catch(err => console.error('[SCAN-LAWYER-NAMES] Failed to trigger parse-all-cases:', err));
     }
 
     const duration = Date.now() - startTime;
