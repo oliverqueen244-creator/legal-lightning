@@ -475,41 +475,95 @@ async function processDocument(doc: QueuedDocument, supabase: any, botToken: str
 }
 
 // ============================================================================
-// AI FUNCTIONS - Google AI Studio Direct API
+// AI FUNCTIONS - Google AI Studio Direct API with Rate Limiting & Retry
 // ============================================================================
 
-async function detectStructure(base64Pdf: string, apiKey: string): Promise<PdfStructure | null> {
+const GOOGLE_AI_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
+const MAX_RETRIES = 3;
+const BASE_DELAY_MS = 2000;
+const RATE_LIMIT_DELAY_MS = 500; // Delay between API calls
+
+// Helper function with exponential backoff retry
+async function callGoogleAI(
+  apiKey: string, 
+  contents: any[], 
+  maxOutputTokens: number = 8000,
+  retryCount: number = 0
+): Promise<{ success: boolean; content: string; error?: string }> {
   try {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+    const response = await fetch(`${GOOGLE_AI_ENDPOINT}?key=${apiKey}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        contents: [{
-          parts: [
-            { text: `Analyze this causelist PDF structure. Identify all courts/benches.
-For each: court_identifier, judge_names, start_item_no, end_item_no, items_contiguous.
-OUTPUT STRICT JSON:
-{"total_courts_detected": N, "item_numbering_type_global": "continuous_global", "courts": [{"court_identifier": "Court No. 1", "judge_names": "...", "start_item_no": 1, "end_item_no": 150, "items_contiguous": true}], "courts_interleaved": false, "safe_for_court_based_split": true, "notes": ""}` },
-            { inline_data: { mime_type: 'application/pdf', data: base64Pdf } }
-          ]
-        }],
+        contents: [{ parts: contents }],
         generationConfig: {
-          maxOutputTokens: 8000,
+          maxOutputTokens,
           temperature: 0,
         },
       }),
     });
 
-    if (!response.ok) {
-      console.error('[TELEGRAM-DOC] Structure API error:', response.status, await response.text());
-      return null;
+    // Handle rate limiting (429) and server errors (5xx)
+    if (response.status === 429 || response.status === 503 || response.status === 500) {
+      if (retryCount < MAX_RETRIES) {
+        const delay = BASE_DELAY_MS * Math.pow(2, retryCount) + Math.random() * 1000;
+        console.log(`[TELEGRAM-AI] Rate limited (${response.status}), retry ${retryCount + 1}/${MAX_RETRIES} in ${Math.round(delay)}ms`);
+        await new Promise(r => setTimeout(r, delay));
+        return callGoogleAI(apiKey, contents, maxOutputTokens, retryCount + 1);
+      }
+      const errorText = await response.text();
+      console.error(`[TELEGRAM-AI] Max retries exceeded: ${response.status}`, errorText);
+      return { success: false, content: '', error: `Rate limit exceeded after ${MAX_RETRIES} retries` };
     }
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`[TELEGRAM-AI] API error ${response.status}:`, errorText);
+      return { success: false, content: '', error: `API error: ${response.status}` };
+    }
+
     const data = await response.json();
+    
+    // Check for safety blocks or empty responses
+    if (data.candidates?.[0]?.finishReason === 'SAFETY') {
+      console.warn('[TELEGRAM-AI] Response blocked by safety filters');
+      return { success: false, content: '', error: 'Safety filter blocked response' };
+    }
+
     const content = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    const match = content.match(/\{[\s\S]*\}/);
+    return { success: true, content };
+    
+  } catch (e) {
+    if (retryCount < MAX_RETRIES) {
+      const delay = BASE_DELAY_MS * Math.pow(2, retryCount);
+      console.log(`[TELEGRAM-AI] Network error, retry ${retryCount + 1}/${MAX_RETRIES} in ${delay}ms:`, e);
+      await new Promise(r => setTimeout(r, delay));
+      return callGoogleAI(apiKey, contents, maxOutputTokens, retryCount + 1);
+    }
+    console.error('[TELEGRAM-AI] Max retries exceeded due to network error:', e);
+    return { success: false, content: '', error: `Network error: ${e instanceof Error ? e.message : 'Unknown'}` };
+  }
+}
+
+async function detectStructure(base64Pdf: string, apiKey: string): Promise<PdfStructure | null> {
+  const result = await callGoogleAI(apiKey, [
+    { text: `Analyze this causelist PDF structure. Identify all courts/benches.
+For each: court_identifier, judge_names, start_item_no, end_item_no, items_contiguous.
+OUTPUT STRICT JSON:
+{"total_courts_detected": N, "item_numbering_type_global": "continuous_global", "courts": [{"court_identifier": "Court No. 1", "judge_names": "...", "start_item_no": 1, "end_item_no": 150, "items_contiguous": true}], "courts_interleaved": false, "safe_for_court_based_split": true, "notes": ""}` },
+    { inline_data: { mime_type: 'application/pdf', data: base64Pdf } }
+  ], 8000);
+
+  if (!result.success) {
+    console.error('[TELEGRAM-DOC] Structure detection failed:', result.error);
+    return null;
+  }
+
+  try {
+    const match = result.content.match(/\{[\s\S]*\}/);
     return match ? JSON.parse(match[0]) : null;
   } catch (e) {
-    console.error('[TELEGRAM-DOC] Structure error:', e);
+    console.error('[TELEGRAM-DOC] Structure parse error:', e);
     return null;
   }
 }
@@ -523,83 +577,47 @@ async function parseCourt(base64Pdf: string, court: CourtSection, apiKey: string
     const start = court.start_item_no + i * CHUNK;
     const end = Math.min(court.start_item_no + (i + 1) * CHUNK - 1, court.end_item_no);
     
-    try {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{
-            parts: [
-              { text: `Parse ${bench} causelist PDF. ONLY ${court.court_identifier}, items ${start}-${end}.
+    // Rate limiting delay between chunks
+    if (i > 0) await new Promise(r => setTimeout(r, RATE_LIMIT_DELAY_MS));
+    
+    const result = await callGoogleAI(apiKey, [
+      { text: `Parse ${bench} causelist PDF. ONLY ${court.court_identifier}, items ${start}-${end}.
 Extract: item_no, case_number, petitioner, respondent, petitioner_lawyer, respondent_lawyer.
 JSON: {"cases": [{"item_no": N, "case_number": "...", "petitioner": "...", "respondent": "...", "petitioner_lawyer": "...", "respondent_lawyer": "..."}]}` },
-              { inline_data: { mime_type: 'application/pdf', data: base64Pdf } }
-            ]
-          }],
-          generationConfig: {
-            maxOutputTokens: 16000,
-            temperature: 0,
-          },
-        }),
-      });
+      { inline_data: { mime_type: 'application/pdf', data: base64Pdf } }
+    ], 16000);
 
-      if (response.ok) {
-        const data = await response.json();
-        let content = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-        content = content.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
-        const cases = parseJson(content);
-        allCases.push(...cases.map(c => ({
-          ...c,
-          judge_names: court.judge_names,
-          court_room_no: court.court_identifier.replace(/Court\s*No\.?\s*:?\s*/i, '').trim(),
-        })));
-      } else {
-        console.error('[TELEGRAM-DOC] Court parse error:', response.status);
-      }
-    } catch (e) {
-      console.error(`[TELEGRAM-DOC] Court chunk error:`, e);
+    if (result.success) {
+      const content = result.content.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+      const cases = parseJson(content);
+      allCases.push(...cases.map(c => ({
+        ...c,
+        judge_names: court.judge_names,
+        court_room_no: court.court_identifier.replace(/Court\s*No\.?\s*:?\s*/i, '').trim(),
+      })));
+    } else {
+      console.error(`[TELEGRAM-DOC] Court ${court.court_identifier} chunk ${i+1} failed:`, result.error);
     }
-    
-    if (i < Math.ceil(count / CHUNK) - 1) await new Promise(r => setTimeout(r, 200));
   }
   
   return allCases;
 }
 
 async function parseChunk(base64Pdf: string, start: number, end: number, apiKey: string, bench: string, listType: string): Promise<ParsedCase[]> {
-  try {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{
-          parts: [
-            { text: `Parse ${bench} ${listType} causelist PDF. Items ${start}-${end} ONLY.
+  const result = await callGoogleAI(apiKey, [
+    { text: `Parse ${bench} ${listType} causelist PDF. Items ${start}-${end} ONLY.
 Extract: item_no, case_number, petitioner, respondent, petitioner_lawyer, respondent_lawyer.
 JSON: {"cases": [...]}` },
-            { inline_data: { mime_type: 'application/pdf', data: base64Pdf } }
-          ]
-        }],
-        generationConfig: {
-          maxOutputTokens: 16000,
-          temperature: 0,
-        },
-      }),
-    });
+    { inline_data: { mime_type: 'application/pdf', data: base64Pdf } }
+  ], 16000);
 
-    if (!response.ok) {
-      console.error('[TELEGRAM-DOC] Chunk parse error:', response.status);
-      return [];
-    }
-    const data = await response.json();
-    let content = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    return parseJson(content.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim());
-  } catch (e) {
-    console.error('[TELEGRAM-DOC] Chunk error:', e);
+  if (!result.success) {
+    console.error(`[TELEGRAM-DOC] Chunk ${start}-${end} failed:`, result.error);
     return [];
   }
-}
 
+  return parseJson(result.content.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim());
+}
 // ============================================================================
 // UTILITIES
 // ============================================================================
