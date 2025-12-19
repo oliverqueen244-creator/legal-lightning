@@ -258,22 +258,50 @@ serve(async (req) => {
 
     console.log(`[PARSE-CASE] Parsing cases for alias: ${queueItem.matched_alias}`);
 
-    const systemPrompt = 'You are a legal document parser. Extract case data accurately. Return only valid JSON.';
-    const userPrompt = `Extract all court cases from this causelist that mention the lawyer name "${queueItem.matched_alias}" (case-insensitive match).
+    const systemPrompt = `You are an expert legal document parser specializing in Indian High Court causelists. 
+Extract case data with extreme accuracy. Pay close attention to lawyer name suffixes and prefixes.
+Return only valid JSON array.`;
 
-For each matching case, extract:
-- court_room_no: Court/Bench number (e.g., "DB-I", "SB-III")
-- item_no: Serial/Item number (integer)
-- case_number: Full case number (e.g., "S.B. Civil Writ Petition No. 1234/2024")
-- petitioner: Petitioner name(s)
-- respondent: Respondent name(s)  
-- petitioner_lawyer: Lawyer(s) for petitioner
-- respondent_lawyer: Lawyer(s) for respondent
+    const userPrompt = `Extract all court cases from this Indian High Court causelist that mention the lawyer name "${queueItem.matched_alias}" (case-insensitive, partial match allowed).
+
+CRITICAL - LAWYER NAME FORMAT RULES:
+In Indian causelists, lawyer names often have suffixes or prefixes indicating their role:
+- "-P" or "(P)" suffix = Petitioner's lawyer (e.g., "RAMESH PUROHIT-P", "MR. SHARMA (P)")
+- "-R" or "(R)" suffix = Respondent's lawyer (e.g., "RAMESH PUROHIT-R", "ADV. KUMAR (R)")  
+- "Sh.", "Shri", "Mr.", "Ms.", "Adv.", "Advocate" = Common prefixes (ignore when matching)
+- "AAG", "GA", "Govt. Adv." = Government Advocates (typically respondent side)
+- Names may be ALL CAPS, Mixed Case, or have extra spaces
+
+When you see "${queueItem.matched_alias}" with:
+- "-R" suffix → They are the RESPONDENT'S lawyer
+- "-P" suffix → They are the PETITIONER'S lawyer
+- No suffix → Check context to determine role
+
+The matched lawyer name should be extracted WITHOUT the -P/-R suffix in the output.
+
+For each case containing this lawyer, extract:
+- court_room_no: Court/Bench number (e.g., "DB-I", "SB-III", "Court No. 1", "BENCH-A")
+- item_no: Serial/Item number (must be an integer, e.g., 45, 603, 1)
+- case_number: Full case number exactly as written (e.g., "C.M.A. 1693/2004", "S.B. Civil Writ Petition No. 1234/2024")
+- petitioner: Petitioner name(s) - party bringing the case
+- respondent: Respondent name(s) - party responding
+- petitioner_lawyer: Clean lawyer name(s) for petitioner (remove -P suffix)
+- respondent_lawyer: Clean lawyer name(s) for respondent (remove -R suffix)
+
+EXAMPLES:
+If causelist shows: "MANISH PITLIYA-P, RAMESH PUROHIT-R"
+Then: petitioner_lawyer="MANISH PITLIYA", respondent_lawyer="RAMESH PUROHIT"
+
+If causelist shows: "Adv. John Doe (P) / AAG (R)"
+Then: petitioner_lawyer="Adv. John Doe", respondent_lawyer="AAG"
 
 Return a JSON array. Example:
 [{"court_room_no": "DB-I", "item_no": 45, "case_number": "D.B. Civil Writ Petition No. 1234/2024", "petitioner": "ABC Company", "respondent": "State of Rajasthan", "petitioner_lawyer": "Sh. John Doe", "respondent_lawyer": "AAG"}]
 
-Only return valid JSON array. If no matching cases found, return empty array [].
+IMPORTANT: 
+- Match "${queueItem.matched_alias}" even if it appears with suffixes like -P, -R, (P), (R)
+- Remove these suffixes when outputting the lawyer names
+- Return empty array [] if no matching cases found
 
 Causelist text:
 ${textContent.substring(0, 80000)}`;
