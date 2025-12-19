@@ -133,6 +133,19 @@ serve(async (req) => {
       body: JSON.stringify({ causelist_id: causelist.id })
     }).catch(err => console.error('[DOWNLOAD-CAUSELISTS] Failed to trigger notes extraction:', err));
 
+    // Step 6: Trigger lawyer name scanning (fire and forget)
+    const scanUrl = `${supabaseUrl}/functions/v1/scan-lawyer-names`;
+    fetch(scanUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${supabaseServiceKey}`
+      },
+      body: JSON.stringify({})
+    }).then(() => {
+      console.log('[DOWNLOAD-CAUSELISTS] Triggered scan-lawyer-names');
+    }).catch(err => console.error('[DOWNLOAD-CAUSELISTS] Failed to trigger scan-lawyer-names:', err));
+
     const duration = Date.now() - startTime;
     console.log(`[DOWNLOAD-CAUSELISTS] Completed in ${duration}ms`);
 
