@@ -258,11 +258,55 @@ serve(async (req) => {
 
     console.log(`[PARSE-CASE] Parsing cases for alias: ${queueItem.matched_alias}`);
 
+    // Smart extraction: Find all matches and extract context around each
+    const aliasPattern = new RegExp(queueItem.matched_alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+    const matches: number[] = [];
+    let match;
+    while ((match = aliasPattern.exec(textContent)) !== null) {
+      matches.push(match.index);
+    }
+
+    console.log(`[PARSE-CASE] Found ${matches.length} occurrences of alias in text`);
+
+    // Extract context around each match (5000 chars before and after)
+    const CONTEXT_WINDOW = 5000;
+    const excerpts: string[] = [];
+    const seenRanges: { start: number; end: number }[] = [];
+
+    for (const pos of matches) {
+      const start = Math.max(0, pos - CONTEXT_WINDOW);
+      const end = Math.min(textContent.length, pos + CONTEXT_WINDOW);
+      
+      // Check if this range overlaps with an existing one
+      const overlapping = seenRanges.find(r => 
+        (start >= r.start && start <= r.end) || (end >= r.start && end <= r.end)
+      );
+      
+      if (overlapping) {
+        // Merge ranges
+        overlapping.start = Math.min(overlapping.start, start);
+        overlapping.end = Math.max(overlapping.end, end);
+      } else {
+        seenRanges.push({ start, end });
+      }
+    }
+
+    // Extract text from merged ranges
+    for (const range of seenRanges) {
+      excerpts.push(textContent.substring(range.start, range.end));
+    }
+
+    const relevantText = excerpts.length > 0 
+      ? excerpts.join('\n\n--- NEXT SECTION ---\n\n')
+      : textContent.substring(0, 100000); // Fallback if no matches found
+
+    console.log(`[PARSE-CASE] Extracted ${relevantText.length} chars of relevant text from ${seenRanges.length} sections`);
+
     const systemPrompt = `You are an expert legal document parser specializing in Indian High Court causelists. 
 Extract case data with extreme accuracy. Pay close attention to lawyer name suffixes and prefixes.
 Return only valid JSON array.`;
 
-    const userPrompt = `Extract all court cases from this Indian High Court causelist that mention the lawyer name "${queueItem.matched_alias}" (case-insensitive, partial match allowed).
+    const userPrompt = `Extract all court cases from these causelist excerpts that mention the lawyer name "${queueItem.matched_alias}" (case-insensitive, partial match allowed).
 
 CRITICAL - LAWYER NAME FORMAT RULES:
 In Indian causelists, lawyer names often have suffixes or prefixes indicating their role:
@@ -303,8 +347,8 @@ IMPORTANT:
 - Remove these suffixes when outputting the lawyer names
 - Return empty array [] if no matching cases found
 
-Causelist text:
-${textContent}`;
+Causelist excerpts:
+${relevantText}`;
 
     const aiResult = await callAIWithFallback(systemPrompt, userPrompt);
 
