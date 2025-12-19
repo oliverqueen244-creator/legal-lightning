@@ -34,10 +34,10 @@ async function extractWithGoogleAI(pdfBase64: string): Promise<string | null> {
   }
 
   try {
-    console.log('[SCAN-LAWYER-NAMES] Trying Google AI Studio...');
+    console.log('[SCAN-LAWYER-NAMES] Trying Google AI Studio (gemini-exp-1206)...');
     
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-exp-1206:generateContent?key=${apiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -81,34 +81,32 @@ async function extractWithGoogleAI(pdfBase64: string): Promise<string | null> {
   }
 }
 
-// Extract text using OpenAI (fallback)
-async function extractWithOpenAI(pdfBase64: string): Promise<string | null> {
-  const apiKey = Deno.env.get('OPENAI_API_KEY');
+// Extract text using OpenRouter (second fallback - supports PDFs via Gemini)
+async function extractWithOpenRouter(pdfBase64: string): Promise<string | null> {
+  const apiKey = Deno.env.get('OPENROUTER_API_KEY');
   if (!apiKey) {
-    console.log('[SCAN-LAWYER-NAMES] OPENAI_API_KEY not configured');
+    console.log('[SCAN-LAWYER-NAMES] OPENROUTER_API_KEY not configured');
     return null;
   }
 
   try {
-    console.log('[SCAN-LAWYER-NAMES] Trying OpenAI fallback...');
+    console.log('[SCAN-LAWYER-NAMES] Trying OpenRouter fallback...');
     
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://lovable.dev',
+        'X-Title': 'Causelist Parser'
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini',
+        model: 'google/gemini-2.0-flash-001',
         messages: [
-          {
-            role: 'system',
-            content: 'Extract ALL text from this PDF. Return only raw text, preserve lawyer names and case numbers. No commentary.'
-          },
           {
             role: 'user',
             content: [
-              { type: 'text', text: 'Extract all text from this PDF document.' },
+              { type: 'text', text: 'Extract ALL text from this PDF. Return only raw text, preserve lawyer names and case numbers. No commentary.' },
               {
                 type: 'image_url',
                 image_url: { url: `data:application/pdf;base64,${pdfBase64}` }
@@ -116,13 +114,13 @@ async function extractWithOpenAI(pdfBase64: string): Promise<string | null> {
             ]
           }
         ],
-        max_tokens: 16000
+        max_tokens: 30000
       })
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('[SCAN-LAWYER-NAMES] OpenAI error:', response.status, errorText);
+      console.error('[SCAN-LAWYER-NAMES] OpenRouter error:', response.status, errorText);
       return null;
     }
 
@@ -130,12 +128,12 @@ async function extractWithOpenAI(pdfBase64: string): Promise<string | null> {
     const text = result.choices?.[0]?.message?.content;
     
     if (text) {
-      console.log('[SCAN-LAWYER-NAMES] OpenAI extraction successful');
+      console.log('[SCAN-LAWYER-NAMES] OpenRouter extraction successful');
       return text;
     }
     return null;
   } catch (error) {
-    console.error('[SCAN-LAWYER-NAMES] OpenAI exception:', error);
+    console.error('[SCAN-LAWYER-NAMES] OpenRouter exception:', error);
     return null;
   }
 }
@@ -145,9 +143,9 @@ async function extractTextFromPDF(pdfBase64: string): Promise<string> {
   // Try Google AI first
   let text = await extractWithGoogleAI(pdfBase64);
   
-  // Fallback to OpenAI if Google fails
+  // Fallback to OpenRouter if Google fails
   if (!text) {
-    text = await extractWithOpenAI(pdfBase64);
+    text = await extractWithOpenRouter(pdfBase64);
   }
   
   return text || '';

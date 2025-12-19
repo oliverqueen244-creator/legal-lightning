@@ -24,10 +24,10 @@ async function extractWithGoogleAI(pdfBase64: string): Promise<string | null> {
   }
 
   try {
-    console.log('[EXTRACT-NOTES] Trying Google AI Studio...');
+    console.log('[EXTRACT-NOTES] Trying Google AI Studio (gemini-exp-1206)...');
     
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-exp-1206:generateContent?key=${apiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -71,34 +71,32 @@ async function extractWithGoogleAI(pdfBase64: string): Promise<string | null> {
   }
 }
 
-// Extract text using OpenAI (fallback)
-async function extractWithOpenAI(pdfBase64: string): Promise<string | null> {
-  const apiKey = Deno.env.get('OPENAI_API_KEY');
+// Extract text using OpenRouter (second fallback - supports PDFs via Gemini)
+async function extractWithOpenRouter(pdfBase64: string): Promise<string | null> {
+  const apiKey = Deno.env.get('OPENROUTER_API_KEY');
   if (!apiKey) {
-    console.log('[EXTRACT-NOTES] OPENAI_API_KEY not configured');
+    console.log('[EXTRACT-NOTES] OPENROUTER_API_KEY not configured');
     return null;
   }
 
   try {
-    console.log('[EXTRACT-NOTES] Trying OpenAI fallback...');
+    console.log('[EXTRACT-NOTES] Trying OpenRouter fallback...');
     
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://lovable.dev',
+        'X-Title': 'Causelist Parser'
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini',
+        model: 'google/gemini-2.0-flash-001',
         messages: [
-          {
-            role: 'system',
-            content: 'You are a document text extractor. Extract ALL text content from the provided PDF document. Focus on the first 3 pages. Return ONLY the raw text, no formatting or commentary.'
-          },
           {
             role: 'user',
             content: [
-              { type: 'text', text: 'Extract all text from the first 3 pages of this PDF document. Return only the raw text.' },
+              { type: 'text', text: 'Extract ALL text content from the first 3 pages of this PDF document. Return ONLY the raw text, no formatting or commentary.' },
               {
                 type: 'image_url',
                 image_url: { url: `data:application/pdf;base64,${pdfBase64}` }
@@ -112,7 +110,7 @@ async function extractWithOpenAI(pdfBase64: string): Promise<string | null> {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('[EXTRACT-NOTES] OpenAI error:', response.status, errorText);
+      console.error('[EXTRACT-NOTES] OpenRouter error:', response.status, errorText);
       return null;
     }
 
@@ -120,12 +118,12 @@ async function extractWithOpenAI(pdfBase64: string): Promise<string | null> {
     const text = result.choices?.[0]?.message?.content;
     
     if (text) {
-      console.log('[EXTRACT-NOTES] OpenAI extraction successful');
+      console.log('[EXTRACT-NOTES] OpenRouter extraction successful');
       return text;
     }
     return null;
   } catch (error) {
-    console.error('[EXTRACT-NOTES] OpenAI exception:', error);
+    console.error('[EXTRACT-NOTES] OpenRouter exception:', error);
     return null;
   }
 }
@@ -135,9 +133,9 @@ async function extractTextFromPDF(pdfBase64: string): Promise<string> {
   // Try Google AI first
   let text = await extractWithGoogleAI(pdfBase64);
   
-  // Fallback to OpenAI if Google fails
+  // Fallback to OpenRouter if Google fails
   if (!text) {
-    text = await extractWithOpenAI(pdfBase64);
+    text = await extractWithOpenRouter(pdfBase64);
   }
   
   return text || '';
