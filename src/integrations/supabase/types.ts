@@ -707,6 +707,7 @@ export type Database = {
         Row: {
           bench: string
           created_at: string | null
+          extraction_progress: Json | null
           file_name: string | null
           file_size_bytes: number | null
           id: string
@@ -721,6 +722,7 @@ export type Database = {
         Insert: {
           bench: string
           created_at?: string | null
+          extraction_progress?: Json | null
           file_name?: string | null
           file_size_bytes?: number | null
           id?: string
@@ -735,6 +737,7 @@ export type Database = {
         Update: {
           bench?: string
           created_at?: string | null
+          extraction_progress?: Json | null
           file_name?: string | null
           file_size_bytes?: number | null
           id?: string

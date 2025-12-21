@@ -1,7 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
-
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -10,11 +9,11 @@ const corsHeaders = {
 /**
  * ACCOUNT-WISE NAME SCAN (CRITICAL)
  * 
- * This function runs per profile per causelist:
- * 1. Extract plain text from PDF using pdf.co API (handles large PDFs)
- * 2. Search for profile's aliases (case-insensitive string match)
- * 3. If match found: enqueue parsing task
- * 4. If no match: STOP, do nothing
+ * This function orchestrates PDF text extraction and alias scanning:
+ * 1. Check if text extraction is complete
+ * 2. If not: trigger chunked extraction via pdf-extract-chunk
+ * 3. If complete: search for profile's aliases (case-insensitive string match)
+ * 4. If match found: enqueue parsing task
  * 
  * ❌ NO case number extraction
  * ❌ NO party identification
@@ -26,101 +25,23 @@ interface ScanRequest {
   causelist_id?: string;
 }
 
-// Extract text using pdf.co API (handles large PDFs externally)
-async function extractTextFromPDF(pdfArrayBuffer: ArrayBuffer): Promise<string> {
-  const pdfCoApiKey = Deno.env.get('PDF_CO_API_KEY');
-  
-  if (!pdfCoApiKey) {
-    console.error('[SCAN-LAWYER-NAMES] PDF_CO_API_KEY not configured');
-    return '';
-  }
-
-  try {
-    console.log('[SCAN-LAWYER-NAMES] Extracting text with pdf.co API...');
-    const startTime = Date.now();
-    
-    // Step 1: Upload the PDF file to pdf.co
-    console.log('[SCAN-LAWYER-NAMES] Uploading PDF to pdf.co...');
-    const formData = new FormData();
-    const blob = new Blob([pdfArrayBuffer], { type: 'application/pdf' });
-    formData.append('file', blob, 'document.pdf');
-    
-    const uploadResponse = await fetch('https://api.pdf.co/v1/file/upload', {
-      method: 'POST',
-      headers: {
-        'x-api-key': pdfCoApiKey,
-      },
-      body: formData,
-    });
-
-    if (!uploadResponse.ok) {
-      const errorText = await uploadResponse.text();
-      console.error(`[SCAN-LAWYER-NAMES] pdf.co upload error: ${uploadResponse.status} - ${errorText}`);
-      return '';
-    }
-
-    const uploadResult = await uploadResponse.json();
-    
-    if (uploadResult.error) {
-      console.error(`[SCAN-LAWYER-NAMES] pdf.co upload error: ${uploadResult.message}`);
-      return '';
-    }
-
-    const fileUrl = uploadResult.url;
-    console.log(`[SCAN-LAWYER-NAMES] PDF uploaded, extracting text...`);
-
-    // Step 2: Convert PDF to text using the uploaded URL
-    const extractResponse = await fetch('https://api.pdf.co/v1/pdf/convert/to/text', {
-      method: 'POST',
-      headers: {
-        'x-api-key': pdfCoApiKey,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        url: fileUrl,
-        inline: true,
-        pages: '',
-        async: false,
-      }),
-    });
-
-    if (!extractResponse.ok) {
-      const errorText = await extractResponse.text();
-      console.error(`[SCAN-LAWYER-NAMES] pdf.co extract error: ${extractResponse.status} - ${errorText}`);
-      return '';
-    }
-
-    const extractResult = await extractResponse.json();
-    
-    if (extractResult.error) {
-      console.error(`[SCAN-LAWYER-NAMES] pdf.co extract error: ${extractResult.message}`);
-      return '';
-    }
-
-    const fullText = extractResult.body || '';
-    const elapsed = Date.now() - startTime;
-    console.log(`[SCAN-LAWYER-NAMES] Extracted ${fullText.length} chars in ${elapsed}ms via pdf.co`);
-    
-    return fullText;
-  } catch (error) {
-    console.error('[SCAN-LAWYER-NAMES] pdf.co extraction error:', error);
-    return '';
-  }
+interface ExtractionProgress {
+  pages_done: number;
+  total_pages: number;
+  status: 'in_progress' | 'complete' | 'error';
+  last_updated: string;
+  error_count: number;
 }
+
+const STALE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 
 // Extract causelist date from PDF text content
 function extractCauselistDate(textContent: string): string | null {
-  // Common date patterns in Indian causelists
   const patterns = [
-    // "Thursday Dated : 18/12/2025" or "Dated : 18/12/2025"
     /Dated\s*:\s*(\d{1,2})\/(\d{1,2})\/(\d{4})/i,
-    // "Date: 18-12-2025" or "Date : 18-12-2025"
     /Date\s*:\s*(\d{1,2})-(\d{1,2})-(\d{4})/i,
-    // "18.12.2025" at start of line
     /^(\d{1,2})\.(\d{1,2})\.(\d{4})/m,
-    // "Cause List for 18/12/2025"
     /Cause\s*List\s*(?:for|dated?)\s*(\d{1,2})\/(\d{1,2})\/(\d{4})/i,
-    // "Daily Causelist" followed by date
     /Daily\s*Causelist.*?(\d{1,2})\/(\d{1,2})\/(\d{4})/is,
   ];
 
@@ -130,14 +51,16 @@ function extractCauselistDate(textContent: string): string | null {
       const day = match[1].padStart(2, '0');
       const month = match[2].padStart(2, '0');
       const year = match[3];
-      const dateStr = `${year}-${month}-${day}`;
-      console.log(`[SCAN-LAWYER-NAMES] Extracted date from PDF: ${dateStr}`);
-      return dateStr;
+      return `${year}-${month}-${day}`;
     }
   }
-
-  console.log('[SCAN-LAWYER-NAMES] Could not extract date from PDF content');
   return null;
+}
+
+// Check if extraction is stalled (last_updated > 5 minutes ago)
+function isExtractionStalled(progress: ExtractionProgress): boolean {
+  const lastUpdated = new Date(progress.last_updated).getTime();
+  return Date.now() - lastUpdated > STALE_TIMEOUT_MS;
 }
 
 serve(async (req) => {
@@ -158,15 +81,15 @@ serve(async (req) => {
     // Get causelists to scan
     let causelistQuery = supabase
       .from('raw_causelists')
-      .select('id, storage_path, text_content, bench, list_type, list_date')
-      .in('status', ['downloaded', 'notes_extracted', 'scanning'])
+      .select('id, storage_path, text_content, extraction_progress, bench, list_type, list_date, page_count')
+      .in('status', ['downloaded', 'notes_extracted', 'scanning', 'text_extracted', 'extracting'])
       .order('created_at', { ascending: true })
       .limit(1);
 
     if (body.causelist_id) {
       causelistQuery = supabase
         .from('raw_causelists')
-        .select('id, storage_path, text_content, bench, list_type, list_date')
+        .select('id, storage_path, text_content, extraction_progress, bench, list_type, list_date, page_count')
         .eq('id', body.causelist_id);
     }
 
@@ -212,70 +135,74 @@ serve(async (req) => {
     let totalScans = 0;
     let totalMatches = 0;
     let totalEnqueued = 0;
+    let extractionsTriggered = 0;
 
     for (const causelist of causelists) {
       console.log(`[SCAN-LAWYER-NAMES] Processing causelist: ${causelist.id} (${causelist.bench} ${causelist.list_type})`);
 
-      // Get or extract text content
+      const progress = causelist.extraction_progress as ExtractionProgress | null;
       let textContent = causelist.text_content;
 
-      if (!textContent) {
-        // Mark as extracting FIRST to prevent duplicate processing
+      // Check if we need to extract text
+      const needsExtraction = !textContent || !progress || progress.status !== 'complete';
+      
+      if (needsExtraction) {
+        // Check if extraction is in progress
+        if (progress?.status === 'in_progress' && !isExtractionStalled(progress)) {
+          console.log(`[SCAN-LAWYER-NAMES] Extraction in progress: ${progress.pages_done}/${progress.total_pages} pages`);
+          continue; // Skip, let the extraction complete
+        }
+
+        // Check if extraction errored out
+        if (progress?.status === 'error' && progress.error_count >= 3) {
+          console.log(`[SCAN-LAWYER-NAMES] Extraction failed permanently after ${progress.error_count} attempts`);
+          continue;
+        }
+
+        // Trigger extraction (new or resume stalled)
+        const startPage = progress?.status === 'in_progress' ? progress.pages_done : 0;
+        
+        console.log(`[SCAN-LAWYER-NAMES] Triggering pdf-extract-chunk from page ${startPage}`);
+        
+        // Mark as extracting
         await supabase
           .from('raw_causelists')
           .update({ status: 'extracting' })
           .eq('id', causelist.id);
-        
-        console.log('[SCAN-LAWYER-NAMES] No cached text, extracting from PDF...');
-        
-        const { data: pdfData, error: downloadError } = await supabase.storage
-          .from('causelist-pdfs')
-          .download(causelist.storage_path);
 
-        if (downloadError || !pdfData) {
-          console.error(`[SCAN-LAWYER-NAMES] Failed to download PDF: ${downloadError?.message}`);
-          await supabase.from('raw_causelists').update({ status: 'download_error' }).eq('id', causelist.id);
-          continue;
+        // Trigger extraction
+        try {
+          await fetch(`${supabaseUrl}/functions/v1/pdf-extract-chunk`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${supabaseServiceKey}`
+            },
+            body: JSON.stringify({
+              causelist_id: causelist.id,
+              start_page: startPage
+            })
+          });
+          extractionsTriggered++;
+          console.log(`[SCAN-LAWYER-NAMES] Extraction triggered for ${causelist.id}`);
+        } catch (err) {
+          console.error(`[SCAN-LAWYER-NAMES] Failed to trigger extraction:`, err);
         }
 
-        // Extract text using unpdf
-        const arrayBuffer = await pdfData.arrayBuffer();
-        textContent = await extractTextFromPDF(arrayBuffer);
+        continue; // Don't scan yet, wait for extraction
+      }
 
-        if (!textContent) {
-          console.error('[SCAN-LAWYER-NAMES] Failed to extract text from PDF');
-          await supabase.from('raw_causelists').update({ status: 'extract_error' }).eq('id', causelist.id);
-          continue;
-        }
+      // Text extraction is complete, proceed with scanning
+      console.log(`[SCAN-LAWYER-NAMES] Text ready: ${textContent.length} chars, scanning for aliases...`);
 
-        // Extract date and save text immediately
-        const extractedDate = extractCauselistDate(textContent);
-        console.log(`[SCAN-LAWYER-NAMES] Extracted date: ${extractedDate}, saving ${textContent.length} chars`);
-        
-        const { error: saveError } = await supabase
+      // Extract and update date if needed
+      const extractedDate = extractCauselistDate(textContent);
+      if (extractedDate && extractedDate !== causelist.list_date) {
+        await supabase
           .from('raw_causelists')
-          .update({ 
-            text_content: textContent.substring(0, 500000), 
-            status: 'scanned',
-            list_date: extractedDate || causelist.list_date
-          })
+          .update({ list_date: extractedDate })
           .eq('id', causelist.id);
-
-        if (saveError) {
-          console.error(`[SCAN-LAWYER-NAMES] Failed to save text: ${saveError.message}`);
-          continue;
-        }
-        console.log('[SCAN-LAWYER-NAMES] Text saved successfully');
-      } else {
-        // Even if text is cached, try to extract and update date if not already set
-        const extractedDate = extractCauselistDate(textContent);
-        if (extractedDate && extractedDate !== causelist.list_date) {
-          await supabase
-            .from('raw_causelists')
-            .update({ list_date: extractedDate })
-            .eq('id', causelist.id);
-          console.log(`[SCAN-LAWYER-NAMES] Updated cached causelist date to: ${extractedDate}`);
-        }
+        console.log(`[SCAN-LAWYER-NAMES] Updated causelist date to: ${extractedDate}`);
       }
 
       const textLower = textContent.toLowerCase();
@@ -295,7 +222,7 @@ serve(async (req) => {
           continue;
         }
 
-        // Get profile's aliases ONLY
+        // Get profile's aliases
         const { data: aliases } = await supabase
           .from('lawyer_aliases')
           .select('alias_name')
@@ -307,7 +234,7 @@ serve(async (req) => {
 
         totalScans++;
 
-        // Simple case-insensitive string matching - NO AI
+        // Simple case-insensitive string matching
         const matchedAliases: string[] = [];
         for (const { alias_name } of aliases) {
           const aliasLower = alias_name.toLowerCase().trim();
@@ -348,15 +275,14 @@ serve(async (req) => {
         }
       }
 
-      // Update causelist status
+      // Update causelist status to scanned
       await supabase
         .from('raw_causelists')
         .update({ status: 'scanned' })
         .eq('id', causelist.id);
 
-      // Trigger parse-all-cases to extract all cases from this causelist
-      const parseUrl = `${supabaseUrl}/functions/v1/parse-all-cases`;
-      fetch(parseUrl, {
+      // Trigger parse-all-cases
+      fetch(`${supabaseUrl}/functions/v1/parse-all-cases`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -369,13 +295,14 @@ serve(async (req) => {
     }
 
     const duration = Date.now() - startTime;
-    console.log(`[SCAN-LAWYER-NAMES] Completed: ${totalScans} scans, ${totalMatches} matches, ${totalEnqueued} enqueued, ${duration}ms`);
+    console.log(`[SCAN-LAWYER-NAMES] Completed: ${totalScans} scans, ${totalMatches} matches, ${totalEnqueued} enqueued, ${extractionsTriggered} extractions triggered, ${duration}ms`);
 
     return new Response(JSON.stringify({
       success: true,
       scans_performed: totalScans,
       matches_found: totalMatches,
       tasks_enqueued: totalEnqueued,
+      extractions_triggered: extractionsTriggered,
       duration_ms: duration
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }

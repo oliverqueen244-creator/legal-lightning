@@ -47,3 +47,6 @@ verify_jwt = false
 
 [functions.test-pdf-parse]
 verify_jwt = false
+
+[functions.pdf-extract-chunk]
+verify_jwt = false
