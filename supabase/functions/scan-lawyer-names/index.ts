@@ -144,7 +144,8 @@ serve(async (req) => {
       let textContent = causelist.text_content;
 
       // Check if we need to extract text
-      const needsExtraction = !textContent || !progress || progress.status !== 'complete';
+      // If text already exists (legacy extraction), skip chunked extraction
+      const needsExtraction = !textContent && (!progress || progress.status !== 'complete');
       
       if (needsExtraction) {
         // Check if extraction is in progress
