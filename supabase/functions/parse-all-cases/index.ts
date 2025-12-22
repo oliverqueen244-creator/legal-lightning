@@ -133,25 +133,47 @@ serve(async (req) => {
       // Call AI to extract all cases
       const prompt = `You are a legal document parser. Extract ALL court cases from this Indian High Court causelist.
 
+CRITICAL: The causelist is organized by COURT SECTIONS. Each section starts with:
+"Court No : X" followed by judge names (e.g., "Court No : 4" then "HON'BLE MR. JUSTICE VINIT KUMAR MATHUR").
+
+For court_room_no:
+- Extract the court number from the "Court No : X" section header
+- Each case under that section belongs to that court
+- DO NOT use the trailing 3-4 digit category codes (like 603, 602, 4200, 4500) as court room numbers
+- These trailing codes appear after lawyer names and are case category identifiers, NOT court rooms
+
 For each case, extract:
-- item_no: The serial/item number (integer)
-- case_number: Full case number (e.g., "S.B. Civil Writ Petition No. 1234/2024")
-- petitioner: Petitioner name(s)
-- respondent: Respondent name(s)
-- petitioner_lawyer: Advocate for petitioner
-- respondent_lawyer: Advocate for respondent
-- court_room_no: Court room number if mentioned
-- judge_names: Judge name(s) if mentioned at the top of the section
+- item_no: The serial/item number (integer) - the S.No. column
+- case_number: Full case number (e.g., "C.M.A. 1693/2004", "S.B. Civil Writ Petition No. 1234/2024")
+- petitioner: Petitioner name(s) - first party listed
+- respondent: Respondent name(s) - second party listed
+- petitioner_lawyer: Advocate for petitioner (marked with -P suffix)
+- respondent_lawyer: Advocate for respondent (marked with -R suffix)  
+- court_room_no: The court number from the section header (e.g., "3", "4", "5", NOT "603" or "4200")
+- judge_names: Judge name(s) from the section header
+
+Example structure in causelist:
+"Court No : 4
+HON'BLE MR. JUSTICE VINIT KUMAR MATHUR
+...
+33 C.M.A. 1693/2004 SMT. BABY KANWAR
+                    MOHD. SHARIF
+                    MANISH PITLIYA-P RAMESH PUROHIT-R
+                    603"  <-- This 603 is a CATEGORY CODE, not court room!
+
+Correct extraction: court_room_no = "4" (from section header)
 
 Return a JSON array of cases. Example:
 [
   {
-    "item_no": 1,
-    "case_number": "S.B. Civil Writ Petition No. 1234/2024",
-    "petitioner": "ABC Company",
-    "respondent": "State of Rajasthan",
-    "petitioner_lawyer": "Mr. Sharma",
-    "respondent_lawyer": "AAG"
+    "item_no": 33,
+    "case_number": "C.M.A. 1693/2004",
+    "petitioner": "SMT. BABY KANWAR AND ORS",
+    "respondent": "MOHD. SHARIF AND ORS",
+    "petitioner_lawyer": "MANISH PITLIYA",
+    "respondent_lawyer": "RAMESH PUROHIT",
+    "court_room_no": "4",
+    "judge_names": "HON'BLE MR. JUSTICE VINIT KUMAR MATHUR"
   }
 ]
 
