@@ -10,10 +10,9 @@ const corsHeaders = {
  * CASE PARSING WORKER - Multi-AI Provider Support
  * 
  * Tries AI providers in order:
- * 1. Lovable AI (google/gemini-2.5-flash)
- * 2. Google AI API (gemini-2.0-flash)
- * 3. OpenAI (gpt-4o-mini)
- * 4. OpenRouter (as last resort)
+ * 1. Google AI API (gemini-2.0-flash) - Primary
+ * 2. OpenAI (gpt-4o-mini) - Fallback
+ * 3. OpenRouter (as last resort)
  */
 
 interface ParsedCase {
@@ -33,48 +32,7 @@ interface AICallResult {
   error?: string;
 }
 
-// Call Lovable AI Gateway
-async function callLovableAI(systemPrompt: string, userPrompt: string, maxTokens: number): Promise<AICallResult> {
-  const apiKey = Deno.env.get('LOVABLE_API_KEY');
-  if (!apiKey) {
-    return { success: false, content: '', provider: 'lovable', error: 'LOVABLE_API_KEY not configured' };
-  }
-
-  try {
-    console.log('[AI] Trying Lovable AI...');
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
-        ],
-        max_tokens: maxTokens
-      })
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.log(`[AI] Lovable AI failed: ${response.status} - ${errorText.substring(0, 200)}`);
-      return { success: false, content: '', provider: 'lovable', error: `HTTP ${response.status}` };
-    }
-
-    const result = await response.json();
-    const content = result.choices?.[0]?.message?.content || '';
-    console.log(`[AI] Lovable AI success, got ${content.length} chars`);
-    return { success: true, content, provider: 'lovable' };
-  } catch (error) {
-    console.error('[AI] Lovable AI error:', error);
-    return { success: false, content: '', provider: 'lovable', error: error instanceof Error ? error.message : 'Unknown error' };
-  }
-}
-
-// Call Google AI API directly
+// Call Google AI API directly (Primary provider)
 async function callGoogleAI(systemPrompt: string, userPrompt: string): Promise<AICallResult> {
   const apiKey = Deno.env.get('GOOGLE_AI_API_KEY');
   if (!apiKey) {
@@ -193,10 +151,9 @@ async function callOpenRouter(systemPrompt: string, userPrompt: string): Promise
   }
 }
 
-// Try all AI providers in sequence
+// Try all AI providers in sequence (Google AI first, then OpenAI, then OpenRouter)
 async function callAIWithFallback(systemPrompt: string, userPrompt: string, maxTokens: number = 10000): Promise<AICallResult> {
   const providers = [
-    () => callLovableAI(systemPrompt, userPrompt, maxTokens),
     () => callGoogleAI(systemPrompt, userPrompt),
     () => callOpenAI(systemPrompt, userPrompt),
     () => callOpenRouter(systemPrompt, userPrompt)
