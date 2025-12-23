@@ -30,7 +30,7 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const firecrawlKey = Deno.env.get('FIRECRAWL_API_KEY');
     const openRouterKey = Deno.env.get('OPENROUTER_API_KEY');
-    const lovableApiKey = Deno.env.get('LOVABLE_API_KEY');
+    const googleAiKey = Deno.env.get('GOOGLE_AI_API_KEY');
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
@@ -106,7 +106,7 @@ serve(async (req) => {
             causelist,
             supabase,
             firecrawlKey,
-            openRouterKey || lovableApiKey,
+            openRouterKey || googleAiKey,
             targetDate
           );
           
