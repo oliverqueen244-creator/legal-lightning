@@ -14,6 +14,42 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_parse_cache: {
+        Row: {
+          created_at: string
+          expires_at: string
+          hit_count: number | null
+          id: string
+          prompt_hash: string
+          provider: string
+          response_json: Json
+          text_hash: string
+          tokens_used: number | null
+        }
+        Insert: {
+          created_at?: string
+          expires_at?: string
+          hit_count?: number | null
+          id?: string
+          prompt_hash: string
+          provider: string
+          response_json: Json
+          text_hash: string
+          tokens_used?: number | null
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string
+          hit_count?: number | null
+          id?: string
+          prompt_hash?: string
+          provider?: string
+          response_json?: Json
+          text_hash?: string
+          tokens_used?: number | null
+        }
+        Relationships: []
+      }
       case_arguments: {
         Row: {
           created_at: string | null
@@ -122,10 +158,13 @@ export type Database = {
           error_message: string | null
           id: string
           item_range: string | null
+          last_retry_at: string | null
           matched_alias: string
           page_range: string | null
           profile_id: string
+          provider_used: string | null
           raw_causelist_id: string
+          retry_count: number | null
           started_at: string | null
           status: string | null
         }
@@ -136,10 +175,13 @@ export type Database = {
           error_message?: string | null
           id?: string
           item_range?: string | null
+          last_retry_at?: string | null
           matched_alias: string
           page_range?: string | null
           profile_id: string
+          provider_used?: string | null
           raw_causelist_id: string
+          retry_count?: number | null
           started_at?: string | null
           status?: string | null
         }
@@ -150,10 +192,13 @@ export type Database = {
           error_message?: string | null
           id?: string
           item_range?: string | null
+          last_retry_at?: string | null
           matched_alias?: string
           page_range?: string | null
           profile_id?: string
+          provider_used?: string | null
           raw_causelist_id?: string
+          retry_count?: number | null
           started_at?: string | null
           status?: string | null
         }
