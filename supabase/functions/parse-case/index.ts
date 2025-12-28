@@ -1,6 +1,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
+// Declare EdgeRuntime for background tasks
+declare const EdgeRuntime: {
+  waitUntil: (promise: Promise<unknown>) => void;
+};
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -377,8 +382,26 @@ async function callAIWithFallback(
   return { success: false, content: '', provider: 'none', error: 'All AI providers failed' };
 }
 
-// Optimized text extraction - smaller, more targeted chunks
-function extractRelevantText(textContent: string, alias: string, maxCharsPerMatch: number = 3000): string {
+// Configuration for batch processing
+const SECTIONS_PER_BATCH = 10; // Process 10 sections per AI call
+const MAX_CHARS_PER_SECTION = 2500; // Characters of context around each match
+
+interface TextExtractionResult {
+  text: string;
+  totalSections: number;
+  processedSections: number;
+  startSection: number;
+  endSection: number;
+  hasMore: boolean;
+  nextStartSection: number;
+}
+
+// Optimized text extraction with batch support
+function extractRelevantText(
+  textContent: string, 
+  alias: string, 
+  batchStart: number = 0
+): TextExtractionResult {
   const aliasPattern = new RegExp(alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
   const matches: number[] = [];
   let match;
@@ -388,14 +411,22 @@ function extractRelevantText(textContent: string, alias: string, maxCharsPerMatc
   }
 
   if (matches.length === 0) {
-    // Fallback: return first portion
-    return textContent.substring(0, 30000);
+    console.log(`[TEXT] No occurrences of alias found`);
+    return {
+      text: textContent.substring(0, 30000),
+      totalSections: 1,
+      processedSections: 1,
+      startSection: 0,
+      endSection: 1,
+      hasMore: false,
+      nextStartSection: 0
+    };
   }
 
   console.log(`[TEXT] Found ${matches.length} occurrences of alias`);
 
-  // Merge overlapping ranges
-  const CONTEXT_WINDOW = maxCharsPerMatch;
+  // Merge overlapping ranges to create sections
+  const CONTEXT_WINDOW = MAX_CHARS_PER_SECTION;
   const ranges: { start: number; end: number }[] = [];
 
   for (const pos of matches) {
@@ -414,14 +445,27 @@ function extractRelevantText(textContent: string, alias: string, maxCharsPerMatc
     }
   }
 
-  // Limit to first 5 sections to avoid huge prompts
-  const limitedRanges = ranges.slice(0, 5);
-  const excerpts = limitedRanges.map(r => textContent.substring(r.start, r.end));
+  const totalSections = ranges.length;
+  
+  // Get the batch of sections to process
+  const batchEnd = Math.min(batchStart + SECTIONS_PER_BATCH, totalSections);
+  const batchRanges = ranges.slice(batchStart, batchEnd);
+  const excerpts = batchRanges.map(r => textContent.substring(r.start, r.end));
   
   const result = excerpts.join('\n\n--- NEXT SECTION ---\n\n');
-  console.log(`[TEXT] Extracted ${result.length} chars from ${limitedRanges.length} sections (vs original ${textContent.length} chars)`);
+  const hasMore = batchEnd < totalSections;
   
-  return result;
+  console.log(`[TEXT] Batch ${batchStart}-${batchEnd} of ${totalSections} sections, ${result.length} chars extracted`);
+  
+  return {
+    text: result,
+    totalSections,
+    processedSections: batchRanges.length,
+    startSection: batchStart,
+    endSection: batchEnd,
+    hasMore,
+    nextStartSection: batchEnd
+  };
 }
 
 serve(async (req) => {
@@ -476,8 +520,13 @@ serve(async (req) => {
 
     console.log(`[PARSE-CASE] Parsing cases for alias: ${queueItem.matched_alias}`);
 
-    // OPTIMIZED: Extract only relevant text around alias matches
-    const relevantText = extractRelevantText(textContent, queueItem.matched_alias, 3000);
+    // Get the batch start from the queue item (default 0 for first batch)
+    const batchStart = queueItem.batch_start || 0;
+
+    // OPTIMIZED: Extract relevant text in batches
+    const extraction = extractRelevantText(textContent, queueItem.matched_alias, batchStart);
+
+    console.log(`[PARSE-CASE] Processing batch: sections ${extraction.startSection}-${extraction.endSection} of ${extraction.totalSections}`);
 
     const systemPrompt = `You are an expert legal document parser specializing in Indian High Court causelists. 
 Extract case data with extreme accuracy. Pay close attention to lawyer name suffixes and prefixes.
@@ -519,11 +568,11 @@ Return a JSON array. Example:
 
 Return empty array [] if no matching cases found.
 
-Causelist excerpts:
-${relevantText}`;
+Causelist excerpts (batch ${extraction.startSection + 1}-${extraction.endSection} of ${extraction.totalSections}):
+${extraction.text}`;
 
     // Call AI with caching and throttling
-    const aiResult = await callAIWithFallback(supabase, systemPrompt, userPrompt, relevantText);
+    const aiResult = await callAIWithFallback(supabase, systemPrompt, userPrompt, extraction.text);
 
     if (!aiResult.success) {
       // Handle failure - increment retry count
@@ -626,6 +675,7 @@ ${relevantText}`;
       if (!insertError) insertedCount++;
     }
 
+    // Update current queue item as done
     await supabase
       .from('case_parse_queue')
       .update({ 
@@ -638,7 +688,45 @@ ${relevantText}`;
       .eq('id', queueItem.id);
 
     const duration = Date.now() - startTime;
-    console.log(`[PARSE-CASE] Done: ${insertedCount} inserted, ${skippedCount} skipped, ${duration}ms, provider: ${aiResult.provider}${aiResult.cached ? ' (CACHED)' : ''}`);
+    console.log(`[PARSE-CASE] Batch done: ${insertedCount} inserted, ${skippedCount} skipped, ${duration}ms, provider: ${aiResult.provider}${aiResult.cached ? ' (CACHED)' : ''}`);
+
+    // If there are more sections to process, create a follow-up queue item
+    let nextBatchQueued = false;
+    if (extraction.hasMore) {
+      console.log(`[PARSE-CASE] Queueing next batch starting at section ${extraction.nextStartSection}`);
+      
+      const { error: queueNextError } = await supabase
+        .from('case_parse_queue')
+        .insert({
+          profile_id: queueItem.profile_id,
+          raw_causelist_id: queueItem.raw_causelist_id,
+          matched_alias: queueItem.matched_alias,
+          status: 'pending',
+          batch_start: extraction.nextStartSection
+        });
+      
+      if (queueNextError) {
+        console.error('[PARSE-CASE] Failed to queue next batch:', queueNextError);
+      } else {
+        nextBatchQueued = true;
+        console.log(`[PARSE-CASE] Next batch queued successfully`);
+        
+        // Trigger next processing immediately via background task
+        const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+        const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+        
+        EdgeRuntime.waitUntil(
+          fetch(`${supabaseUrl}/functions/v1/parse-case`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${supabaseAnonKey}`
+            },
+            body: JSON.stringify({})
+          }).catch(err => console.error('[PARSE-CASE] Failed to trigger next batch:', err))
+        );
+      }
+    }
 
     return new Response(JSON.stringify({
       success: true,
@@ -648,7 +736,13 @@ ${relevantText}`;
       cases_skipped: skippedCount,
       duration_ms: duration,
       ai_provider: aiResult.provider,
-      cached: aiResult.cached || false
+      cached: aiResult.cached || false,
+      batch_info: {
+        sections_processed: `${extraction.startSection}-${extraction.endSection}`,
+        total_sections: extraction.totalSections,
+        has_more: extraction.hasMore,
+        next_batch_queued: nextBatchQueued
+      }
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
