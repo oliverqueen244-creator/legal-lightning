@@ -152,6 +152,7 @@ export type Database = {
       }
       case_parse_queue: {
         Row: {
+          batch_start: number | null
           cases_parsed: number | null
           completed_at: string | null
           created_at: string | null
@@ -169,6 +170,7 @@ export type Database = {
           status: string | null
         }
         Insert: {
+          batch_start?: number | null
           cases_parsed?: number | null
           completed_at?: string | null
           created_at?: string | null
@@ -186,6 +188,7 @@ export type Database = {
           status?: string | null
         }
         Update: {
+          batch_start?: number | null
           cases_parsed?: number | null
           completed_at?: string | null
           created_at?: string | null
