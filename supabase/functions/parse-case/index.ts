@@ -32,41 +32,77 @@ interface AICallResult {
   error?: string;
 }
 
-// Call Google AI API directly (Primary provider)
+// Helper function to sleep for a given number of milliseconds
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// Call Google AI API directly (Primary provider) with exponential backoff retry
 async function callGoogleAI(systemPrompt: string, userPrompt: string): Promise<AICallResult> {
   const apiKey = Deno.env.get('GOOGLE_AI_API_KEY');
   if (!apiKey) {
     return { success: false, content: '', provider: 'google', error: 'GOOGLE_AI_API_KEY not configured' };
   }
 
-  try {
-    console.log('[AI] Trying Google AI...');
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }],
-          generationConfig: { maxOutputTokens: 10000, temperature: 0.1 }
-        })
+  const maxRetries = 3;
+  const baseDelayMs = 1000; // Start with 1 second delay
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      if (attempt === 0) {
+        console.log('[AI] Trying Google AI...');
+      } else {
+        console.log(`[AI] Google AI retry attempt ${attempt}/${maxRetries}...`);
       }
-    );
+      
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }],
+            generationConfig: { maxOutputTokens: 10000, temperature: 0.1 }
+          })
+        }
+      );
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.log(`[AI] Google AI failed: ${response.status} - ${errorText.substring(0, 200)}`);
-      return { success: false, content: '', provider: 'google', error: `HTTP ${response.status}` };
+      if (!response.ok) {
+        const errorText = await response.text();
+        const status = response.status;
+        
+        // Check if it's a rate limit error (429) and we have retries left
+        if (status === 429 && attempt < maxRetries) {
+          // Exponential backoff: 1s, 2s, 4s
+          const delayMs = baseDelayMs * Math.pow(2, attempt);
+          console.log(`[AI] Google AI rate limited (429), waiting ${delayMs}ms before retry...`);
+          await sleep(delayMs);
+          continue; // Retry the request
+        }
+        
+        console.log(`[AI] Google AI failed: ${status} - ${errorText.substring(0, 200)}`);
+        return { success: false, content: '', provider: 'google', error: `HTTP ${status}` };
+      }
+
+      const result = await response.json();
+      const content = result.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      console.log(`[AI] Google AI success, got ${content.length} chars`);
+      return { success: true, content, provider: 'google' };
+    } catch (error) {
+      // On network errors, also retry with backoff
+      if (attempt < maxRetries) {
+        const delayMs = baseDelayMs * Math.pow(2, attempt);
+        console.log(`[AI] Google AI network error, waiting ${delayMs}ms before retry...`, error);
+        await sleep(delayMs);
+        continue;
+      }
+      console.error('[AI] Google AI error after all retries:', error);
+      return { success: false, content: '', provider: 'google', error: error instanceof Error ? error.message : 'Unknown error' };
     }
-
-    const result = await response.json();
-    const content = result.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    console.log(`[AI] Google AI success, got ${content.length} chars`);
-    return { success: true, content, provider: 'google' };
-  } catch (error) {
-    console.error('[AI] Google AI error:', error);
-    return { success: false, content: '', provider: 'google', error: error instanceof Error ? error.message : 'Unknown error' };
   }
+
+  // Should not reach here, but just in case
+  return { success: false, content: '', provider: 'google', error: 'Max retries exceeded' };
 }
 
 // Call OpenAI API
