@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
-import { Gavel, Clock, Coffee, SkipForward, Ban, AlertTriangle, Moon } from 'lucide-react';
+import { Gavel, Clock, Coffee, SkipForward, Ban, AlertTriangle, Moon, UserCheck } from 'lucide-react';
 import type { BoardStatus, LiveBoardCache } from '@/types/database';
 import { SyncStatusBadge, SyncTimestamp } from './SyncStatusBadge';
 import { useCourtSyncHealth } from '@/hooks/useSyncHealth';
 import { isCourtHours } from '@/hooks/useLiveBoard';
+import { useCourtOverrides, findOverrideForItem } from '@/hooks/useCourtOverrides';
 
 interface LiveCourtWidgetProps {
   courtRoom: string;
@@ -31,6 +32,12 @@ export function LiveCourtWidget({
   const syncHealth = useCourtSyncHealth(courtLocation, courtRoom, liveBoard);
   const courtHoursStatus = isCourtHours();
   const isActive = liveBoard?.is_active ?? false;
+  
+  // Fetch court overrides for today
+  const { data: overrides = [] } = useCourtOverrides(courtLocation, courtRoom);
+  
+  // Check if current item has a judge override
+  const currentOverride = findOverrideForItem(overrides, courtRoom, currentItem);
 
   // Animate number changes
   useEffect(() => {
@@ -188,6 +195,20 @@ export function LiveCourtWidget({
           )}
         </div>
       </div>
+
+      {/* Judge Override Banner */}
+      {currentOverride && currentOverride.new_judge && isActive && courtHoursStatus.inSession && (
+        <div className="mb-4 p-3 rounded-lg bg-court-warning/10 border border-court-warning/30 relative z-10">
+          <div className="flex items-center gap-2 text-sm">
+            <UserCheck className="h-4 w-4 text-court-warning" />
+            <span className="text-court-warning font-medium">Judge Override Active</span>
+          </div>
+          <p className="text-xs text-muted-foreground mt-1">
+            Items {currentOverride.from_serial ?? 1}-{currentOverride.to_serial ?? '∞'} before{' '}
+            <span className="text-foreground font-medium">{currentOverride.new_judge}</span>
+          </p>
+        </div>
+      )}
 
       {/* Giant Item Number or Not In Session Message */}
       <div className="text-center py-8 relative z-10">

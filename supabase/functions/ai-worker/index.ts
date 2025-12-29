@@ -158,10 +158,26 @@ serve(async (req) => {
         await insertParsedCases(supabase, job, result.cases);
       }
 
-      // Log overrides for SUPPLEMENTARY/NOTICE
+      // Store overrides in court_overrides table
       if (result.overrides && result.overrides.length > 0) {
         console.log(`[AI-WORKER] Job ${job.id} extracted ${result.overrides.length} court overrides`);
-        // TODO: Could store these in a dedicated table for live board updates
+        
+        for (const override of result.overrides) {
+          await supabase
+            .from('court_overrides')
+            .insert({
+              court_location: job.payload.bench,
+              court_no: String(override.court_no),
+              override_date: job.payload.list_date,
+              from_serial: override.from_serial,
+              to_serial: override.to_serial,
+              new_judge: override.new_judge,
+              override_type: 'judge_substitution',
+              source_causelist_id: job.payload.causelist_id,
+              is_active: true
+            });
+        }
+        console.log(`[AI-WORKER] Inserted ${result.overrides.length} court overrides for ${job.payload.bench}`);
       }
 
       const itemCount = result.cases?.length || 0;
