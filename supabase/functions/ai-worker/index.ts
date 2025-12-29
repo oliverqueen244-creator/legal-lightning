@@ -43,13 +43,16 @@ interface AiJob {
 }
 
 interface ParsedCase {
-  court_room_no: string;
+  court_room_no: number;
   item_no: number;
+  case_type: string;
   case_number: string;
+  year: number;
   petitioner: string | null;
   respondent: string | null;
-  petitioner_lawyer: string | null;
-  respondent_lawyer: string | null;
+  listing_category: string | null;
+  petitioner_lawyer: string[];
+  respondent_lawyer: string[];
 }
 
 serve(async (req) => {
@@ -263,42 +266,60 @@ async function processJob(job: AiJob, supabase: any): Promise<{ cases: ParsedCas
 }
 
 function buildParsePrompt(text: string, alias: string, jobType: string, courtNo: string): string {
-  return `Extract all cases from this court causelist text where the lawyer "${alias}" appears.
+  return `You are parsing an Indian High Court DAILY CAUSE LIST.
 
-COURT NUMBER: ${courtNo}
-JOB TYPE: ${jobType}
+You are given the FULL TEXT for ONE COURT ONLY.
 
-For each case, extract:
-- item_no (the serial/item number)
-- case_number (full case number like "D.B.CIV.WR.3123/2024")
-- petitioner (name of petitioner/appellant)
-- respondent (name of respondent)
-- petitioner_lawyer (lawyer for petitioner, with -P suffix if "${alias}" appears here)
-- respondent_lawyer (lawyer for respondent, with -R suffix if "${alias}" appears here)
+Your task:
+Extract ALL cases listed in this court.
 
-IMPORTANT:
-- Look for "${alias}" in the lawyer fields and identify which side they represent
-- Add -P suffix if petitioner's lawyer, -R suffix if respondent's lawyer
-- court_room_no should be "${courtNo}"
-- Return ONLY valid JSON, no markdown
+RULES (STRICT):
+- Court room number MUST come from header like "Court No : X"
+- DO NOT infer court number from category codes (e.g. 515, 603)
+- Each case must include:
+  - item_no (serial number)
+  - case_type (e.g. "D.B.CIV.WR", "S.B.CR.REV")
+  - case_number (just the number part)
+  - year (4 digit year)
+  - petitioner_name
+  - respondent_name
+  - listing_category (e.g. "FOR ADMISSION", "FOR ORDERS")
+  - advocate_petitioner (array of lawyer names)
+  - advocate_respondent (array of lawyer names)
+- Advocate suffix rules:
+  - "-P" or "(P)" → petitioner lawyer
+  - "-R" or "(R)" → respondent lawyer
+- Remove -P / -R from names in output
+- If case is "With" another case, still extract it separately
+- Ignore headers, footers, page numbers, timestamps
 
-Return format:
+CRITICAL: Look for lawyer "${alias}" - they may appear with -P or -R suffix
+
+OUTPUT FORMAT:
+Return STRICT JSON:
 {
+  "court_no": ${courtNo},
   "cases": [
     {
-      "court_room_no": "${courtNo}",
       "item_no": 1,
-      "case_number": "...",
-      "petitioner": "...",
-      "respondent": "...",
-      "petitioner_lawyer": "...",
-      "respondent_lawyer": "..."
+      "case_type": "D.B.CIV.WR",
+      "case_number": "3123",
+      "year": 2024,
+      "petitioner_name": "...",
+      "respondent_name": "...",
+      "listing_category": "FOR ADMISSION",
+      "advocate_petitioner": ["LAWYER NAME"],
+      "advocate_respondent": ["LAWYER NAME"]
     }
   ]
 }
 
-TEXT TO PARSE:
-${text.substring(0, 30000)}`;
+NO explanations.
+NO markdown.
+NO commentary.
+
+COURT TEXT:
+${text.substring(0, 50000)}`; // Increased limit for full court block
 }
 
 async function callGoogleAI(prompt: string): Promise<{ success: boolean; content: string; tokensUsed?: number }> {
@@ -408,17 +429,23 @@ function parseAIResponse(content: string, courtNo: string): ParsedCase[] {
     if (!jsonMatch) return [];
 
     const parsed = JSON.parse(jsonMatch[0]);
+    const courtNoFromResponse = parsed.court_no || parseInt(courtNo) || 0;
     const cases = parsed.cases || [];
 
     return cases.map((c: any) => ({
-      court_room_no: c.court_room_no || courtNo,
+      court_room_no: courtNoFromResponse,
       item_no: parseInt(c.item_no) || 0,
-      case_number: c.case_number || 'Unknown',
-      petitioner: c.petitioner || null,
-      respondent: c.respondent || null,
-      petitioner_lawyer: c.petitioner_lawyer || null,
-      respondent_lawyer: c.respondent_lawyer || null
-    })).filter((c: ParsedCase) => c.item_no > 0 && c.case_number !== 'Unknown');
+      case_type: c.case_type || '',
+      case_number: c.case_number || '',
+      year: parseInt(c.year) || new Date().getFullYear(),
+      petitioner: c.petitioner_name || c.petitioner || null,
+      respondent: c.respondent_name || c.respondent || null,
+      listing_category: c.listing_category || null,
+      petitioner_lawyer: Array.isArray(c.advocate_petitioner) ? c.advocate_petitioner : 
+                         (c.advocate_petitioner ? [c.advocate_petitioner] : []),
+      respondent_lawyer: Array.isArray(c.advocate_respondent) ? c.advocate_respondent : 
+                         (c.advocate_respondent ? [c.advocate_respondent] : [])
+    })).filter((c: ParsedCase) => c.item_no > 0 && (c.case_number || c.case_type));
   } catch (e) {
     console.error('[AI-WORKER] Failed to parse AI response:', e);
     return [];
@@ -426,7 +453,7 @@ function parseAIResponse(content: string, courtNo: string): ParsedCase[] {
 }
 
 async function insertParsedCases(supabase: any, job: AiJob, cases: ParsedCase[]) {
-  const { causelist_id, profile_id, bench, list_date } = job.payload;
+  const { profile_id, bench, list_date } = job.payload;
 
   // Check for existing cases to avoid duplicates
   const { data: existing } = await supabase
@@ -444,19 +471,21 @@ async function insertParsedCases(supabase: any, job: AiJob, cases: ParsedCase[])
     return;
   }
 
+  // Build full case number: CASE_TYPE.CASE_NUMBER/YEAR
   const toInsert = newCases.map(c => ({
     date: list_date,
     court_location: bench,
-    court_room_no: c.court_room_no,
+    court_room_no: String(c.court_room_no),
     item_no: c.item_no,
-    case_number: c.case_number,
+    case_number: c.case_type && c.case_number ? `${c.case_type}.${c.case_number}/${c.year}` : c.case_number,
     petitioner: c.petitioner,
     respondent: c.respondent,
-    petitioner_lawyer: c.petitioner_lawyer,
-    respondent_lawyer: c.respondent_lawyer,
+    petitioner_lawyer: c.petitioner_lawyer.join(', ') || null,
+    respondent_lawyer: c.respondent_lawyer.join(', ') || null,
     matched_profile_id: profile_id,
     source_url: `ai_job:${job.id}`,
-    status: 'pending'
+    status: 'pending',
+    list_type: c.listing_category || 'DAILY'
   }));
 
   const { error: insertError } = await supabase
