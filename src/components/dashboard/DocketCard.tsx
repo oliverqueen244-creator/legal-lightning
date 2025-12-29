@@ -206,9 +206,10 @@ export function DocketCard({ item, liveBoard, userRole, onForceActive, showDate 
               )}
             </div>
             
+            {/* Show opposing party - abstracted language */}
             {item.respondent_lawyer && !isPassover && (
               <div className="mt-2 text-sm">
-                <span className="text-muted-foreground">vs </span>
+                <span className="text-muted-foreground">Opposing: </span>
                 <span className="text-foreground">{item.respondent_lawyer}</span>
               </div>
             )}

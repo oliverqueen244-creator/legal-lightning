@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
@@ -15,9 +14,11 @@ import {
   AlertCircle,
   Loader2,
   Zap,
-  Database
+  Database,
+  ShieldAlert
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useAuth } from '@/hooks/useAuth';
 
 interface QueueItem {
   id: string;
@@ -48,11 +49,13 @@ interface HiddenAdminPortalProps {
 }
 
 export default function HiddenAdminPortal({ isOpen, onClose }: HiddenAdminPortalProps) {
-  const [accessCode, setAccessCode] = useState('');
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const { isAdmin } = useAuth();
   const [queueItems, setQueueItems] = useState<QueueItem[]>([]);
   const [causelists, setCauselists] = useState<RawCauselist[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  
+  // Server-side admin verification - no client-side passwords
+  const isAuthenticated = isAdmin;
 
   // Fetch initial data
   const fetchData = async () => {
@@ -140,16 +143,7 @@ export default function HiddenAdminPortal({ isOpen, onClose }: HiddenAdminPortal
     };
   }, [isAuthenticated]);
 
-  const handleAccessSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (accessCode === '21091997') {
-      setIsAuthenticated(true);
-      toast.success('Admin access granted');
-    } else {
-      toast.error('Invalid access code');
-      setAccessCode('');
-    }
-  };
+  // No client-side password authentication - uses server-side isAdmin check
 
   const triggerParseCase = async () => {
     try {
@@ -208,24 +202,18 @@ export default function HiddenAdminPortal({ isOpen, onClose }: HiddenAdminPortal
 
         <CardContent className="p-4">
           {!isAuthenticated ? (
-            <form onSubmit={handleAccessSubmit} className="space-y-4 max-w-xs mx-auto py-8">
+            <div className="space-y-4 max-w-xs mx-auto py-8">
               <div className="text-center mb-6">
-                <Lock className="h-12 w-12 text-primary mx-auto mb-3" />
-                <h3 className="font-semibold">Enter Access Code</h3>
-                <p className="text-sm text-muted-foreground">This portal is restricted</p>
+                <ShieldAlert className="h-12 w-12 text-destructive mx-auto mb-3" />
+                <h3 className="font-semibold">Access Denied</h3>
+                <p className="text-sm text-muted-foreground">
+                  Admin privileges required. Your access level does not permit viewing this console.
+                </p>
               </div>
-              <Input
-                type="password"
-                value={accessCode}
-                onChange={(e) => setAccessCode(e.target.value)}
-                placeholder="Enter code..."
-                className="text-center text-lg tracking-widest"
-                autoFocus
-              />
-              <Button type="submit" className="w-full" variant="gold">
-                Unlock Portal
+              <Button onClick={onClose} className="w-full" variant="outline">
+                Close
               </Button>
-            </form>
+            </div>
           ) : (
             <div className="space-y-4">
               {/* Stats Row */}
