@@ -50,3 +50,6 @@ verify_jwt = false
 
 [functions.pdf-extract-chunk]
 verify_jwt = false
+
+[functions.ai-worker]
+verify_jwt = false

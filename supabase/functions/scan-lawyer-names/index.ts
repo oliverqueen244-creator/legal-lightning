@@ -369,44 +369,55 @@ serve(async (req) => {
                 console.log(`[SCAN-LAWYER-NAMES] Alias "${alias}" found in ${relevantBlocks.length} court blocks`);
                 
                 for (const block of relevantBlocks) {
-                  const { error: queueError } = await supabase
-                    .from('case_parse_queue')
+                  // INSERT INTO ai_jobs - worker will process
+                  const { error: jobError } = await supabase
+                    .from('ai_jobs')
                     .insert({
-                      profile_id: profile.id,
-                      raw_causelist_id: causelist.id,
-                      matched_alias: alias,
-                      status: 'pending',
-                      // Store court block info for targeted AI parsing
-                      item_range: `court_${block.court_no}`,
-                      page_range: JSON.stringify({
+                      job_type: 'court_parse',
+                      payload: {
+                        causelist_id: causelist.id,
+                        profile_id: profile.id,
+                        alias: alias,
                         court_no: block.court_no,
                         court_text: block.court_text,
-                        text_length: block.court_text.length
-                      })
+                        bench: causelist.bench,
+                        list_date: causelist.list_date
+                      },
+                      status: 'pending',
+                      priority: 0
                     });
 
-                  if (!queueError) {
+                  if (!jobError) {
                     totalEnqueued++;
-                    console.log(`[SCAN-LAWYER-NAMES] Enqueued Court ${block.court_no} for "${alias}" (${block.court_text.length} chars)`);
+                    console.log(`[SCAN-LAWYER-NAMES] AI job created: Court ${block.court_no} for "${alias}" (${block.court_text.length} chars)`);
+                  } else {
+                    console.error(`[SCAN-LAWYER-NAMES] Failed to create AI job:`, jobError);
                   }
                 }
               } else {
                 // SEARCH type or fallback - single job for full text
-                const { error: queueError } = await supabase
-                  .from('case_parse_queue')
+                const { error: jobError } = await supabase
+                  .from('ai_jobs')
                   .insert({
-                    profile_id: profile.id,
-                    raw_causelist_id: causelist.id,
-                    matched_alias: alias,
-                    status: 'pending'
+                    job_type: 'lawyer_parse',
+                    payload: {
+                      causelist_id: causelist.id,
+                      profile_id: profile.id,
+                      alias: alias,
+                      full_text: textContent,
+                      bench: causelist.bench,
+                      list_date: causelist.list_date
+                    },
+                    status: 'pending',
+                    priority: 0
                   });
 
-                if (!queueError) {
+                if (!jobError) {
                   totalEnqueued++;
                 }
               }
             }
-            console.log(`[SCAN-LAWYER-NAMES] Enqueued ${totalEnqueued} AI parsing tasks for ${pdfType}`);
+            console.log(`[SCAN-LAWYER-NAMES] Created ${totalEnqueued} AI jobs for ${pdfType} (worker will process)`);
           } else {
             // SUPPLEMENTARY: Log match but skip AI parsing
             console.log(`[SCAN-LAWYER-NAMES] SUPPLEMENTARY match found - skipping AI parsing, logging only`);
@@ -417,27 +428,14 @@ serve(async (req) => {
       }
 
       // Update causelist status based on type
-      const newStatus = useAi ? 'scanned' : 'scanned_no_ai';
+      const newStatus = useAi ? 'jobs_created' : 'scanned_no_ai';
       await supabase
         .from('raw_causelists')
         .update({ status: newStatus })
         .eq('id', causelist.id);
 
-      // Trigger parse-all-cases ONLY for AI-enabled types
-      if (useAi) {
-        fetch(`${supabaseUrl}/functions/v1/parse-all-cases`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${supabaseServiceKey}`
-          },
-          body: JSON.stringify({ causelist_id: causelist.id })
-        }).then(() => {
-          console.log(`[SCAN-LAWYER-NAMES] Triggered parse-all-cases for ${causelist.id} (${pdfType})`);
-        }).catch(err => console.error('[SCAN-LAWYER-NAMES] Failed to trigger parse-all-cases:', err));
-      } else {
-        console.log(`[SCAN-LAWYER-NAMES] Skipped parse-all-cases for ${pdfType} type`);
-      }
+      // NO LONGER triggering parse-case directly - worker handles it
+      console.log(`[SCAN-LAWYER-NAMES] Causelist ${causelist.id} status: ${newStatus} (AI worker will process jobs)`)
     }
 
     const duration = Date.now() - startTime;
