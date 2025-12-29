@@ -137,6 +137,13 @@ export type Database = {
             referencedRelation: "daily_court_docket"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "case_arguments_docket_id_fkey"
+            columns: ["docket_id"]
+            isOneToOne: false
+            referencedRelation: "user_docket_view"
+            referencedColumns: ["id"]
+          },
         ]
       }
       case_documents: {
@@ -200,6 +207,13 @@ export type Database = {
             columns: ["docket_id"]
             isOneToOne: false
             referencedRelation: "daily_court_docket"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "case_documents_docket_id_fkey"
+            columns: ["docket_id"]
+            isOneToOne: false
+            referencedRelation: "user_docket_view"
             referencedColumns: ["id"]
           },
         ]
@@ -773,6 +787,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "live_courtroom_feed_docket_id_fkey"
+            columns: ["docket_id"]
+            isOneToOne: false
+            referencedRelation: "user_docket_view"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "live_courtroom_feed_sender_id_fkey"
             columns: ["sender_id"]
             isOneToOne: false
@@ -824,6 +845,13 @@ export type Database = {
             columns: ["docket_id"]
             isOneToOne: false
             referencedRelation: "daily_court_docket"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "post_court_notes_docket_id_fkey"
+            columns: ["docket_id"]
+            isOneToOne: false
+            referencedRelation: "user_docket_view"
             referencedColumns: ["id"]
           },
         ]
@@ -954,6 +982,33 @@ export type Database = {
         }
         Relationships: []
       }
+      raw_causelists_archive: {
+        Row: {
+          archived_at: string | null
+          bench: string
+          id: string
+          list_date: string
+          list_type: string
+          text_content: string | null
+        }
+        Insert: {
+          archived_at?: string | null
+          bench: string
+          id: string
+          list_date: string
+          list_type: string
+          text_content?: string | null
+        }
+        Update: {
+          archived_at?: string | null
+          bench?: string
+          id?: string
+          list_date?: string
+          list_type?: string
+          text_content?: string | null
+        }
+        Relationships: []
+      }
       scraper_logs: {
         Row: {
           bench: string
@@ -984,6 +1039,48 @@ export type Database = {
           list_type?: string | null
           run_at?: string | null
           status?: string
+        }
+        Relationships: []
+      }
+      subscriptions: {
+        Row: {
+          cancel_at_period_end: boolean | null
+          created_at: string | null
+          current_period_end: string | null
+          current_period_start: string | null
+          id: string
+          plan_type: string
+          status: string
+          stripe_customer_id: string | null
+          stripe_subscription_id: string | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          cancel_at_period_end?: boolean | null
+          created_at?: string | null
+          current_period_end?: string | null
+          current_period_start?: string | null
+          id?: string
+          plan_type?: string
+          status?: string
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          cancel_at_period_end?: boolean | null
+          created_at?: string | null
+          current_period_end?: string | null
+          current_period_start?: string | null
+          id?: string
+          plan_type?: string
+          status?: string
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          updated_at?: string | null
+          user_id?: string
         }
         Relationships: []
       }
@@ -1020,6 +1117,39 @@ export type Database = {
         }
         Relationships: []
       }
+      token_usage_daily: {
+        Row: {
+          budget_limit: number | null
+          created_at: string | null
+          id: string
+          job_count: number
+          provider: string
+          tokens_used: number
+          updated_at: string | null
+          usage_date: string
+        }
+        Insert: {
+          budget_limit?: number | null
+          created_at?: string | null
+          id?: string
+          job_count?: number
+          provider: string
+          tokens_used?: number
+          updated_at?: string | null
+          usage_date?: string
+        }
+        Update: {
+          budget_limit?: number | null
+          created_at?: string | null
+          id?: string
+          job_count?: number
+          provider?: string
+          tokens_used?: number
+          updated_at?: string | null
+          usage_date?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string | null
@@ -1043,9 +1173,75 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      user_docket_view: {
+        Row: {
+          case_number: string | null
+          court_location: string | null
+          court_room_no: string | null
+          created_at: string | null
+          date: string | null
+          force_active: boolean | null
+          id: string | null
+          item_no: number | null
+          judge_names: string | null
+          list_type: string | null
+          matched_profile_id: string | null
+          petitioner: string | null
+          petitioner_lawyer: string | null
+          respondent: string | null
+          respondent_lawyer: string | null
+          status: string | null
+        }
+        Insert: {
+          case_number?: string | null
+          court_location?: string | null
+          court_room_no?: string | null
+          created_at?: string | null
+          date?: string | null
+          force_active?: boolean | null
+          id?: string | null
+          item_no?: number | null
+          judge_names?: string | null
+          list_type?: string | null
+          matched_profile_id?: string | null
+          petitioner?: string | null
+          petitioner_lawyer?: string | null
+          respondent?: string | null
+          respondent_lawyer?: string | null
+          status?: string | null
+        }
+        Update: {
+          case_number?: string | null
+          court_location?: string | null
+          court_room_no?: string | null
+          created_at?: string | null
+          date?: string | null
+          force_active?: boolean | null
+          id?: string | null
+          item_no?: number | null
+          judge_names?: string | null
+          list_type?: string | null
+          matched_profile_id?: string | null
+          petitioner?: string | null
+          petitioner_lawyer?: string | null
+          respondent?: string | null
+          respondent_lawyer?: string | null
+          status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "daily_court_docket_matched_profile_id_fkey"
+            columns: ["matched_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
+      archive_old_causelists: { Args: never; Returns: number }
+      cleanup_old_scraper_logs: { Args: never; Returns: number }
       generate_case_fingerprint: {
         Args: {
           p_case_number: string
@@ -1059,6 +1255,7 @@ export type Database = {
         Args: { _user_id: string }
         Returns: Database["public"]["Enums"]["app_role"]
       }
+      has_active_subscription: { Args: { p_user_id: string }; Returns: boolean }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
