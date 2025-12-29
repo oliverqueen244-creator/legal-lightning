@@ -130,8 +130,17 @@ serve(async (req) => {
         .update({ status: 'parsing' })
         .eq('id', causelist.id);
 
-      // Call AI to extract all cases
+      // Call AI to extract all cases with HARDENED prompt
       const prompt = `You are a legal document parser. Extract ALL court cases from this Indian High Court causelist.
+
+CRITICAL — COURT ROOM NUMBER EXTRACTION RULES (NON-NEGOTIABLE):
+- Court room numbers ONLY appear in section headers like: "Court No : 3" or "Court No. 12"
+- Numbers appearing at the END of case rows such as: 515, 502, 603, 400-PIL, 2602, 1303, 4200, 4500
+  are CATEGORY CODES, NOT court room numbers.
+- CATEGORY CODES must NEVER be assigned to court_room_no.
+- Valid court_room_no values: 1-2 digit numbers (1-99), or bench identifiers (DB-I, SB-II).
+- A court_room_no with 3 or more digits is ALWAYS WRONG.
+- If no explicit court header exists, set court_room_no to null.
 
 CRITICAL: The causelist is organized by COURT SECTIONS. Each section starts with:
 "Court No : X" followed by judge names (e.g., "Court No : 4" then "HON'BLE MR. JUSTICE VINIT KUMAR MATHUR").
@@ -144,12 +153,12 @@ For court_room_no:
 
 For each case, extract:
 - item_no: The serial/item number (integer) - the S.No. column
-- case_number: Full case number (e.g., "C.M.A. 1693/2004", "S.B. Civil Writ Petition No. 1234/2024")
+- case_number: Full case number (REQUIRED - skip case if missing or empty)
 - petitioner: Petitioner name(s) - first party listed
 - respondent: Respondent name(s) - second party listed
-- petitioner_lawyer: Advocate for petitioner (marked with -P suffix)
-- respondent_lawyer: Advocate for respondent (marked with -R suffix)  
-- court_room_no: The court number from the section header (e.g., "3", "4", "5", NOT "603" or "4200")
+- petitioner_lawyer: Advocate for petitioner (marked with -P suffix, remove suffix in output)
+- respondent_lawyer: Advocate for respondent (marked with -R suffix, remove suffix in output)
+- court_room_no: The court number from the section header (e.g., "3", "4", "5", NEVER "603" or "4200")
 - judge_names: Judge name(s) from the section header
 
 Example structure in causelist:
@@ -162,6 +171,11 @@ HON'BLE MR. JUSTICE VINIT KUMAR MATHUR
                     603"  <-- This 603 is a CATEGORY CODE, not court room!
 
 Correct extraction: court_room_no = "4" (from section header)
+
+VALIDATION BEFORE OUTPUT:
+- case_number MUST NOT be null or empty - skip cases without case_number
+- court_room_no must be null OR a 1-2 digit number OR a bench identifier
+- court_room_no with 3+ digits is INVALID - set to null
 
 Return a JSON array of cases. Example:
 [
@@ -177,7 +191,7 @@ Return a JSON array of cases. Example:
   }
 ]
 
-Extract ALL cases, even partial information. Return ONLY the JSON array, no other text.`;
+Extract ALL cases with valid case_numbers. Return ONLY the JSON array, no other text.`;
 
       try {
         const cases = await callOpenAI(prompt, causelist.text_content);
@@ -185,29 +199,54 @@ Extract ALL cases, even partial information. Return ONLY the JSON array, no othe
         console.log(`[PARSE-ALL-CASES] AI extracted ${cases.length} cases`);
 
         if (cases.length > 0) {
-          // Prepare cases for insertion
-          const casesToInsert = cases.map((c: ParsedCase) => ({
-            date: causelist.list_date,
-            court_location: causelist.bench,
-            list_type: causelist.list_type,
-            item_no: c.item_no || null,
-            case_number: c.case_number || null,
-            petitioner: c.petitioner || null,
-            respondent: c.respondent || null,
-            petitioner_lawyer: c.petitioner_lawyer || null,
-            respondent_lawyer: c.respondent_lawyer || null,
-            court_room_no: c.court_room_no || null,
-            judge_names: c.judge_names || null,
-            source_url: causelist.storage_path,
-            status: 'pending'
-          }));
+          // FIX 8: Validate and prepare cases for insertion
+          const CATEGORY_CODE_PATTERN = /^[0-9]{3,}$/;
+          
+          const validCases = cases.filter((c: ParsedCase) => {
+            // Reject cases without case_number
+            if (!c.case_number || c.case_number.trim() === '') {
+              console.log('[PARSE-ALL-CASES] Rejected: missing case_number');
+              return false;
+            }
+            return true;
+          });
 
-          // Insert in batches of 50
+          const casesToInsert = validCases.map((c: ParsedCase) => {
+            // FIX 8: Reject category codes as court_room_no
+            let validCourtRoomNo: string | null = c.court_room_no || null;
+            if (validCourtRoomNo && CATEGORY_CODE_PATTERN.test(validCourtRoomNo)) {
+              console.log(`[PARSE-ALL-CASES] Fixed category code ${validCourtRoomNo} -> null`);
+              validCourtRoomNo = null;
+            }
+
+            return {
+              date: causelist.list_date,
+              court_location: causelist.bench,
+              list_type: causelist.list_type,
+              item_no: c.item_no || null,
+              case_number: c.case_number,
+              petitioner: c.petitioner || null,
+              respondent: c.respondent || null,
+              petitioner_lawyer: c.petitioner_lawyer || null,
+              respondent_lawyer: c.respondent_lawyer || null,
+              court_room_no: validCourtRoomNo,
+              judge_names: c.judge_names || null,
+              source_url: causelist.storage_path,
+              status: 'pending'
+            };
+          });
+
+          console.log(`[PARSE-ALL-CASES] ${cases.length} parsed, ${validCases.length} valid`);
+
+          // Insert in batches of 50 with conflict handling
           for (let i = 0; i < casesToInsert.length; i += 50) {
             const batch = casesToInsert.slice(i, i + 50);
             const { data: inserted, error: insertError } = await supabase
               .from('daily_court_docket')
-              .insert(batch)
+              .upsert(batch, { 
+                onConflict: 'date,court_location,case_number',
+                ignoreDuplicates: true 
+              })
               .select('id');
 
             if (insertError) {
