@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,6 +8,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Scale, Mail, Lock, User, AlertCircle, FileText } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
+import HiddenAdminPortal from '@/components/admin/HiddenAdminPortal';
 
 export default function Auth() {
   const navigate = useNavigate();
@@ -20,6 +21,31 @@ export default function Auth() {
   const [role, setRole] = useState<'SENIOR' | 'JUNIOR'>('JUNIOR');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  
+  // Hidden admin portal state
+  const [showAdminPortal, setShowAdminPortal] = useState(false);
+  const logoClickCount = useRef(0);
+  const logoClickTimer = useRef<NodeJS.Timeout | null>(null);
+
+  const handleLogoClick = () => {
+    logoClickCount.current += 1;
+    
+    // Reset timer on each click
+    if (logoClickTimer.current) {
+      clearTimeout(logoClickTimer.current);
+    }
+    
+    // Reset count after 3 seconds of no clicks
+    logoClickTimer.current = setTimeout(() => {
+      logoClickCount.current = 0;
+    }, 3000);
+    
+    // Open admin portal after 7 clicks
+    if (logoClickCount.current >= 7) {
+      logoClickCount.current = 0;
+      setShowAdminPortal(true);
+    }
+  };
 
   // Redirect if already authenticated
   useEffect(() => {
@@ -90,7 +116,10 @@ export default function Auth() {
       <Card className="w-full max-w-md border-border">
         <CardHeader className="text-center">
           <div className="flex justify-center mb-4">
-            <Scale className="h-12 w-12 text-primary" />
+            <Scale 
+              className="h-12 w-12 text-primary cursor-pointer hover:scale-110 transition-transform select-none" 
+              onClick={handleLogoClick}
+            />
           </div>
           <CardTitle className="font-display text-2xl">
             {isLogin ? 'Welcome Back' : 'Join Vakalat-OS'}
@@ -241,6 +270,12 @@ export default function Auth() {
           <span className="text-xs text-muted-foreground/70">(Workflows, Features & Accessibility)</span>
         </Link>
       </div>
+
+      {/* Hidden Admin Portal */}
+      <HiddenAdminPortal 
+        isOpen={showAdminPortal} 
+        onClose={() => setShowAdminPortal(false)} 
+      />
     </div>
   );
 }
