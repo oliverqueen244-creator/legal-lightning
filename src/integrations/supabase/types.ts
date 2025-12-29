@@ -402,7 +402,11 @@ export type Database = {
           item_no: number | null
           judge_names: string | null
           list_type: string | null
+          match_confidence: number | null
+          match_method: string | null
           matched_profile_id: string | null
+          matched_role: string | null
+          needs_review: boolean | null
           petitioner: string | null
           petitioner_lawyer: string | null
           respondent: string | null
@@ -423,7 +427,11 @@ export type Database = {
           item_no?: number | null
           judge_names?: string | null
           list_type?: string | null
+          match_confidence?: number | null
+          match_method?: string | null
           matched_profile_id?: string | null
+          matched_role?: string | null
+          needs_review?: boolean | null
           petitioner?: string | null
           petitioner_lawyer?: string | null
           respondent?: string | null
@@ -444,7 +452,11 @@ export type Database = {
           item_no?: number | null
           judge_names?: string | null
           list_type?: string | null
+          match_confidence?: number | null
+          match_method?: string | null
           matched_profile_id?: string | null
+          matched_role?: string | null
+          needs_review?: boolean | null
           petitioner?: string | null
           petitioner_lawyer?: string | null
           respondent?: string | null
