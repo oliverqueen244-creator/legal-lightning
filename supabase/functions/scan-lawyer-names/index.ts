@@ -10,15 +10,25 @@ const corsHeaders = {
  * ACCOUNT-WISE NAME SCAN (CRITICAL)
  * 
  * This function orchestrates PDF text extraction and alias scanning:
- * 1. Check if text extraction is complete
- * 2. If not: trigger chunked extraction via pdf-extract-chunk
- * 3. If complete: search for profile's aliases (case-insensitive string match)
- * 4. If match found: enqueue parsing task
+ * 1. Classify PDF type (DAILY, SUPPLEMENTARY, NOTICE, SEARCH)
+ * 2. Route based on type - AI parsing only for DAILY and SEARCH
+ * 3. Check if text extraction is complete
+ * 4. If not: trigger chunked extraction via pdf-extract-chunk
+ * 5. If complete: search for profile's aliases (case-insensitive string match)
+ * 6. If match found: enqueue parsing task
+ * 
+ * ROUTING LOGIC:
+ * - DAILY: ✅ AI parsing (court-wise)
+ * - SEARCH: ✅ AI parsing (lawyer-wise)
+ * - SUPPLEMENTARY: ❌ No AI (simple extraction only)
+ * - NOTICE: ❌ No AI (skip entirely)
  * 
  * ❌ NO case number extraction
  * ❌ NO party identification
  * ❌ NO inserts to daily_court_docket
  */
+
+type PdfType = 'DAILY' | 'SUPPLEMENTARY' | 'NOTICE' | 'SEARCH' | 'UNKNOWN';
 
 interface ScanRequest {
   profile_id?: string;
@@ -34,6 +44,24 @@ interface ExtractionProgress {
 }
 
 const STALE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+
+// PDF Classification - determines routing for AI usage
+function classifyPdf(text: string, pageCount?: number): PdfType {
+  const upperText = text.toUpperCase();
+  
+  if (upperText.includes('DAILY CAUSE LIST')) return 'DAILY';
+  if (upperText.includes('SUPPLEMENTARY CAUSE LIST')) return 'SUPPLEMENTARY';
+  if (upperText.includes('NOTICE')) return 'NOTICE';
+  if (upperText.includes('SEARCH CAUSELIST')) return 'SEARCH';
+  
+  return 'UNKNOWN';
+}
+
+// Check if PDF type requires AI parsing
+function shouldUseAiParsing(pdfType: PdfType): boolean {
+  // Only DAILY and SEARCH use AI
+  return pdfType === 'DAILY' || pdfType === 'SEARCH';
+}
 
 // Extract causelist date from PDF text content
 function extractCauselistDate(textContent: string): string | null {
@@ -193,8 +221,24 @@ serve(async (req) => {
         continue; // Don't scan yet, wait for extraction
       }
 
-      // Text extraction is complete, proceed with scanning
-      console.log(`[SCAN-LAWYER-NAMES] Text ready: ${textContent.length} chars, scanning for aliases...`);
+      // Text extraction is complete, proceed with classification and scanning
+      console.log(`[SCAN-LAWYER-NAMES] Text ready: ${textContent.length} chars`);
+
+      // STEP 2: CLASSIFY PDF TYPE (CRITICAL ROUTING LOGIC)
+      const pdfType = classifyPdf(textContent, causelist.page_count);
+      const useAi = shouldUseAiParsing(pdfType);
+      
+      console.log(`[SCAN-LAWYER-NAMES] PDF Classification: ${pdfType} | AI Parsing: ${useAi ? '✅ YES' : '❌ NO'}`);
+
+      // Handle NOTICE type - skip entirely
+      if (pdfType === 'NOTICE') {
+        console.log(`[SCAN-LAWYER-NAMES] NOTICE type detected - skipping entirely`);
+        await supabase
+          .from('raw_causelists')
+          .update({ status: 'skipped_notice' })
+          .eq('id', causelist.id);
+        continue;
+      }
 
       // Extract and update date if needed
       const extractedDate = extractCauselistDate(textContent);
@@ -256,43 +300,55 @@ serve(async (req) => {
           totalMatches += matchedAliases.length;
           console.log(`[SCAN-LAWYER-NAMES] Profile ${profile.id}: Found ${matchedAliases.length} matches: ${matchedAliases.join(', ')}`);
 
-          // Enqueue parsing tasks for each matched alias
-          for (const alias of matchedAliases) {
-            const { error: queueError } = await supabase
-              .from('case_parse_queue')
-              .insert({
-                profile_id: profile.id,
-                raw_causelist_id: causelist.id,
-                matched_alias: alias,
-                status: 'pending'
-              });
+          // ROUTING: Only enqueue AI parsing for DAILY and SEARCH types
+          if (useAi) {
+            // Enqueue parsing tasks for each matched alias
+            for (const alias of matchedAliases) {
+              const { error: queueError } = await supabase
+                .from('case_parse_queue')
+                .insert({
+                  profile_id: profile.id,
+                  raw_causelist_id: causelist.id,
+                  matched_alias: alias,
+                  status: 'pending'
+                });
 
-            if (!queueError) {
-              totalEnqueued++;
+              if (!queueError) {
+                totalEnqueued++;
+              }
             }
+            console.log(`[SCAN-LAWYER-NAMES] Enqueued ${matchedAliases.length} AI parsing tasks for ${pdfType}`);
+          } else {
+            // SUPPLEMENTARY: Log match but skip AI parsing
+            console.log(`[SCAN-LAWYER-NAMES] SUPPLEMENTARY match found - skipping AI parsing, logging only`);
           }
         } else {
-          console.log(`[SCAN-LAWYER-NAMES] Profile ${profile.id}: No matches, STOPPING`);
+          console.log(`[SCAN-LAWYER-NAMES] Profile ${profile.id}: No matches`);
         }
       }
 
-      // Update causelist status to scanned
+      // Update causelist status based on type
+      const newStatus = useAi ? 'scanned' : 'scanned_no_ai';
       await supabase
         .from('raw_causelists')
-        .update({ status: 'scanned' })
+        .update({ status: newStatus })
         .eq('id', causelist.id);
 
-      // Trigger parse-all-cases
-      fetch(`${supabaseUrl}/functions/v1/parse-all-cases`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${supabaseServiceKey}`
-        },
-        body: JSON.stringify({ causelist_id: causelist.id })
-      }).then(() => {
-        console.log(`[SCAN-LAWYER-NAMES] Triggered parse-all-cases for ${causelist.id}`);
-      }).catch(err => console.error('[SCAN-LAWYER-NAMES] Failed to trigger parse-all-cases:', err));
+      // Trigger parse-all-cases ONLY for AI-enabled types
+      if (useAi) {
+        fetch(`${supabaseUrl}/functions/v1/parse-all-cases`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${supabaseServiceKey}`
+          },
+          body: JSON.stringify({ causelist_id: causelist.id })
+        }).then(() => {
+          console.log(`[SCAN-LAWYER-NAMES] Triggered parse-all-cases for ${causelist.id} (${pdfType})`);
+        }).catch(err => console.error('[SCAN-LAWYER-NAMES] Failed to trigger parse-all-cases:', err));
+      } else {
+        console.log(`[SCAN-LAWYER-NAMES] Skipped parse-all-cases for ${pdfType} type`);
+      }
     }
 
     const duration = Date.now() - startTime;
