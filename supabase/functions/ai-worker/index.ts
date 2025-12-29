@@ -53,6 +53,16 @@ interface ParsedCase {
   listing_category: string | null;
   petitioner_lawyer: string[];
   respondent_lawyer: string[];
+  advocate_role?: 'petitioner' | 'respondent'; // For SEARCH type
+}
+
+interface CourtOverride {
+  type: 'court_override';
+  court_no: number;
+  from_serial: number;
+  to_serial: number;
+  new_judge: string;
+  effective_date?: string;
 }
 
 serve(async (req) => {
@@ -126,13 +136,18 @@ serve(async (req) => {
       // Process the job
       const result = await processJob(job, supabase);
 
+      // Store result - include overrides for SUPPLEMENTARY/NOTICE
+      const resultData = result.overrides 
+        ? { cases: result.cases, overrides: result.overrides }
+        : result.cases;
+
       // Mark as completed
       await supabase
         .from('ai_jobs')
         .update({
           status: 'completed',
           completed_at: new Date().toISOString(),
-          result: result.cases,
+          result: resultData,
           provider: result.provider,
           tokens_used: result.tokensUsed
         })
@@ -143,12 +158,21 @@ serve(async (req) => {
         await insertParsedCases(supabase, job, result.cases);
       }
 
-      console.log(`[AI-WORKER] Job ${job.id} completed: ${result.cases?.length || 0} cases parsed`);
+      // Log overrides for SUPPLEMENTARY/NOTICE
+      if (result.overrides && result.overrides.length > 0) {
+        console.log(`[AI-WORKER] Job ${job.id} extracted ${result.overrides.length} court overrides`);
+        // TODO: Could store these in a dedicated table for live board updates
+      }
+
+      const itemCount = result.cases?.length || 0;
+      const overrideCount = result.overrides?.length || 0;
+      console.log(`[AI-WORKER] Job ${job.id} completed: ${itemCount} cases, ${overrideCount} overrides`);
 
       return new Response(JSON.stringify({
         success: true,
         job_id: job.id,
-        cases_parsed: result.cases?.length || 0,
+        cases_parsed: itemCount,
+        overrides_extracted: overrideCount,
         provider: result.provider,
         tokens_used: result.tokensUsed,
         duration_ms: Date.now() - startTime
@@ -217,7 +241,7 @@ serve(async (req) => {
   }
 });
 
-async function processJob(job: AiJob, supabase: any): Promise<{ cases: ParsedCase[]; provider: string; tokensUsed: number }> {
+async function processJob(job: AiJob, supabase: any): Promise<{ cases: ParsedCase[]; provider: string; tokensUsed: number; overrides?: CourtOverride[] }> {
   const text = job.payload.court_text || job.payload.full_text;
   
   if (!text) {
@@ -226,10 +250,34 @@ async function processJob(job: AiJob, supabase: any): Promise<{ cases: ParsedCas
 
   const alias = job.payload.alias;
   const courtNo = job.payload.court_no || 'UNKNOWN';
+  const listType = (job.payload as any).list_type || 'DAILY';
 
-  const prompt = buildParsePrompt(text, alias, job.job_type, courtNo);
+  // SUPPLEMENTARY / NOTICE - Rule-based extraction (NO AI)
+  if (listType === 'SUPPLEMENTARY' || listType === 'NOTICE') {
+    console.log(`[AI-WORKER] Processing ${listType} with rule-based extraction`);
+    const overrides = extractCourtOverrides(text);
+    
+    // Store overrides in a separate table or as job result
+    return {
+      cases: [],
+      provider: 'rule_based',
+      tokensUsed: 0,
+      overrides
+    };
+  }
 
-  // Try providers in order
+  // SEARCH - Lawyer-centric prompt
+  if (listType === 'SEARCH') {
+    const prompt = buildSearchPrompt(text, alias);
+    return await callAIProviders(prompt, courtNo, 'search');
+  }
+
+  // DAILY - Full court block parsing (default)
+  const prompt = buildDailyPrompt(text, alias, courtNo);
+  return await callAIProviders(prompt, courtNo, 'daily');
+}
+
+async function callAIProviders(prompt: string, courtNo: string, parseType: 'daily' | 'search'): Promise<{ cases: ParsedCase[]; provider: string; tokensUsed: number }> {
   const providers = [
     { name: 'google', fn: () => callGoogleAI(prompt) },
     { name: 'openai', fn: () => callOpenAI(prompt) },
@@ -244,7 +292,9 @@ async function processJob(job: AiJob, supabase: any): Promise<{ cases: ParsedCas
       const result = await provider.fn();
       
       if (result.success) {
-        const cases = parseAIResponse(result.content, courtNo);
+        const cases = parseType === 'search' 
+          ? parseSearchResponse(result.content, courtNo)
+          : parseAIResponse(result.content, courtNo);
         return {
           cases,
           provider: provider.name,
@@ -255,7 +305,6 @@ async function processJob(job: AiJob, supabase: any): Promise<{ cases: ParsedCas
       lastError = err instanceof Error ? err : new Error(String(err));
       console.log(`[AI-WORKER] Provider ${provider.name} failed: ${lastError.message}`);
       
-      // If rate limited, don't try next provider - schedule retry
       if (lastError.message.includes('rate') || lastError.message.includes('429')) {
         throw lastError;
       }
@@ -265,7 +314,66 @@ async function processJob(job: AiJob, supabase: any): Promise<{ cases: ParsedCas
   throw lastError || new Error('All AI providers failed');
 }
 
-function buildParsePrompt(text: string, alias: string, jobType: string, courtNo: string): string {
+// Rule-based extraction for SUPPLEMENTARY/NOTICE lists
+function extractCourtOverrides(text: string): CourtOverride[] {
+  const overrides: CourtOverride[] = [];
+  
+  // Pattern: "Court No. X ... items Y to Z ... will be taken up by Justice NAME"
+  // Or: "Court No : X ... Serial Nos. Y to Z ... before Justice NAME"
+  const patterns = [
+    /Court\s*No\.?\s*:?\s*(\d+)[\s\S]*?(?:items?|serial\s*nos?\.?)\s*(\d+)\s*(?:to|[-–])\s*(\d+)[\s\S]*?(?:before|by|taken\s*up\s*by)\s*(?:HON['']?BLE\s*)?(?:MR\.?\s*|MRS\.?\s*)?JUSTICE\s+([A-Z][A-Z\s\.]+)/gi,
+    /(?:items?|serial\s*nos?\.?)\s*(\d+)\s*(?:to|[-–])\s*(\d+)[\s\S]*?Court\s*No\.?\s*:?\s*(\d+)[\s\S]*?(?:before|by)\s*(?:HON['']?BLE\s*)?(?:MR\.?\s*|MRS\.?\s*)?JUSTICE\s+([A-Z][A-Z\s\.]+)/gi
+  ];
+
+  for (const pattern of patterns) {
+    let match;
+    while ((match = pattern.exec(text)) !== null) {
+      // Determine which capture groups have court_no and serials
+      const isFirstPattern = match[0].toLowerCase().indexOf('court') < match[0].toLowerCase().indexOf('serial');
+      
+      if (isFirstPattern) {
+        overrides.push({
+          type: 'court_override',
+          court_no: parseInt(match[1]),
+          from_serial: parseInt(match[2]),
+          to_serial: parseInt(match[3]),
+          new_judge: match[4].trim()
+        });
+      } else {
+        overrides.push({
+          type: 'court_override',
+          court_no: parseInt(match[3]),
+          from_serial: parseInt(match[1]),
+          to_serial: parseInt(match[2]),
+          new_judge: match[4].trim()
+        });
+      }
+    }
+  }
+
+  // Also check for simple judge substitution patterns
+  const simplePattern = /Court\s*No\.?\s*:?\s*(\d+)[\s\S]{0,200}?(?:HON['']?BLE\s*)?(?:MR\.?\s*|MRS\.?\s*)?JUSTICE\s+([A-Z][A-Z\s\.]+?)(?:\s*(?:WILL|SHALL))/gi;
+  let simpleMatch;
+  while ((simpleMatch = simplePattern.exec(text)) !== null) {
+    // Only add if we don't already have an override for this court
+    const courtNo = parseInt(simpleMatch[1]);
+    if (!overrides.some(o => o.court_no === courtNo)) {
+      overrides.push({
+        type: 'court_override',
+        court_no: courtNo,
+        from_serial: 1,
+        to_serial: 9999, // All items
+        new_judge: simpleMatch[2].trim()
+      });
+    }
+  }
+
+  console.log(`[AI-WORKER] Extracted ${overrides.length} court overrides`);
+  return overrides;
+}
+
+// PROMPT A - Daily cause list (full court block parsing)
+function buildDailyPrompt(text: string, alias: string, courtNo: string): string {
   return `You are parsing an Indian High Court DAILY CAUSE LIST.
 
 You are given the FULL TEXT for ONE COURT ONLY.
@@ -319,7 +427,52 @@ NO markdown.
 NO commentary.
 
 COURT TEXT:
-${text.substring(0, 50000)}`; // Increased limit for full court block
+${text.substring(0, 50000)}`;
+}
+
+// PROMPT B - Search cause list (lawyer-centric)
+function buildSearchPrompt(text: string, targetAdvocate: string): string {
+  return `You are parsing a FILTERED SEARCH CAUSE LIST for an advocate.
+
+TARGET ADVOCATE: "${targetAdvocate}"
+
+Extract ONLY cases where the target advocate appears.
+
+RULES:
+- Match advocate name exactly (case-insensitive)
+- Determine role using suffix rules:
+  - -P / (P) → petitioner lawyer → advocate_role = "petitioner"
+  - -R / (R) → respondent lawyer → advocate_role = "respondent"
+- Remove the -P / -R suffix from the advocate name in output
+- Extract for each matching case:
+  - court_no (from "Court No : X" header)
+  - item_no (serial number)
+  - case_type (e.g. "D.B.CIV.WR")
+  - case_number (just the number)
+  - year (4 digit)
+  - listing_category (e.g. "FOR ADMISSION")
+  - advocate_role ("petitioner" or "respondent")
+
+OUTPUT FORMAT:
+Return STRICT JSON array:
+[
+  {
+    "court_no": 5,
+    "item_no": 23,
+    "case_type": "S.B.CIV.WR",
+    "case_number": "4567",
+    "year": 2024,
+    "listing_category": "FOR ORDERS",
+    "advocate_role": "petitioner"
+  }
+]
+
+NO explanations.
+NO markdown.
+NO commentary.
+
+SEARCH CAUSELIST TEXT:
+${text.substring(0, 50000)}`;
 }
 
 async function callGoogleAI(prompt: string): Promise<{ success: boolean; content: string; tokensUsed?: number }> {
@@ -422,9 +575,9 @@ async function callOpenRouter(prompt: string): Promise<{ success: boolean; conte
   return { success: true, content, tokensUsed };
 }
 
+// Parse response for DAILY prompt
 function parseAIResponse(content: string, courtNo: string): ParsedCase[] {
   try {
-    // Extract JSON from response
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     if (!jsonMatch) return [];
 
@@ -447,7 +600,35 @@ function parseAIResponse(content: string, courtNo: string): ParsedCase[] {
                          (c.advocate_respondent ? [c.advocate_respondent] : [])
     })).filter((c: ParsedCase) => c.item_no > 0 && (c.case_number || c.case_type));
   } catch (e) {
-    console.error('[AI-WORKER] Failed to parse AI response:', e);
+    console.error('[AI-WORKER] Failed to parse DAILY response:', e);
+    return [];
+  }
+}
+
+// Parse response for SEARCH prompt (lawyer-centric)
+function parseSearchResponse(content: string, defaultCourtNo: string): ParsedCase[] {
+  try {
+    // Search returns an array directly
+    const jsonMatch = content.match(/\[[\s\S]*\]/);
+    if (!jsonMatch) return [];
+
+    const cases = JSON.parse(jsonMatch[0]);
+
+    return cases.map((c: any) => ({
+      court_room_no: parseInt(c.court_no) || parseInt(defaultCourtNo) || 0,
+      item_no: parseInt(c.item_no) || 0,
+      case_type: c.case_type || '',
+      case_number: c.case_number || '',
+      year: parseInt(c.year) || new Date().getFullYear(),
+      petitioner: null,
+      respondent: null,
+      listing_category: c.listing_category || null,
+      petitioner_lawyer: [],
+      respondent_lawyer: [],
+      advocate_role: c.advocate_role || undefined
+    })).filter((c: ParsedCase) => c.item_no > 0 && (c.case_number || c.case_type));
+  } catch (e) {
+    console.error('[AI-WORKER] Failed to parse SEARCH response:', e);
     return [];
   }
 }
