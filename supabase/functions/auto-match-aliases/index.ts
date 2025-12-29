@@ -68,29 +68,38 @@ serve(async (req) => {
     let matchedAlias: string | null = null;
 
     // Check each alias against both petitioner and respondent lawyer names
+    // Only match if the alias appears as a complete name within the lawyer field
     for (const alias of aliases || []) {
       const aliasLower = alias.alias_name.toLowerCase().trim();
       
-      // Check petitioner lawyer
+      // Skip very short aliases (less than 3 chars) to avoid false positives
+      if (aliasLower.length < 3) {
+        continue;
+      }
+      
+      // Check petitioner lawyer - alias must be found within the lawyer string
       if (petitioner_lawyer) {
         const petitionerLower = petitioner_lawyer.toLowerCase().trim();
-        if (petitionerLower.includes(aliasLower) || aliasLower.includes(petitionerLower)) {
+        // Only match if the alias is contained in the petitioner lawyer field
+        // This prevents matching "RAMESH PUROHIT" alias against "D K RANA" 
+        if (petitionerLower.includes(aliasLower)) {
           matchedProfileId = alias.profile_id;
           matchedAs = 'petitioner';
           matchedAlias = alias.alias_name;
-          console.log(`[auto-match-aliases] Matched as petitioner via alias: ${alias.alias_name}`);
+          console.log(`[auto-match-aliases] Matched as petitioner via alias: ${alias.alias_name} in "${petitioner_lawyer}"`);
           break;
         }
       }
       
-      // Check respondent lawyer
+      // Check respondent lawyer - alias must be found within the lawyer string
       if (respondent_lawyer) {
         const respondentLower = respondent_lawyer.toLowerCase().trim();
-        if (respondentLower.includes(aliasLower) || aliasLower.includes(respondentLower)) {
+        // Only match if the alias is contained in the respondent lawyer field
+        if (respondentLower.includes(aliasLower)) {
           matchedProfileId = alias.profile_id;
           matchedAs = 'respondent';
           matchedAlias = alias.alias_name;
-          console.log(`[auto-match-aliases] Matched as respondent via alias: ${alias.alias_name}`);
+          console.log(`[auto-match-aliases] Matched as respondent via alias: ${alias.alias_name} in "${respondent_lawyer}"`);
           break;
         }
       }
