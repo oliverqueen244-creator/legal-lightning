@@ -14,6 +14,60 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_jobs: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          error_message: string | null
+          id: string
+          job_type: string
+          max_retries: number
+          next_retry_at: string | null
+          payload: Json
+          priority: number
+          provider: string | null
+          result: Json | null
+          retries: number
+          started_at: string | null
+          status: string
+          tokens_used: number | null
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          job_type: string
+          max_retries?: number
+          next_retry_at?: string | null
+          payload: Json
+          priority?: number
+          provider?: string | null
+          result?: Json | null
+          retries?: number
+          started_at?: string | null
+          status?: string
+          tokens_used?: number | null
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          job_type?: string
+          max_retries?: number
+          next_retry_at?: string | null
+          payload?: Json
+          priority?: number
+          provider?: string | null
+          result?: Json | null
+          retries?: number
+          started_at?: string | null
+          status?: string
+          tokens_used?: number | null
+        }
+        Relationships: []
+      }
       ai_parse_cache: {
         Row: {
           created_at: string
