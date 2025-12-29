@@ -504,6 +504,42 @@ export type Database = {
         }
         Relationships: []
       }
+      docket_cleanup_log: {
+        Row: {
+          case_number: string | null
+          cleaned_at: string
+          court_location: string | null
+          court_room_no: string | null
+          date: string
+          deleted_docket_id: string
+          id: string
+          original_created_at: string | null
+          reason: string
+        }
+        Insert: {
+          case_number?: string | null
+          cleaned_at?: string
+          court_location?: string | null
+          court_room_no?: string | null
+          date: string
+          deleted_docket_id: string
+          id?: string
+          original_created_at?: string | null
+          reason: string
+        }
+        Update: {
+          case_number?: string | null
+          cleaned_at?: string
+          court_location?: string | null
+          court_room_no?: string | null
+          date?: string
+          deleted_docket_id?: string
+          id?: string
+          original_created_at?: string | null
+          reason?: string
+        }
+        Relationships: []
+      }
       document_annotations: {
         Row: {
           annotation_json: Json

@@ -518,7 +518,16 @@ serve(async (req) => {
 
     const systemPrompt = `You are an expert legal document parser specializing in Indian High Court causelists. 
 Extract case data with extreme accuracy. Pay close attention to lawyer name suffixes and prefixes.
-Return only valid JSON array.`;
+Return only valid JSON array.
+
+CRITICAL — COURT ROOM NUMBER EXTRACTION RULES (NON-NEGOTIABLE):
+- Court room numbers ONLY appear in section headers like: "Court No : 3" or "Court No. 12"
+- Numbers appearing at the END of case rows such as: 515, 502, 603, 400-PIL, 2602, 1303, 4200, 4500
+  are CATEGORY CODES, NOT court room numbers.
+- CATEGORY CODES must NEVER be assigned to court_room_no.
+- Valid court_room_no: single or double digit numbers (1-99), or bench identifiers (DB-I, SB-II).
+- If no explicit court header exists, set court_room_no = null.
+- A court_room_no with 3 or more digits is ALWAYS WRONG.`;
 
     const userPrompt = `Extract all UNIQUE court cases from these causelist excerpts. Each "CASE MENTION" section contains context around where "${queueItem.matched_alias}" appears.
 
@@ -539,13 +548,19 @@ The matched lawyer name should be extracted WITHOUT the -P/-R suffix in the outp
 
 CRITICAL - COURT ROOM NUMBER EXTRACTION:
 - Court room numbers come from section headers like "Court No : 4" or "Court No : 5"
-- DO NOT use trailing 3-4 digit category codes (like 603, 602, 4200) as court room numbers
+- DO NOT use trailing 3-4 digit category codes (like 603, 602, 4200, 515, 502) as court room numbers
 - These trailing codes are case category identifiers, NOT court rooms
+- If you cannot identify a clear court header, set court_room_no to null
+
+VALIDATION BEFORE OUTPUT:
+- case_number MUST NOT be null or empty
+- court_room_no must be null OR a valid 1-2 digit number OR a bench identifier (DB-I, SB-II)
+- court_room_no with 3+ digits is INVALID - reject such cases
 
 For each case containing this lawyer, extract:
-- court_room_no: Court/Bench number from section header (e.g., "4", "5", NOT "603")
+- court_room_no: Court/Bench number from section header (e.g., "4", "5", null if unknown, NEVER "603" or "515")
 - item_no: Serial/Item number (must be an integer)
-- case_number: Full case number exactly as written
+- case_number: Full case number exactly as written (REQUIRED - skip case if missing)
 - petitioner: Petitioner name(s)
 - respondent: Respondent name(s)
 - petitioner_lawyer: Clean lawyer name(s) for petitioner (remove -P suffix)
@@ -558,6 +573,7 @@ IMPORTANT:
 - Extract ONE case per mention section (each "CASE MENTION" marker = one case)
 - If a case number appears in multiple mentions, include it only ONCE
 - Return empty array [] if no valid cases found
+- SKIP any case where case_number is null or empty
 
 Lawyer to find: "${queueItem.matched_alias}"
 Causelist excerpts (mentions ${extraction.startSection + 1}-${extraction.endSection} of ${extraction.totalSections} total):
@@ -621,9 +637,15 @@ ${extraction.text}`;
 
     console.log(`[PARSE-CASE] Parsed ${parsedCases.length} cases for alias ${queueItem.matched_alias}`);
 
-    // Insert cases ONE BY ONE with deduplication
+    // FIX 2: Remove item_no from deduplication - use case identity only
+    // FIX 5: Fail-loud on uniqueness violations
+    // FIX 8: Validate cases before insertion
     let insertedCount = 0;
     let skippedCount = 0;
+    let rejectedCount = 0;
+
+    // Known category codes that should never be court_room_no
+    const CATEGORY_CODE_PATTERN = /^[0-9]{3,}$/;
 
     for (const caseData of parsedCases) {
       if (Date.now() - startTime > TIMEOUT_GUARD_MS) {
@@ -631,29 +653,45 @@ ${extraction.text}`;
         break;
       }
 
-      // Check for duplicates using case_number + date + item_no
+      // FIX 8: VALIDATION - Reject cases with missing case_number
+      if (!caseData.case_number || caseData.case_number.trim() === '') {
+        console.log('[PARSE-CASE] Rejected: missing case_number');
+        rejectedCount++;
+        continue;
+      }
+
+      // FIX 8: VALIDATION - Reject or fix invalid court_room_no (category codes)
+      let validCourtRoomNo: string | null = caseData.court_room_no || null;
+      if (validCourtRoomNo && CATEGORY_CODE_PATTERN.test(validCourtRoomNo)) {
+        console.log(`[PARSE-CASE] Rejected category code as court_room_no: ${validCourtRoomNo}`);
+        validCourtRoomNo = null;
+      }
+
+      // FIX 2: Deduplication uses case identity ONLY (date + court_location + case_number)
+      // item_no is presentation metadata, NOT part of identity
       const { data: existing } = await supabase
         .from('daily_court_docket')
         .select('id')
         .eq('date', causelist.list_date)
         .eq('court_location', causelist.bench)
         .eq('case_number', caseData.case_number)
-        .eq('item_no', caseData.item_no)
-        .single();
+        .maybeSingle();
 
       if (existing) {
+        console.log(`[PARSE-CASE] Skipped duplicate: ${caseData.case_number}`);
         skippedCount++;
         continue;
       }
 
+      // FIX 5: FAIL-LOUD insertion with proper error handling
       const { error: insertError } = await supabase
         .from('daily_court_docket')
         .insert({
           date: causelist.list_date,
           court_location: causelist.bench,
           list_type: causelist.list_type,
-          court_room_no: caseData.court_room_no || 'UNKNOWN',
-          item_no: caseData.item_no || 0,
+          court_room_no: validCourtRoomNo, // May be null if invalid
+          item_no: caseData.item_no || null,
           case_number: caseData.case_number,
           petitioner: caseData.petitioner,
           respondent: caseData.respondent,
@@ -664,8 +702,21 @@ ${extraction.text}`;
           status: 'pending'
         });
 
-      if (!insertError) insertedCount++;
+      if (insertError) {
+        // FIX 5: FAIL-LOUD - Log uniqueness violations explicitly
+        if (insertError.code === '23505') {
+          console.error(`[PARSE-CASE] UNIQUENESS VIOLATION - This is a BUG: ${caseData.case_number}`, insertError.message);
+          skippedCount++;
+        } else {
+          console.error(`[PARSE-CASE] INSERT FAILED: ${caseData.case_number}`, insertError.message);
+          rejectedCount++;
+        }
+      } else {
+        insertedCount++;
+      }
     }
+
+    console.log(`[PARSE-CASE] Results: ${insertedCount} inserted, ${skippedCount} skipped, ${rejectedCount} rejected`);
 
     // Update current queue item as done
     await supabase
