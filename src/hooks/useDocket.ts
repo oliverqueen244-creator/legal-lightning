@@ -26,19 +26,11 @@ export function useDocket() {
         }
       }
 
-      // Fallback: get all items for today (demo mode)
-      const { data, error } = await supabase
-        .from('daily_court_docket')
-        .select('*')
-        .eq('date', new Date().toISOString().split('T')[0])
-        .order('list_type', { ascending: false })
-        .order('item_no', { ascending: true });
-
-      if (error) throw error;
-      return data as DocketItem[];
+      // No demo mode - only show user's own matched cases
+      // Return empty array if no matches found
+      return [] as DocketItem[];
     },
   });
-
   // Subscribe to realtime changes
   useEffect(() => {
     const channel = supabase

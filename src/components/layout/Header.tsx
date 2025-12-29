@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Scale, Calendar, MapPin, LogOut, User, Settings, Download, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -18,6 +18,7 @@ import { NotificationBell } from '@/components/notifications/NotificationBell';
 import { useLiveBoard } from '@/hooks/useLiveBoard';
 import { useDocket } from '@/hooks/useDocket';
 import { supabase } from '@/integrations/supabase/client';
+import { OperationsConsole } from '@/components/admin/OperationsConsole';
 
 type Bench = 'JAIPUR' | 'JODHPUR';
 
@@ -36,6 +37,29 @@ export function Header() {
     displayBench as Bench | 'BOTH'
   );
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
+  
+  // Hidden console state - requires 7 rapid clicks on logo
+  const [showOperationsConsole, setShowOperationsConsole] = useState(false);
+  const clickCountRef = useRef(0);
+  const clickTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
+  const handleLogoClick = () => {
+    clickCountRef.current += 1;
+    
+    // Reset click count after 2 seconds of inactivity
+    if (clickTimeoutRef.current) {
+      clearTimeout(clickTimeoutRef.current);
+    }
+    clickTimeoutRef.current = setTimeout(() => {
+      clickCountRef.current = 0;
+    }, 2000);
+    
+    // Open console after 7 rapid clicks
+    if (clickCountRef.current >= 7) {
+      clickCountRef.current = 0;
+      setShowOperationsConsole(true);
+    }
+  };
 
   // Update selected bench when profile loads
   useEffect(() => {
@@ -115,7 +139,13 @@ export function Header() {
     <header className="border-b border-border glass-card rounded-none sticky top-0 z-40" role="banner">
       <div className="container mx-auto px-4 py-4">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
+          <div 
+            className="flex items-center gap-3 cursor-pointer select-none" 
+            onClick={handleLogoClick}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => { if (e.key === 'Enter') handleLogoClick(); }}
+          >
             <Scale className="h-8 w-8 text-primary" aria-hidden="true" />
             <div>
               <h1 className="font-display text-2xl font-bold text-foreground tracking-wide">
@@ -282,6 +312,12 @@ export function Header() {
           </div>
         </div>
       </div>
+      
+      {/* Hidden Operations Console - activated by 7 clicks on logo */}
+      <OperationsConsole 
+        isOpen={showOperationsConsole} 
+        onClose={() => setShowOperationsConsole(false)} 
+      />
     </header>
   );
 }
