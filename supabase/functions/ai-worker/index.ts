@@ -19,7 +19,7 @@ const corsHeaders = {
 
 // Rate limiting config
 const MIN_JOB_INTERVAL_MS = 3000; // 3 seconds between jobs
-const MAX_TOKENS_PER_HOUR = 100000; // Token budget
+const MAX_TOKENS_PER_HOUR = 250000; // Token budget (increased for larger causelists)
 const RETRY_DELAYS = [60, 300, 900]; // 1min, 5min, 15min
 
 interface AiJob {
