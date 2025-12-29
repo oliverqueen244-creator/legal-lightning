@@ -320,10 +320,8 @@ async function callAIProviders(prompt: string, courtNo: string, parseType: 'dail
     } catch (err) {
       lastError = err instanceof Error ? err : new Error(String(err));
       console.log(`[AI-WORKER] Provider ${provider.name} failed: ${lastError.message}`);
-      
-      if (lastError.message.includes('rate') || lastError.message.includes('429')) {
-        throw lastError;
-      }
+      // Continue to next provider on rate limit - don't throw immediately
+      continue;
     }
   }
 
