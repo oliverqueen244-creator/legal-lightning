@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Scale, Calendar, FileText, Settings, Activity, FileCheck, Database, Gavel } from 'lucide-react';
+import { ArrowLeft, Scale, Calendar, FileText, Settings, Activity, FileCheck, Database, Gavel, Brain } from 'lucide-react';
 import { AuthGuard } from '@/components/layout/AuthGuard';
 import { useAuth } from '@/hooks/useAuth';
 import { DocketManager } from '@/components/admin/DocketManager';
@@ -12,6 +12,7 @@ import { SyncMonitorPanel } from '@/components/admin/SyncMonitorPanel';
 import { DataValidationPanel } from '@/components/admin/DataValidationPanel';
 import { CauseListScraper } from '@/components/admin/CauseListScraper';
 import { JudgmentReferencesManager } from '@/components/admin/JudgmentReferencesManager';
+import { AiJobsMonitor } from '@/components/admin/AiJobsMonitor';
 
 export default function Admin() {
   const navigate = useNavigate();
@@ -76,10 +77,14 @@ export default function Admin() {
         {/* Main Content */}
         <main className="flex-1 container mx-auto px-4 py-6">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-            <TabsList className="grid w-full max-w-5xl grid-cols-7">
+            <TabsList className="grid w-full max-w-6xl grid-cols-8">
               <TabsTrigger value="scraper" className="flex items-center gap-2">
                 <Database className="h-4 w-4" />
                 <span className="hidden sm:inline">Scraper</span>
+              </TabsTrigger>
+              <TabsTrigger value="ai-jobs" className="flex items-center gap-2">
+                <Brain className="h-4 w-4" />
+                <span className="hidden sm:inline">AI Jobs</span>
               </TabsTrigger>
               <TabsTrigger value="docket" className="flex items-center gap-2">
                 <Calendar className="h-4 w-4" />
@@ -109,6 +114,10 @@ export default function Admin() {
 
             <TabsContent value="scraper" className="space-y-4">
               <CauseListScraper />
+            </TabsContent>
+
+            <TabsContent value="ai-jobs" className="space-y-4">
+              <AiJobsMonitor />
             </TabsContent>
 
             <TabsContent value="docket" className="space-y-4">
