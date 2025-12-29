@@ -91,6 +91,59 @@ function isExtractionStalled(progress: ExtractionProgress): boolean {
   return Date.now() - lastUpdated > STALE_TIMEOUT_MS;
 }
 
+// STEP 3: Court-wise split for DAILY causelists (NO AI)
+interface CourtBlock {
+  court_no: string;
+  court_text: string;
+  start_index: number;
+  end_index: number;
+}
+
+function splitByCourtBlocks(text: string): CourtBlock[] {
+  const courtPattern = /Court\s*No\s*[:\.]?\s*(\d+)/gi;
+  const blocks: CourtBlock[] = [];
+  const matches: { index: number; courtNo: string }[] = [];
+  
+  // Find all court number positions
+  let match;
+  while ((match = courtPattern.exec(text)) !== null) {
+    matches.push({
+      index: match.index,
+      courtNo: match[1]
+    });
+  }
+  
+  if (matches.length === 0) {
+    console.log('[COURT-SPLIT] No court blocks found');
+    return [];
+  }
+  
+  console.log(`[COURT-SPLIT] Found ${matches.length} court markers`);
+  
+  // Create blocks from each court marker to the next
+  for (let i = 0; i < matches.length; i++) {
+    const startIndex = matches[i].index;
+    const endIndex = i < matches.length - 1 ? matches[i + 1].index : text.length;
+    const courtText = text.substring(startIndex, endIndex).trim();
+    
+    blocks.push({
+      court_no: matches[i].courtNo,
+      court_text: courtText,
+      start_index: startIndex,
+      end_index: endIndex
+    });
+  }
+  
+  console.log(`[COURT-SPLIT] Created ${blocks.length} court blocks: ${blocks.map(b => `Court ${b.court_no}`).join(', ')}`);
+  return blocks;
+}
+
+// Filter court blocks that contain a lawyer's alias
+function filterCourtBlocksForAlias(blocks: CourtBlock[], alias: string): CourtBlock[] {
+  const aliasLower = alias.toLowerCase().trim();
+  return blocks.filter(block => block.court_text.toLowerCase().includes(aliasLower));
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -250,6 +303,13 @@ serve(async (req) => {
         console.log(`[SCAN-LAWYER-NAMES] Updated causelist date to: ${extractedDate}`);
       }
 
+      // STEP 3: For DAILY type, split by court blocks (NO AI for splitting)
+      let courtBlocks: CourtBlock[] = [];
+      if (pdfType === 'DAILY') {
+        courtBlocks = splitByCourtBlocks(textContent);
+        console.log(`[SCAN-LAWYER-NAMES] DAILY causelist split into ${courtBlocks.length} court blocks`);
+      }
+
       const textLower = textContent.toLowerCase();
 
       // Scan for each profile's aliases
@@ -302,22 +362,51 @@ serve(async (req) => {
 
           // ROUTING: Only enqueue AI parsing for DAILY and SEARCH types
           if (useAi) {
-            // Enqueue parsing tasks for each matched alias
             for (const alias of matchedAliases) {
-              const { error: queueError } = await supabase
-                .from('case_parse_queue')
-                .insert({
-                  profile_id: profile.id,
-                  raw_causelist_id: causelist.id,
-                  matched_alias: alias,
-                  status: 'pending'
-                });
+              if (pdfType === 'DAILY' && courtBlocks.length > 0) {
+                // STEP 3: DAILY - Create ONE AI job per court block containing the alias
+                const relevantBlocks = filterCourtBlocksForAlias(courtBlocks, alias);
+                console.log(`[SCAN-LAWYER-NAMES] Alias "${alias}" found in ${relevantBlocks.length} court blocks`);
+                
+                for (const block of relevantBlocks) {
+                  const { error: queueError } = await supabase
+                    .from('case_parse_queue')
+                    .insert({
+                      profile_id: profile.id,
+                      raw_causelist_id: causelist.id,
+                      matched_alias: alias,
+                      status: 'pending',
+                      // Store court block info for targeted AI parsing
+                      item_range: `court_${block.court_no}`,
+                      page_range: JSON.stringify({
+                        court_no: block.court_no,
+                        court_text: block.court_text,
+                        text_length: block.court_text.length
+                      })
+                    });
 
-              if (!queueError) {
-                totalEnqueued++;
+                  if (!queueError) {
+                    totalEnqueued++;
+                    console.log(`[SCAN-LAWYER-NAMES] Enqueued Court ${block.court_no} for "${alias}" (${block.court_text.length} chars)`);
+                  }
+                }
+              } else {
+                // SEARCH type or fallback - single job for full text
+                const { error: queueError } = await supabase
+                  .from('case_parse_queue')
+                  .insert({
+                    profile_id: profile.id,
+                    raw_causelist_id: causelist.id,
+                    matched_alias: alias,
+                    status: 'pending'
+                  });
+
+                if (!queueError) {
+                  totalEnqueued++;
+                }
               }
             }
-            console.log(`[SCAN-LAWYER-NAMES] Enqueued ${matchedAliases.length} AI parsing tasks for ${pdfType}`);
+            console.log(`[SCAN-LAWYER-NAMES] Enqueued ${totalEnqueued} AI parsing tasks for ${pdfType}`);
           } else {
             // SUPPLEMENTARY: Log match but skip AI parsing
             console.log(`[SCAN-LAWYER-NAMES] SUPPLEMENTARY match found - skipping AI parsing, logging only`);
