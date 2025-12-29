@@ -653,6 +653,18 @@ function determineListType(text: string, fileName: string): string {
   return 'DAILY';
 }
 
+// Enhanced PDF classification based on actual content
+function classifyPdf(text: string, pageCount?: number): 'DAILY' | 'SUPPLEMENTARY' | 'NOTICE' | 'SEARCH' | 'UNKNOWN' {
+  const upperText = text.toUpperCase();
+  
+  if (upperText.includes('DAILY CAUSE LIST')) return 'DAILY';
+  if (upperText.includes('SUPPLEMENTARY CAUSE LIST')) return 'SUPPLEMENTARY';
+  if (upperText.includes('NOTICE')) return 'NOTICE';
+  if (upperText.includes('SEARCH CAUSELIST')) return 'SEARCH';
+  
+  return 'UNKNOWN';
+}
+
 function extractCourtNumber(text: string, fileName: string): string {
   const match = `${text} ${fileName}`.match(/court\s*(?:no\.?|number)?\s*:?\s*(\d+)/i);
   return match ? match[1] : 'ALL';
