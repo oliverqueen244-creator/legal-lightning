@@ -383,8 +383,9 @@ async function callAIWithFallback(
 }
 
 // Configuration for batch processing
-const SECTIONS_PER_BATCH = 10; // Process 10 sections per AI call
-const MAX_CHARS_PER_SECTION = 2500; // Characters of context around each match
+const SECTIONS_PER_BATCH = 20; // Process 20 mentions per AI call
+const CONTEXT_BEFORE = 300; // Characters before the alias match
+const CONTEXT_AFTER = 800; // Characters after (includes case details, next item)
 
 interface TextExtractionResult {
   text: string;
@@ -396,7 +397,7 @@ interface TextExtractionResult {
   nextStartSection: number;
 }
 
-// Optimized text extraction with batch support
+// Extract text around each individual mention WITHOUT merging
 function extractRelevantText(
   textContent: string, 
   alias: string, 
@@ -423,44 +424,31 @@ function extractRelevantText(
     };
   }
 
-  console.log(`[TEXT] Found ${matches.length} occurrences of alias`);
+  console.log(`[TEXT] Found ${matches.length} total occurrences of alias`);
 
-  // Merge overlapping ranges to create sections
-  const CONTEXT_WINDOW = MAX_CHARS_PER_SECTION;
-  const ranges: { start: number; end: number }[] = [];
-
-  for (const pos of matches) {
-    const start = Math.max(0, pos - CONTEXT_WINDOW);
-    const end = Math.min(textContent.length, pos + CONTEXT_WINDOW);
-    
-    const overlapping = ranges.find(r => 
-      (start >= r.start && start <= r.end) || (end >= r.start && end <= r.end)
-    );
-    
-    if (overlapping) {
-      overlapping.start = Math.min(overlapping.start, start);
-      overlapping.end = Math.max(overlapping.end, end);
-    } else {
-      ranges.push({ start, end });
-    }
-  }
-
-  const totalSections = ranges.length;
+  const totalSections = matches.length;
   
-  // Get the batch of sections to process
+  // Get the batch of mentions to process (NO MERGING - each mention is a section)
   const batchEnd = Math.min(batchStart + SECTIONS_PER_BATCH, totalSections);
-  const batchRanges = ranges.slice(batchStart, batchEnd);
-  const excerpts = batchRanges.map(r => textContent.substring(r.start, r.end));
+  const batchMatches = matches.slice(batchStart, batchEnd);
   
-  const result = excerpts.join('\n\n--- NEXT SECTION ---\n\n');
+  // Extract context around each match individually
+  const excerpts = batchMatches.map((pos, idx) => {
+    const start = Math.max(0, pos - CONTEXT_BEFORE);
+    const end = Math.min(textContent.length, pos + CONTEXT_AFTER);
+    const excerpt = textContent.substring(start, end);
+    return `--- CASE MENTION ${batchStart + idx + 1} ---\n${excerpt}`;
+  });
+  
+  const result = excerpts.join('\n\n');
   const hasMore = batchEnd < totalSections;
   
-  console.log(`[TEXT] Batch ${batchStart}-${batchEnd} of ${totalSections} sections, ${result.length} chars extracted`);
+  console.log(`[TEXT] Batch ${batchStart + 1}-${batchEnd} of ${totalSections} mentions, ${result.length} chars extracted, hasMore: ${hasMore}`);
   
   return {
     text: result,
     totalSections,
-    processedSections: batchRanges.length,
+    processedSections: batchMatches.length,
     startSection: batchStart,
     endSection: batchEnd,
     hasMore,
@@ -526,13 +514,13 @@ serve(async (req) => {
     // OPTIMIZED: Extract relevant text in batches
     const extraction = extractRelevantText(textContent, queueItem.matched_alias, batchStart);
 
-    console.log(`[PARSE-CASE] Processing batch: sections ${extraction.startSection}-${extraction.endSection} of ${extraction.totalSections}`);
+    console.log(`[PARSE-CASE] Processing batch: mentions ${extraction.startSection + 1}-${extraction.endSection} of ${extraction.totalSections}`);
 
     const systemPrompt = `You are an expert legal document parser specializing in Indian High Court causelists. 
 Extract case data with extreme accuracy. Pay close attention to lawyer name suffixes and prefixes.
 Return only valid JSON array.`;
 
-    const userPrompt = `Extract all court cases from these causelist excerpts that mention the lawyer name "${queueItem.matched_alias}" (case-insensitive, partial match allowed).
+    const userPrompt = `Extract all UNIQUE court cases from these causelist excerpts. Each "CASE MENTION" section contains context around where "${queueItem.matched_alias}" appears.
 
 CRITICAL - LAWYER NAME FORMAT RULES:
 In Indian causelists, lawyer names often have suffixes or prefixes indicating their role:
@@ -566,9 +554,13 @@ For each case containing this lawyer, extract:
 Return a JSON array. Example:
 [{"court_room_no": "4", "item_no": 33, "case_number": "C.M.A. 1693/2004", "petitioner": "ABC Company", "respondent": "State", "petitioner_lawyer": "John Doe", "respondent_lawyer": "Jane Smith"}]
 
-Return empty array [] if no matching cases found.
+IMPORTANT: 
+- Extract ONE case per mention section (each "CASE MENTION" marker = one case)
+- If a case number appears in multiple mentions, include it only ONCE
+- Return empty array [] if no valid cases found
 
-Causelist excerpts (batch ${extraction.startSection + 1}-${extraction.endSection} of ${extraction.totalSections}):
+Lawyer to find: "${queueItem.matched_alias}"
+Causelist excerpts (mentions ${extraction.startSection + 1}-${extraction.endSection} of ${extraction.totalSections} total):
 ${extraction.text}`;
 
     // Call AI with caching and throttling
