@@ -589,13 +589,58 @@ async function callOpenRouter(prompt: string): Promise<{ success: boolean; conte
   return { success: true, content, tokensUsed };
 }
 
+// Attempt to repair truncated JSON
+function repairTruncatedJson(jsonStr: string): string {
+  let repaired = jsonStr.trim();
+  
+  // Remove trailing incomplete entries (ends with comma, incomplete object)
+  repaired = repaired.replace(/,\s*(\{[^}]*)?$/, '');
+  repaired = repaired.replace(/,\s*"[^"]*$/, '');
+  repaired = repaired.replace(/,\s*$/, '');
+  
+  // Count brackets to determine what's missing
+  const openBrackets = (repaired.match(/\[/g) || []).length;
+  let closeBrackets = (repaired.match(/\]/g) || []).length;
+  const openBraces = (repaired.match(/\{/g) || []).length;
+  let closeBraces = (repaired.match(/\}/g) || []).length;
+  
+  // Add missing closing brackets
+  while (closeBrackets < openBrackets) {
+    repaired += ']';
+    closeBrackets++;
+  }
+  while (closeBraces < openBraces) {
+    repaired += '}';
+    closeBraces++;
+  }
+  
+  return repaired;
+}
+
 // Parse response for DAILY prompt
 function parseAIResponse(content: string, courtNo: string): ParsedCase[] {
   try {
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     if (!jsonMatch) return [];
 
-    const parsed = JSON.parse(jsonMatch[0]);
+    let jsonStr = jsonMatch[0];
+    let parsed;
+    
+    try {
+      parsed = JSON.parse(jsonStr);
+    } catch (parseError) {
+      // Try to repair truncated JSON
+      console.log('[AI-WORKER] Attempting JSON repair...');
+      const repaired = repairTruncatedJson(jsonStr);
+      try {
+        parsed = JSON.parse(repaired);
+        console.log('[AI-WORKER] JSON repair successful');
+      } catch (repairError) {
+        console.error('[AI-WORKER] JSON repair failed:', repairError);
+        return [];
+      }
+    }
+
     const courtNoFromResponse = parsed.court_no || parseInt(courtNo) || 0;
     const cases = parsed.cases || [];
 
