@@ -381,7 +381,8 @@ serve(async (req) => {
                         court_no: block.court_no,
                         court_text: block.court_text,
                         bench: causelist.bench,
-                        list_date: causelist.list_date
+                        list_date: causelist.list_date,
+                        list_type: pdfType
                       },
                       status: 'pending',
                       priority: 0
@@ -406,7 +407,8 @@ serve(async (req) => {
                       alias: alias,
                       full_text: textContent,
                       bench: causelist.bench,
-                      list_date: causelist.list_date
+                      list_date: causelist.list_date,
+                      list_type: pdfType
                     },
                     status: 'pending',
                     priority: 0

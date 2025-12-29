@@ -335,6 +335,59 @@ export type Database = {
         }
         Relationships: []
       }
+      court_overrides: {
+        Row: {
+          court_location: string
+          court_no: string
+          created_at: string
+          expires_at: string | null
+          from_serial: number | null
+          id: string
+          is_active: boolean
+          new_judge: string | null
+          override_date: string
+          override_type: string
+          source_causelist_id: string | null
+          to_serial: number | null
+        }
+        Insert: {
+          court_location: string
+          court_no: string
+          created_at?: string
+          expires_at?: string | null
+          from_serial?: number | null
+          id?: string
+          is_active?: boolean
+          new_judge?: string | null
+          override_date?: string
+          override_type?: string
+          source_causelist_id?: string | null
+          to_serial?: number | null
+        }
+        Update: {
+          court_location?: string
+          court_no?: string
+          created_at?: string
+          expires_at?: string | null
+          from_serial?: number | null
+          id?: string
+          is_active?: boolean
+          new_judge?: string | null
+          override_date?: string
+          override_type?: string
+          source_causelist_id?: string | null
+          to_serial?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "court_overrides_source_causelist_id_fkey"
+            columns: ["source_causelist_id"]
+            isOneToOne: false
+            referencedRelation: "raw_causelists"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       daily_court_docket: {
         Row: {
           case_fingerprint: string | null
