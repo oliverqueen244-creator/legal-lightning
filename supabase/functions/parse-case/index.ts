@@ -456,10 +456,19 @@ function extractRelevantText(
   };
 }
 
+// Timing obfuscation helper
+function randomDelay(minMs = 50, maxMs = 200): Promise<void> {
+  const delay = Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs;
+  return new Promise(resolve => setTimeout(resolve, delay));
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
+  
+  // Add timing obfuscation to prevent timing analysis
+  await randomDelay();
 
   const startTime = Date.now();
   const TIMEOUT_GUARD_MS = 50000;

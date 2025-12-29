@@ -1,11 +1,14 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
+import { useRateLimit } from './useRateLimit';
+import { toast } from 'sonner';
 import type { LawyerAlias } from '@/types/database';
 
 export function useAliases() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const { isLimited, remainingRequests, executeWithLimit } = useRateLimit('aliasEdit');
 
   const { data: aliases = [], isLoading } = useQuery({
     queryKey: ['aliases', user?.id],
@@ -27,19 +30,30 @@ export function useAliases() {
   const addAlias = useMutation({
     mutationFn: async ({ aliasName, isPrimary = false }: { aliasName: string; isPrimary?: boolean }) => {
       if (!user?.id) throw new Error('Not authenticated');
+      
+      // Rate limit check
+      if (isLimited) {
+        toast.error('Too many requests. Please wait a moment.');
+        throw new Error('Rate limited');
+      }
 
-      const { data, error } = await supabase
-        .from('lawyer_aliases')
-        .insert({
-          profile_id: user.id,
-          alias_name: aliasName,
-          is_primary: isPrimary,
-        })
-        .select()
-        .single();
+      const result = await executeWithLimit(async () => {
+        const { data, error } = await supabase
+          .from('lawyer_aliases')
+          .insert({
+            profile_id: user.id,
+            alias_name: aliasName,
+            is_primary: isPrimary,
+          })
+          .select()
+          .single();
 
-      if (error) throw error;
-      return data as LawyerAlias;
+        if (error) throw error;
+        return data as LawyerAlias;
+      });
+
+      if (!result) throw new Error('Rate limited');
+      return result;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['aliases', user?.id] });
@@ -48,12 +62,19 @@ export function useAliases() {
 
   const removeAlias = useMutation({
     mutationFn: async (aliasId: string) => {
-      const { error } = await supabase
-        .from('lawyer_aliases')
-        .delete()
-        .eq('id', aliasId);
+      if (isLimited) {
+        toast.error('Too many requests. Please wait a moment.');
+        throw new Error('Rate limited');
+      }
 
-      if (error) throw error;
+      await executeWithLimit(async () => {
+        const { error } = await supabase
+          .from('lawyer_aliases')
+          .delete()
+          .eq('id', aliasId);
+
+        if (error) throw error;
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['aliases', user?.id] });
@@ -63,20 +84,27 @@ export function useAliases() {
   const setPrimaryAlias = useMutation({
     mutationFn: async (aliasId: string) => {
       if (!user?.id) throw new Error('Not authenticated');
+      
+      if (isLimited) {
+        toast.error('Too many requests. Please wait a moment.');
+        throw new Error('Rate limited');
+      }
 
-      // First, set all aliases to non-primary
-      await supabase
-        .from('lawyer_aliases')
-        .update({ is_primary: false })
-        .eq('profile_id', user.id);
+      await executeWithLimit(async () => {
+        // First, set all aliases to non-primary
+        await supabase
+          .from('lawyer_aliases')
+          .update({ is_primary: false })
+          .eq('profile_id', user.id);
 
-      // Then set the selected one as primary
-      const { error } = await supabase
-        .from('lawyer_aliases')
-        .update({ is_primary: true })
-        .eq('id', aliasId);
+        // Then set the selected one as primary
+        const { error } = await supabase
+          .from('lawyer_aliases')
+          .update({ is_primary: true })
+          .eq('id', aliasId);
 
-      if (error) throw error;
+        if (error) throw error;
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['aliases', user?.id] });
@@ -89,5 +117,7 @@ export function useAliases() {
     addAlias,
     removeAlias,
     setPrimaryAlias,
+    isRateLimited: isLimited,
+    remainingRequests,
   };
 }
