@@ -2,6 +2,8 @@ import { useState, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
+import { useRateLimit } from './useRateLimit';
+import { toast } from 'sonner';
 
 const RECENT_SEARCHES_KEY = 'lawyer-search-recent';
 const MAX_RECENT_SEARCHES = 5;
@@ -9,6 +11,7 @@ const MAX_RECENT_SEARCHES = 5;
 export function useLawyerSearch() {
   const [searchTerm, setSearchTerm] = useState('');
   const today = format(new Date(), 'yyyy-MM-dd');
+  const { isLimited, remainingRequests, checkAndRecord } = useRateLimit('search');
 
   const { data: results, isLoading, refetch, isFetched } = useQuery({
     queryKey: ['lawyer-search', searchTerm, today],
@@ -31,6 +34,13 @@ export function useLawyerSearch() {
 
   const search = useCallback(async (term: string) => {
     if (!term.trim()) return;
+    
+    // Rate limit check
+    if (!checkAndRecord()) {
+      toast.error('Too many searches. Please wait a moment.');
+      return;
+    }
+    
     setSearchTerm(term.trim());
     
     // Save to recent searches
@@ -41,7 +51,7 @@ export function useLawyerSearch() {
     
     // Wait for state update then refetch
     setTimeout(() => refetch(), 0);
-  }, [refetch]);
+  }, [refetch, checkAndRecord]);
 
   const getRecentSearches = (): string[] => {
     try {
@@ -76,5 +86,7 @@ export function useLawyerSearch() {
     getRecentSearches,
     clearRecentSearches,
     getMatchedSide,
+    isRateLimited: isLimited,
+    remainingSearches: remainingRequests,
   };
 }
