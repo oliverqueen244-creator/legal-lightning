@@ -8,6 +8,7 @@ import ControlDeck from "./pages/ControlDeck";
 import Auth from "./pages/Auth";
 import Admin from "./pages/Admin";
 import Documentation from "./pages/Documentation";
+import ProductDossier from "./pages/ProductDossier";
 import Onboarding from "./pages/Onboarding";
 import NotFound from "./pages/NotFound";
 import CourtroomMode from "./pages/CourtroomMode";
@@ -29,6 +30,7 @@ const App = () => (
           <Route path="/auth" element={<Auth />} />
           <Route path="/onboarding" element={<Onboarding />} />
           <Route path="/docs" element={<Documentation />} />
+          <Route path="/dossier" element={<ProductDossier />} />
           <Route path="/admin" element={<Admin />} />
           <Route path="/war-room/:caseId" element={<WarRoom />} />
           <Route path="/control-deck/:caseId" element={<ControlDeck />} />
