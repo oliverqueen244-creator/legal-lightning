@@ -53,3 +53,6 @@ verify_jwt = false
 
 [functions.ai-worker]
 verify_jwt = false
+
+[functions.escalate-whatsapp]
+verify_jwt = true
