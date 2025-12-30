@@ -15,6 +15,7 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { NetworkStatusPill } from './NetworkStatusPill';
 import { NotificationBell } from '@/components/notifications/NotificationBell';
+import { CourtModeBadge } from '@/components/court-mode/CourtModeBadge';
 import { useLiveBoard } from '@/hooks/useLiveBoard';
 import { useDocket } from '@/hooks/useDocket';
 import { supabase } from '@/integrations/supabase/client';
@@ -225,6 +226,9 @@ export function Header() {
                 {formatLastSync()}
               </Badge>
             </div>
+
+            {/* Court Mode Badge */}
+            <CourtModeBadge />
 
             {/* Network Status Pill */}
             <NetworkStatusPill />

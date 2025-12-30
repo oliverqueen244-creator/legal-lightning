@@ -349,6 +349,42 @@ export type Database = {
         }
         Relationships: []
       }
+      court_mode_settings: {
+        Row: {
+          court_mode_bench: string | null
+          court_mode_enabled: boolean
+          court_mode_end: string
+          court_mode_start: string
+          created_at: string
+          id: string
+          updated_at: string
+          user_id: string
+          whatsapp_escalation_enabled: boolean
+        }
+        Insert: {
+          court_mode_bench?: string | null
+          court_mode_enabled?: boolean
+          court_mode_end?: string
+          court_mode_start?: string
+          created_at?: string
+          id?: string
+          updated_at?: string
+          user_id: string
+          whatsapp_escalation_enabled?: boolean
+        }
+        Update: {
+          court_mode_bench?: string | null
+          court_mode_enabled?: boolean
+          court_mode_end?: string
+          court_mode_start?: string
+          created_at?: string
+          id?: string
+          updated_at?: string
+          user_id?: string
+          whatsapp_escalation_enabled?: boolean
+        }
+        Relationships: []
+      }
       court_overrides: {
         Row: {
           court_location: string
@@ -798,6 +834,110 @@ export type Database = {
             columns: ["sender_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notification_escalations: {
+        Row: {
+          attempted_at: string
+          case_fingerprint: string | null
+          channel: string
+          error_message: string | null
+          escalation_date: string
+          id: string
+          notification_id: string
+          status: string
+          user_id: string
+        }
+        Insert: {
+          attempted_at?: string
+          case_fingerprint?: string | null
+          channel: string
+          error_message?: string | null
+          escalation_date?: string
+          id?: string
+          notification_id: string
+          status: string
+          user_id: string
+        }
+        Update: {
+          attempted_at?: string
+          case_fingerprint?: string | null
+          channel?: string
+          error_message?: string | null
+          escalation_date?: string
+          id?: string
+          notification_id?: string
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_escalations_notification_id_fkey"
+            columns: ["notification_id"]
+            isOneToOne: false
+            referencedRelation: "notifications"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notifications: {
+        Row: {
+          acknowledged_at: string | null
+          created_at: string
+          docket_id: string | null
+          id: string
+          item_distance: number | null
+          message: string
+          notification_type: string
+          severity: string
+          status: string
+          threshold_crossed: string | null
+          title: string
+          user_id: string
+        }
+        Insert: {
+          acknowledged_at?: string | null
+          created_at?: string
+          docket_id?: string | null
+          id?: string
+          item_distance?: number | null
+          message: string
+          notification_type: string
+          severity: string
+          status?: string
+          threshold_crossed?: string | null
+          title: string
+          user_id: string
+        }
+        Update: {
+          acknowledged_at?: string | null
+          created_at?: string
+          docket_id?: string | null
+          id?: string
+          item_distance?: number | null
+          message?: string
+          notification_type?: string
+          severity?: string
+          status?: string
+          threshold_crossed?: string | null
+          title?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_docket_id_fkey"
+            columns: ["docket_id"]
+            isOneToOne: false
+            referencedRelation: "daily_court_docket"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_docket_id_fkey"
+            columns: ["docket_id"]
+            isOneToOne: false
+            referencedRelation: "user_docket_view"
             referencedColumns: ["id"]
           },
         ]
