@@ -122,7 +122,7 @@ export default function Auth() {
             />
           </div>
           <CardTitle className="font-display text-2xl">
-            {isLogin ? 'Welcome Back' : 'Join Vakalat-OS'}
+            {isLogin ? 'Welcome Back' : 'Join Nyay Hub'}
           </CardTitle>
           <CardDescription>
             {isLogin 

@@ -69,7 +69,7 @@ export function CourtModeSettings({ open, onOpenChange }: CourtModeSettingsProps
               Court Mode Settings
             </DialogTitle>
             <DialogDescription>
-              Configure how Vakalat-OS alerts you during court hours
+              Configure how Nyay Hub alerts you during court hours
             </DialogDescription>
           </DialogHeader>
 
@@ -189,7 +189,7 @@ export function CourtModeSettings({ open, onOpenChange }: CourtModeSettingsProps
               Court Mode helps you avoid missing court-critical situations.
             </p>
             <p className="text-sm leading-relaxed">
-              During court hours, Vakalat-OS may escalate urgent alerts through 
+              During court hours, Nyay Hub may escalate urgent alerts through 
               additional channels if they are not acknowledged in time.
             </p>
             <p className="text-sm leading-relaxed font-medium">

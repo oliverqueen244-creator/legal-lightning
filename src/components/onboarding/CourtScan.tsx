@@ -130,9 +130,9 @@ export default function CourtScan({ bench }: CourtScanProps) {
   };
 
   const handleReportIssue = () => {
-    const subject = encodeURIComponent('Vakalat-OS: Case Matching Issue');
+    const subject = encodeURIComponent('Nyay Hub: Case Matching Issue');
     const body = encodeURIComponent(`
-Hi Vakalat-OS Support,
+Hi Nyay Hub Support,
 
 I was unable to find my cases during the court scan.
 
@@ -146,7 +146,7 @@ Please help me manually link my cases.
 Thank you.
     `.trim());
     
-    window.open(`mailto:support@vakalat.com?subject=${subject}&body=${body}`, '_blank');
+    window.open(`mailto:support@nyayhub.com?subject=${subject}&body=${body}`, '_blank');
     toast.info('Opening email client to report issue');
   };
 
