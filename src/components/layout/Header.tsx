@@ -298,15 +298,6 @@ export function Header() {
                   </>
                 )}
                 <DropdownMenuSeparator />
-                <DropdownMenuItem 
-                  onClick={() => navigate('/documentation#download')} 
-                  className="min-h-touch"
-                  aria-label="Download complete portal source code"
-                >
-                  <Download className="h-4 w-4 mr-2" aria-hidden="true" />
-                  Download Source Code
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleSignOut} className="text-destructive min-h-touch">
                   <LogOut className="h-4 w-4 mr-2" aria-hidden="true" />
                   Sign Out
