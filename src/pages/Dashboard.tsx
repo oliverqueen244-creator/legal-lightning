@@ -32,7 +32,7 @@ export default function Dashboard() {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const { data: docket, isLoading: docketLoading, refetch } = useDocket();
   const { data: liveBoards, isLoading: liveBoardLoading } = useLiveBoard();
-  const { role, profile } = useAuth();
+  const { role, profile, isAdmin } = useAuth();
   const { data: morningBrief, isLoading: briefLoading, refetch: refetchBrief } = useMorningBrief();
   const { data: pendingCaptures } = usePendingCaptures();
   const { data: upcomingCases, isLoading: upcomingLoading } = useUpcomingCases();
@@ -127,45 +127,39 @@ export default function Dashboard() {
               </div>
               
               <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-                <TabsList className="grid w-full grid-cols-5 mb-4">
-                  <TabsTrigger value="brief" className="flex items-center gap-2">
-                    <Sun className="h-3 w-3" />
-                    Today
+                <TabsList className="grid w-full grid-cols-5 gap-1 mb-4 h-auto p-1.5">
+                  <TabsTrigger value="brief" className="flex items-center gap-1.5 px-2 py-2 text-xs sm:text-sm">
+                    <Sun className="h-3 w-3 shrink-0" />
+                    <span className="hidden xs:inline">Brief</span>
                     {morningBrief && morningBrief.summary.high_risk_count > 0 && (
-                      <Badge variant="danger" className="ml-1 h-5 w-5 p-0 flex items-center justify-center text-xs">
+                      <span className="h-4 w-4 rounded-full bg-destructive text-destructive-foreground text-[10px] flex items-center justify-center font-medium">
                         {morningBrief.summary.high_risk_count}
-                      </Badge>
+                      </span>
                     )}
                   </TabsTrigger>
-                  <TabsTrigger value="daily" className="flex items-center gap-2">
-                    <div className="h-2 w-2 rounded-full bg-primary" />
-                    Daily
-                    <Badge variant="secondary" className="ml-1">
+                  <TabsTrigger value="daily" className="flex items-center gap-1.5 px-2 py-2 text-xs sm:text-sm">
+                    <div className="h-2 w-2 rounded-full bg-primary shrink-0" />
+                    <span className="hidden xs:inline">Cases</span>
+                    <span className="text-muted-foreground text-[10px]">
                       {dailyItems.length}
-                    </Badge>
+                    </span>
                   </TabsTrigger>
-                  <TabsTrigger value="supplementary" className="flex items-center gap-2">
-                    <div className="h-2 w-2 rounded-full bg-court-warning animate-pulse" />
-                    Urgent
+                  <TabsTrigger value="supplementary" className="flex items-center gap-1.5 px-2 py-2 text-xs sm:text-sm">
+                    <div className="h-2 w-2 rounded-full bg-court-warning shrink-0" />
+                    <span className="hidden xs:inline">Urgent</span>
                     {supplementaryItems.length > 0 && (
-                      <Badge variant="danger" className="ml-1 flex items-center gap-1">
-                        <AlertCircle className="h-3 w-3" />
+                      <span className="h-4 w-4 rounded-full bg-destructive text-destructive-foreground text-[10px] flex items-center justify-center font-medium">
                         {supplementaryItems.length}
-                      </Badge>
+                      </span>
                     )}
                   </TabsTrigger>
-                  <TabsTrigger value="upcoming" className="flex items-center gap-2">
-                    <Calendar className="h-3 w-3" />
-                    Upcoming
-                    {filteredUpcoming.length > 0 && (
-                      <Badge variant="secondary" className="ml-1">
-                        {filteredUpcoming.length}
-                      </Badge>
-                    )}
+                  <TabsTrigger value="upcoming" className="flex items-center gap-1.5 px-2 py-2 text-xs sm:text-sm">
+                    <Calendar className="h-3 w-3 shrink-0" />
+                    <span className="hidden xs:inline">Later</span>
                   </TabsTrigger>
-                  <TabsTrigger value="search" className="flex items-center gap-2">
-                    <Search className="h-3 w-3" />
-                    Find
+                  <TabsTrigger value="search" className="flex items-center gap-1.5 px-2 py-2 text-xs sm:text-sm">
+                    <Search className="h-3 w-3 shrink-0" />
+                    <span className="hidden xs:inline">Find</span>
                   </TabsTrigger>
                 </TabsList>
 
@@ -217,13 +211,15 @@ export default function Dashboard() {
 
                 <TabsContent value="supplementary" className="space-y-3 mt-0">
                   <div className="flex items-center gap-2 mb-2">
-                    <div className="h-3 w-3 rounded-full bg-court-warning animate-pulse" />
+                    <div className="h-3 w-3 rounded-full bg-court-warning" />
                     <h2 className="font-display text-lg font-semibold text-court-warning tracking-wide">
                       Supplementary List
                     </h2>
-                    <Badge variant="supplementary" className="ml-2">
-                      🔴 URGENT
-                    </Badge>
+                    {supplementaryItems.length > 0 && (
+                      <Badge variant="supplementary" className="ml-2">
+                        URGENT
+                      </Badge>
+                    )}
                   </div>
                   <p className="text-xs text-muted-foreground mb-4">
                     ⚡ Supplementary lists move faster! Panic alerts trigger at 10 items away.
@@ -346,8 +342,8 @@ export default function Dashboard() {
                 {/* Court Metadata Widget - Shows active courts */}
                 <CourtMetadataWidget bench={profile?.bench || undefined} />
                 
-                {/* Live Board Simulator for testing */}
-                <LiveBoardSimulator liveBoards={filteredLiveBoards} />
+                {/* Live Board Simulator - Admin Only */}
+                {isAdmin && <LiveBoardSimulator liveBoards={filteredLiveBoards} />}
               </div>
             </div>
           </div>

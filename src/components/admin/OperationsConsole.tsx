@@ -142,7 +142,7 @@ export function OperationsConsole({ isOpen, onClose }: OperationsConsoleProps) {
       case 'completed':
         return <Badge className="bg-green-500/20 text-green-400 border-green-500/30"><CheckCircle2 className="w-3 h-3 mr-1" />Done</Badge>;
       case 'processing':
-        return <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30 animate-pulse"><Loader2 className="w-3 h-3 mr-1 animate-spin" />Processing</Badge>;
+        return <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30"><Loader2 className="w-3 h-3 mr-1 animate-spin" />Processing</Badge>;
       case 'pending':
         return <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30"><Clock className="w-3 h-3 mr-1" />Pending</Badge>;
       case 'failed':
@@ -199,8 +199,13 @@ export function OperationsConsole({ isOpen, onClose }: OperationsConsoleProps) {
               <Activity className="h-5 w-5 text-primary" />
             </div>
             <div>
-              <CardTitle className="text-lg">Operations Console</CardTitle>
-              <p className="text-xs text-muted-foreground">System internals - Admin only</p>
+              <CardTitle className="text-lg flex items-center gap-2">
+                Operations Console
+                <Badge variant="outline" className="text-[10px] border-destructive/50 text-destructive bg-destructive/10">
+                  ADMIN
+                </Badge>
+              </CardTitle>
+              <p className="text-xs text-muted-foreground">Internal system controls</p>
             </div>
           </div>
           <Button variant="ghost" size="icon" onClick={onClose}>

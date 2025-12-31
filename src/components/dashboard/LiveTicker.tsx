@@ -76,7 +76,7 @@ export function LiveTicker({ liveBoards }: LiveTickerProps) {
                       'text-destructive'
                     }`} />
                     {courtHealth?.status === 'live' && (
-                      <span className="absolute -top-1 -right-1 h-2 w-2 bg-court-success rounded-full animate-ping" />
+                      <span className="absolute -top-1 -right-1 h-2 w-2 bg-court-success rounded-full" />
                     )}
                   </div>
                   <div>
