@@ -6,8 +6,27 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Input validation
+const VALID_BENCHES = ['JAIPUR', 'JODHPUR'] as const;
+type ValidBench = typeof VALID_BENCHES[number];
+
+function isValidBench(bench: unknown): bench is ValidBench {
+  return typeof bench === 'string' && VALID_BENCHES.includes(bench as ValidBench);
+}
+
+function isValidDate(date: unknown): date is string {
+  if (date === undefined || date === null) return true; // Optional
+  if (typeof date !== 'string') return false;
+  // Validate YYYY-MM-DD format
+  const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+  if (!dateRegex.test(date)) return false;
+  // Validate it's a real date
+  const parsed = new Date(date);
+  return !isNaN(parsed.getTime()) && date === parsed.toISOString().split('T')[0];
+}
+
 interface ScrapeRequest {
-  bench: 'JAIPUR' | 'JODHPUR';
+  bench: ValidBench;
   date?: string;
 }
 
@@ -44,7 +63,33 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const { bench, date } = await req.json() as ScrapeRequest;
+    const body = await req.json();
+    const { bench, date } = body;
+
+    // Validate bench
+    if (!isValidBench(bench)) {
+      console.error(`[SCRAPER] Invalid bench: ${bench}`);
+      return new Response(JSON.stringify({
+        success: false,
+        error: `Invalid bench. Must be one of: ${VALID_BENCHES.join(', ')}`
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    // Validate date format
+    if (!isValidDate(date)) {
+      console.error(`[SCRAPER] Invalid date format: ${date}`);
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'Invalid date format. Must be YYYY-MM-DD'
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
     const targetDate = date || new Date().toISOString().split('T')[0];
 
     console.log(`[SCRAPER] Starting scrape for ${bench} bench, date: ${targetDate}`);

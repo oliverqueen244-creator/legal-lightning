@@ -6,6 +6,29 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Input validation
+const VALID_ACTIONS = ['increment', 'toggle_supplementary', 'get_status'] as const;
+const VALID_COURT_LOCATIONS = ['JAIPUR', 'JODHPUR'] as const;
+
+type ValidAction = typeof VALID_ACTIONS[number];
+type ValidCourtLocation = typeof VALID_COURT_LOCATIONS[number];
+
+function isValidAction(action: unknown): action is ValidAction {
+  return typeof action === 'string' && VALID_ACTIONS.includes(action as ValidAction);
+}
+
+function isValidCourtLocation(location: unknown): location is ValidCourtLocation {
+  return typeof location === 'string' && VALID_COURT_LOCATIONS.includes(location as ValidCourtLocation);
+}
+
+function isValidCourtNo(courtNo: unknown): courtNo is string {
+  return typeof courtNo === 'string' && courtNo.length > 0 && courtNo.length <= 10 && /^[A-Za-z0-9\-]+$/.test(courtNo);
+}
+
+function isValidIncrement(increment: unknown): increment is number {
+  return increment === undefined || (typeof increment === 'number' && Number.isInteger(increment) && increment >= 1 && increment <= 100);
+}
+
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
@@ -17,7 +40,47 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const { action, court_location, court_no, increment } = await req.json();
+    const body = await req.json();
+    const { action, court_location, court_no, increment } = body;
+
+    // Validate action
+    if (!isValidAction(action)) {
+      console.error(`[simulate-live-board] Invalid action: ${action}`);
+      return new Response(
+        JSON.stringify({ error: `Invalid action. Must be one of: ${VALID_ACTIONS.join(', ')}` }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Validate court_location and court_no for actions that need them
+    if (action !== 'get_status') {
+      if (!isValidCourtLocation(court_location)) {
+        console.error(`[simulate-live-board] Invalid court_location: ${court_location}`);
+        return new Response(
+          JSON.stringify({ error: `Invalid court_location. Must be one of: ${VALID_COURT_LOCATIONS.join(', ')}` }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      if (!isValidCourtNo(court_no)) {
+        console.error(`[simulate-live-board] Invalid court_no: ${court_no}`);
+        return new Response(
+          JSON.stringify({ error: 'Invalid court_no. Must be a non-empty alphanumeric string (max 10 chars)' }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
+    // Validate increment for increment action
+    if (action === 'increment' && !isValidIncrement(increment)) {
+      console.error(`[simulate-live-board] Invalid increment: ${increment}`);
+      return new Response(
+        JSON.stringify({ error: 'Invalid increment. Must be an integer between 1 and 100' }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    console.log(`[simulate-live-board] Action: ${action}, Location: ${court_location}, Court: ${court_no}`);
 
     if (action === "increment") {
       // Increment current item by specified amount (default 1)
