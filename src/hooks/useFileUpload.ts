@@ -24,17 +24,21 @@ export function useFileUpload(docketId: string) {
 
       if (uploadError) throw uploadError;
 
-      // Get public URL
-      const { data: { publicUrl } } = supabase.storage
+      // Get signed URL (1 hour expiration) instead of public URL
+      // The bucket is now private for security
+      const { data: signedUrlData, error: signedUrlError } = await supabase.storage
         .from('case-documents')
-        .getPublicUrl(fileName);
+        .createSignedUrl(fileName, 3600); // 1 hour expiration
+
+      if (signedUrlError) throw signedUrlError;
 
       // Insert record into case_documents table
+      // Store the path, not the signed URL (signed URLs expire)
       const { error: insertError } = await supabase
         .from('case_documents')
         .insert({
           docket_id: docketId,
-          file_url: publicUrl,
+          file_url: fileName, // Store path, generate signed URL when needed
           doc_type: file.type,
         });
 
@@ -42,10 +46,10 @@ export function useFileUpload(docketId: string) {
 
       setProgress(100);
       toast.success(`${file.name} uploaded successfully`);
-      return { url: publicUrl, error: null };
+      return { url: signedUrlData.signedUrl, path: fileName, error: null };
     } catch (error: any) {
       toast.error(`Failed to upload: ${error.message}`);
-      return { url: null, error };
+      return { url: null, path: null, error };
     } finally {
       setUploading(false);
     }
@@ -60,10 +64,24 @@ export function useFileUpload(docketId: string) {
     return results;
   };
 
+  // Helper function to get a fresh signed URL for a stored file path
+  const getSignedUrl = async (filePath: string, expiresIn: number = 3600) => {
+    const { data, error } = await supabase.storage
+      .from('case-documents')
+      .createSignedUrl(filePath, expiresIn);
+    
+    if (error) {
+      console.error('Failed to get signed URL:', error);
+      return null;
+    }
+    return data.signedUrl;
+  };
+
   return {
     uploadFile,
     uploadFiles,
     uploading,
     progress,
+    getSignedUrl,
   };
 }

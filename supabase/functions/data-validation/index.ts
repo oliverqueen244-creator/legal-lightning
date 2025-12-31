@@ -6,6 +6,14 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Input validation
+const VALID_ACTIONS = ['validate_all', 'validate_causelist', 'validate_live_board', 'cross_validate', 'get_logs'] as const;
+type ValidAction = typeof VALID_ACTIONS[number];
+
+function isValidAction(action: unknown): action is ValidAction {
+  return typeof action === 'string' && VALID_ACTIONS.includes(action as ValidAction);
+}
+
 interface ValidationResult {
   type: string;
   status: 'pass' | 'warning' | 'fail';
@@ -23,7 +31,18 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { action } = await req.json();
+    const body = await req.json();
+    const { action } = body;
+
+    // Validate action
+    if (!isValidAction(action)) {
+      console.error(`[data-validation] Invalid action: ${action}`);
+      return new Response(
+        JSON.stringify({ error: `Invalid action. Must be one of: ${VALID_ACTIONS.join(', ')}` }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     console.log(`[data-validation] Action: ${action}`);
 
     const results: ValidationResult[] = [];
