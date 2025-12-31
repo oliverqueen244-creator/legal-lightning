@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Scale, Mail, Lock, User, AlertCircle, FileText } from 'lucide-react';
+import { Scale, Mail, Lock, User, AlertCircle } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 import HiddenAdminPortal from '@/components/admin/HiddenAdminPortal';
@@ -258,18 +258,6 @@ export default function Auth() {
           </div>
         </CardContent>
       </Card>
-
-      {/* Documentation Links */}
-      <div className="mt-6 text-center">
-        <Link 
-          to="/docs" 
-          className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors group"
-        >
-          <FileText className="h-4 w-4 group-hover:text-primary transition-colors" aria-hidden="true" />
-          <span>View Documentation</span>
-          <span className="text-xs text-muted-foreground/70">(Workflows, Features & Accessibility)</span>
-        </Link>
-      </div>
 
       {/* Hidden Admin Portal */}
       <HiddenAdminPortal 
