@@ -16,7 +16,7 @@ const buttonVariants = cva(
         ghost: "hover:bg-accent hover:text-accent-foreground",
         link: "text-primary underline-offset-4 hover:underline",
         gold: "bg-primary text-primary-foreground font-semibold hover:bg-primary/90 shadow-[0_0_15px_hsl(48_97%_54%/0.3)] hover:shadow-[0_0_25px_hsl(48_97%_54%/0.5)]",
-        danger: "bg-court-danger-light text-foreground font-semibold hover:bg-court-danger-light/90 animate-pulse-ring",
+        danger: "bg-court-danger-light text-foreground font-semibold hover:bg-court-danger-light/90 border-2 border-court-danger-light",
         court: "bg-court-slate-700 text-foreground border border-court-slate-700 hover:border-primary hover:bg-court-slate-800",
         whisper: "bg-background border-2 border-primary text-primary font-semibold hover:bg-primary hover:text-primary-foreground transition-all duration-200",
       },

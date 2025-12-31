@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Scale, Mail, Lock, User, AlertCircle } from 'lucide-react';
+import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 import HiddenAdminPortal from '@/components/admin/HiddenAdminPortal';
@@ -238,7 +239,14 @@ export default function Auth() {
               className="w-full"
               disabled={submitting}
             >
-              {submitting ? 'Please wait...' : isLogin ? 'Sign In' : 'Create Account'}
+              {submitting ? (
+                <>
+                  <LoadingSpinner className="mr-2" />
+                  {isLogin ? 'Signing in...' : 'Creating account...'}
+                </>
+              ) : (
+                isLogin ? 'Sign In' : 'Create Account'
+              )}
             </Button>
           </form>
 
