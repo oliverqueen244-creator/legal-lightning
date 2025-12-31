@@ -150,7 +150,7 @@ export function Header() {
             <Scale className="h-8 w-8 text-primary" aria-hidden="true" />
             <div>
               <h1 className="font-display text-2xl font-bold text-foreground tracking-wide">
-                Vakalat-OS
+                Nyay Hub
               </h1>
               <p className="text-sm text-muted-foreground">
                 Rajasthan High Court
