@@ -36,12 +36,12 @@ function JudgeIntelligenceDisclaimer() {
     <div 
       className="flex items-start gap-2 px-3 py-2 rounded-md bg-muted/50 border border-border/50 text-muted-foreground text-xs"
       role="note"
-      aria-label="Judge intelligence disclaimer"
+      aria-label="Judicial memory disclaimer"
     >
       <AlertCircle className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" aria-hidden="true" />
       <span>
-        Based on recorded observations from your cases and shared chamber data (if enabled). 
-        This is not legal advice or prediction.
+        This module records observations and recent outcomes for reference only. 
+        It does not predict or advise on judicial decisions.
       </span>
     </div>
   );
@@ -165,7 +165,7 @@ function AddObservationForm({
       <Textarea
         value={text}
         onChange={(e) => setText(e.target.value)}
-        placeholder="What did you observe? (e.g., 'Historically noted: prefers written submissions over oral arguments')"
+        placeholder="What did you observe? (e.g., 'Historically noted: requested written submissions before oral arguments')"
         className="text-xs min-h-[60px] resize-none"
         maxLength={500}
       />
@@ -326,7 +326,7 @@ export function JudgeIntelligencePanel({
               <div className="flex items-center gap-2">
                 <Brain className="h-4 w-4 text-muted-foreground" />
                 <CardTitle className="text-sm font-normal text-muted-foreground">
-                  Judge Intelligence
+                  Judicial Memory
                 </CardTitle>
                 {ownCount > 0 && (
                   <Badge variant="outline" className="text-[10px] h-4 px-1.5">
@@ -411,7 +411,7 @@ export function JudgeIntelligencePanel({
 
             {/* Source attribution */}
             <p className="text-[10px] text-muted-foreground/40 pt-2 border-t border-border/30">
-              Personal memory • Append-only • Not legal advice
+              Lawyer-scoped memory • Append-only • Never predictive • Not legal advice
             </p>
           </CardContent>
         </CollapsibleContent>
