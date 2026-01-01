@@ -282,6 +282,8 @@ export default function WarRoom() {
             {/* Judgment References Panel - Collapsed by Default */}
             <div className="p-2 border-t border-border">
               <JudgmentReferencesPanel
+                docketId={caseId}
+                caseNumber={docketItem.case_number}
                 judgeName={docketItem.judge_names}
                 court={docketItem.court_location}
                 petitionerLawyer={docketItem.petitioner_lawyer}
