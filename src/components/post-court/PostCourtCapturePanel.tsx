@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { SensitiveViewGuard, SensitiveContentNotice } from '@/components/ui/SensitiveViewGuard';
 import { BookMarked, ChevronRight, X, Check } from 'lucide-react';
 import { format, isToday, parseISO } from 'date-fns';
 import { toast } from 'sonner';
@@ -96,62 +97,72 @@ export function PostCourtCapturePanel() {
       </CardHeader>
 
       <CardContent className="px-4 pb-4 space-y-4">
-        {/* Case identifier */}
-        <div className="pb-3 border-b border-border/30">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="font-display text-lg text-foreground">
-              #{currentCase.item_no}
-            </span>
-            <span className="text-foreground">
-              {currentCase.case_number}
-            </span>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            Court {currentCase.court_room_no} • {hearingIsToday ? 'Today' : format(parseISO(currentCase.hearing_date), 'd MMM')}
-          </p>
-        </div>
-
-        {/* Simple capture fields - no formatting, no requirements */}
-        <div className="space-y-3">
-          <div>
-            <Label htmlFor="what_happened" className="text-sm text-muted-foreground">
-              What happened today?
-            </Label>
-            <Textarea
-              id="what_happened"
-              placeholder="Brief note... (optional)"
-              value={formData.what_happened}
-              onChange={(e) => setFormData(prev => ({ ...prev, what_happened: e.target.value }))}
-              className="mt-1 min-h-[60px] resize-none bg-muted/30 border-border/30"
-            />
+        {/* Sensitive content notice */}
+        <SensitiveContentNotice />
+        
+        <SensitiveViewGuard 
+          contentType="personal-notes"
+          showWatermark={true}
+          disableSelection={false}
+          disableContextMenu={false}
+        >
+          {/* Case identifier */}
+          <div className="pb-3 border-b border-border/30">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="font-display text-lg text-foreground">
+                #{currentCase.item_no}
+              </span>
+              <span className="text-foreground">
+                {currentCase.case_number}
+              </span>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Court {currentCase.court_room_no} • {hearingIsToday ? 'Today' : format(parseISO(currentCase.hearing_date), 'd MMM')}
+            </p>
           </div>
 
-          <div>
-            <Label htmlFor="next_direction" className="text-sm text-muted-foreground">
-              Next date / direction
-            </Label>
-            <Textarea
-              id="next_direction"
-              placeholder="e.g. Posted for 15 Jan... (optional)"
-              value={formData.next_direction}
-              onChange={(e) => setFormData(prev => ({ ...prev, next_direction: e.target.value }))}
-              className="mt-1 min-h-[40px] resize-none bg-muted/30 border-border/30"
-            />
-          </div>
+          {/* Simple capture fields - no formatting, no requirements */}
+          <div className="space-y-3 mt-3">
+            <div>
+              <Label htmlFor="what_happened" className="text-sm text-muted-foreground">
+                What happened today?
+              </Label>
+              <Textarea
+                id="what_happened"
+                placeholder="Brief note... (optional)"
+                value={formData.what_happened}
+                onChange={(e) => setFormData(prev => ({ ...prev, what_happened: e.target.value }))}
+                className="mt-1 min-h-[60px] resize-none bg-muted/30 border-border/30"
+              />
+            </div>
 
-          <div>
-            <Label htmlFor="note_for_next" className="text-sm text-muted-foreground">
-              Note for next time
-            </Label>
-            <Textarea
-              id="note_for_next"
-              placeholder="Reminder for future... (optional)"
-              value={formData.note_for_next}
-              onChange={(e) => setFormData(prev => ({ ...prev, note_for_next: e.target.value }))}
-              className="mt-1 min-h-[40px] resize-none bg-muted/30 border-border/30"
-            />
+            <div>
+              <Label htmlFor="next_direction" className="text-sm text-muted-foreground">
+                Next date / direction
+              </Label>
+              <Textarea
+                id="next_direction"
+                placeholder="e.g. Posted for 15 Jan... (optional)"
+                value={formData.next_direction}
+                onChange={(e) => setFormData(prev => ({ ...prev, next_direction: e.target.value }))}
+                className="mt-1 min-h-[40px] resize-none bg-muted/30 border-border/30"
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="note_for_next" className="text-sm text-muted-foreground">
+                Note for next time
+              </Label>
+              <Textarea
+                id="note_for_next"
+                placeholder="Reminder for future... (optional)"
+                value={formData.note_for_next}
+                onChange={(e) => setFormData(prev => ({ ...prev, note_for_next: e.target.value }))}
+                className="mt-1 min-h-[40px] resize-none bg-muted/30 border-border/30"
+              />
+            </div>
           </div>
-        </div>
+        </SensitiveViewGuard>
 
         {/* Action buttons */}
         <div className="flex items-center justify-between pt-2">
