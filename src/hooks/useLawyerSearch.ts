@@ -8,20 +8,28 @@ import { toast } from 'sonner';
 const RECENT_SEARCHES_KEY = 'lawyer-search-recent';
 const MAX_RECENT_SEARCHES = 5;
 
-export function useLawyerSearch() {
+/**
+ * Lawyer Search Hook
+ * 
+ * @param selectedDate - Optional date to search. If not provided, defaults to today.
+ * This fixes the audit issue where search was hardcoded to today's date 
+ * instead of using the user's selected date from DateSelector.
+ */
+export function useLawyerSearch(selectedDate?: string) {
   const [searchTerm, setSearchTerm] = useState('');
-  const today = format(new Date(), 'yyyy-MM-dd');
+  // Use provided selectedDate or fall back to today
+  const searchDate = selectedDate || format(new Date(), 'yyyy-MM-dd');
   const { isLimited, remainingRequests, checkAndRecord } = useRateLimit('search');
 
   const { data: results, isLoading, refetch, isFetched } = useQuery({
-    queryKey: ['lawyer-search', searchTerm, today],
+    queryKey: ['lawyer-search', searchTerm, searchDate],
     queryFn: async () => {
       if (!searchTerm.trim()) return [];
       
       const { data, error } = await supabase
         .from('daily_court_docket')
         .select('*')
-        .eq('date', today)
+        .eq('date', searchDate)
         .or(`petitioner_lawyer.ilike.%${searchTerm}%,respondent_lawyer.ilike.%${searchTerm}%`)
         .order('court_room_no')
         .order('item_no');

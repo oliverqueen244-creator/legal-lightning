@@ -8,7 +8,18 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useLawyerSearch } from '@/hooks/useLawyerSearch';
 import { useLiveBoard } from '@/hooks/useLiveBoard';
 
-export function LawyerSearchPanel() {
+interface LawyerSearchPanelProps {
+  /** The selected date to search for cases (yyyy-MM-dd format) */
+  selectedDate?: string;
+}
+
+/**
+ * LawyerSearchPanel - Search for another lawyer's cases
+ * 
+ * FIX: Now accepts selectedDate prop to search the correct date
+ * instead of always searching today's date.
+ */
+export function LawyerSearchPanel({ selectedDate }: LawyerSearchPanelProps) {
   const [inputValue, setInputValue] = useState('');
   const { 
     searchTerm, 
@@ -19,7 +30,7 @@ export function LawyerSearchPanel() {
     getRecentSearches, 
     clearRecentSearches,
     getMatchedSide 
-  } = useLawyerSearch();
+  } = useLawyerSearch(selectedDate);
   const { data: liveBoards } = useLiveBoard();
   
   const [recentSearches, setRecentSearches] = useState<string[]>([]);

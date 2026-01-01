@@ -400,7 +400,7 @@ export default function Dashboard() {
                 </TabsContent>
 
                 <TabsContent value="search" className="mt-0">
-                  <LawyerSearchPanel />
+                  <LawyerSearchPanel selectedDate={formattedDate} />
                 </TabsContent>
               </Tabs>
             </div>
