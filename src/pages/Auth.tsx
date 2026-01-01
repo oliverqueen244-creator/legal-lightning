@@ -19,7 +19,7 @@ export default function Auth() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
-  const [role, setRole] = useState<'SENIOR' | 'JUNIOR'>('JUNIOR');
+  const [role, setRole] = useState<'SENIOR' | 'JUNIOR' | 'CLERK'>('JUNIOR');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   
@@ -195,10 +195,13 @@ export default function Auth() {
             {!isLogin && (
               <div className="space-y-3">
                 <Label>Select Your Role</Label>
+                <p className="text-xs text-muted-foreground">
+                  This determines your default view. Role cannot be changed after signup.
+                </p>
                 <RadioGroup
                   value={role}
-                  onValueChange={(value) => setRole(value as 'SENIOR' | 'JUNIOR')}
-                  className="grid grid-cols-2 gap-4"
+                  onValueChange={(value) => setRole(value as 'SENIOR' | 'JUNIOR' | 'CLERK')}
+                  className="grid grid-cols-3 gap-3"
                 >
                   <div className="relative">
                     <RadioGroupItem
@@ -208,10 +211,10 @@ export default function Auth() {
                     />
                     <Label
                       htmlFor="senior"
-                      className="flex flex-col items-center justify-center rounded-lg border-2 border-border bg-card p-4 cursor-pointer hover:bg-accent peer-data-[state=checked]:border-primary peer-data-[state=checked]:bg-primary/5"
+                      className="flex flex-col items-center justify-center rounded-lg border-2 border-border bg-card p-3 cursor-pointer hover:bg-accent peer-data-[state=checked]:border-primary peer-data-[state=checked]:bg-primary/5"
                     >
-                      <span className="font-semibold text-foreground">Senior</span>
-                      <span className="text-xs text-muted-foreground mt-1">War Room View</span>
+                      <span className="font-semibold text-foreground text-sm">Senior</span>
+                      <span className="text-[10px] text-muted-foreground mt-1 text-center">War Room</span>
                     </Label>
                   </div>
                   
@@ -223,10 +226,25 @@ export default function Auth() {
                     />
                     <Label
                       htmlFor="junior"
-                      className="flex flex-col items-center justify-center rounded-lg border-2 border-border bg-card p-4 cursor-pointer hover:bg-accent peer-data-[state=checked]:border-primary peer-data-[state=checked]:bg-primary/5"
+                      className="flex flex-col items-center justify-center rounded-lg border-2 border-border bg-card p-3 cursor-pointer hover:bg-accent peer-data-[state=checked]:border-primary peer-data-[state=checked]:bg-primary/5"
                     >
-                      <span className="font-semibold text-foreground">Junior</span>
-                      <span className="text-xs text-muted-foreground mt-1">Control Deck</span>
+                      <span className="font-semibold text-foreground text-sm">Junior</span>
+                      <span className="text-[10px] text-muted-foreground mt-1 text-center">Control Deck</span>
+                    </Label>
+                  </div>
+
+                  <div className="relative">
+                    <RadioGroupItem
+                      value="CLERK"
+                      id="clerk"
+                      className="peer sr-only"
+                    />
+                    <Label
+                      htmlFor="clerk"
+                      className="flex flex-col items-center justify-center rounded-lg border-2 border-border bg-card p-3 cursor-pointer hover:bg-accent peer-data-[state=checked]:border-primary peer-data-[state=checked]:bg-primary/5"
+                    >
+                      <span className="font-semibold text-foreground text-sm">Clerk</span>
+                      <span className="text-[10px] text-muted-foreground mt-1 text-center">Read-only</span>
                     </Label>
                   </div>
                 </RadioGroup>

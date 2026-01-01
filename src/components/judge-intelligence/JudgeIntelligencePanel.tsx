@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { SensitiveViewGuard, SensitiveContentNotice } from '@/components/ui/SensitiveViewGuard';
+import { ChamberSharingPanel } from './ChamberSharingPanel';
 import {
   Brain, 
   ChevronDown, 
@@ -17,7 +18,8 @@ import {
   Users, 
   Clock,
   AlertCircle,
-  Loader2
+  Loader2,
+  Settings
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { 
@@ -57,24 +59,31 @@ interface ObservationCardProps {
 }
 
 function ObservationCard({ observation }: ObservationCardProps) {
+  // Chamber-shared observations should be visually muted
+  const isChamberShared = observation.is_chamber_shared && !observation.is_own;
+  
   return (
-    <div className="p-3 rounded border border-border/30 bg-background/50 space-y-2">
+    <div className={`p-3 rounded border space-y-2 ${
+      isChamberShared 
+        ? 'border-border/20 bg-muted/30 opacity-80' 
+        : 'border-border/30 bg-background/50'
+    }`}>
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
-          <p className="text-xs text-foreground">
+          <p className={`text-xs ${isChamberShared ? 'text-muted-foreground' : 'text-foreground'}`}>
             {observation.observation_text}
           </p>
         </div>
         
-        {/* Source indicator */}
+        {/* Source indicator - always show clearly */}
         <div className="shrink-0">
           {observation.is_own ? (
-            <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4">
+            <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 border-primary/30">
               <User className="h-2.5 w-2.5 mr-0.5" />
               Your observation
             </Badge>
           ) : (
-            <Badge variant="secondary" className="text-[9px] px-1.5 py-0 h-4">
+            <Badge variant="secondary" className="text-[9px] px-1.5 py-0 h-4 bg-muted">
               <Users className="h-2.5 w-2.5 mr-0.5" />
               Chamber shared
             </Badge>
@@ -294,7 +303,7 @@ export function JudgeIntelligencePanel({
   caseNumber
 }: JudgeIntelligencePanelProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<'personal' | 'patterns'>('personal');
+  const [activeTab, setActiveTab] = useState<'personal' | 'patterns' | 'sharing'>('personal');
 
   const { 
     data: observations = [], 
@@ -368,7 +377,7 @@ export function JudgeIntelligencePanel({
               disableSelection={true}
               disableContextMenu={true}
             >
-              <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'personal' | 'patterns')}>
+              <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'personal' | 'patterns' | 'sharing')}>
                 <TabsList className="w-full">
                   <TabsTrigger value="personal" className="flex-1 text-xs">
                     <User className="h-3 w-3 mr-1" />
@@ -377,6 +386,10 @@ export function JudgeIntelligencePanel({
                   <TabsTrigger value="patterns" className="flex-1 text-xs">
                     <Clock className="h-3 w-3 mr-1" />
                     Patterns
+                  </TabsTrigger>
+                  <TabsTrigger value="sharing" className="flex-1 text-xs">
+                    <Settings className="h-3 w-3 mr-1" />
+                    Sharing
                   </TabsTrigger>
                 </TabsList>
 
@@ -393,9 +406,18 @@ export function JudgeIntelligencePanel({
                   ) : (
                     <ScrollArea className="h-[200px]">
                       <div className="space-y-2">
-                        {judgeObservations.map((obs) => (
-                          <ObservationCard key={obs.id} observation={obs} />
-                        ))}
+                        {/* Show own observations first, then chamber shared (muted) */}
+                        {judgeObservations
+                          .sort((a, b) => {
+                            // Own observations first
+                            if (a.is_own && !b.is_own) return -1;
+                            if (!a.is_own && b.is_own) return 1;
+                            // Then by date
+                            return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+                          })
+                          .map((obs) => (
+                            <ObservationCard key={obs.id} observation={obs} />
+                          ))}
                       </div>
                     </ScrollArea>
                   )}
@@ -408,6 +430,13 @@ export function JudgeIntelligencePanel({
                   <ProceduralPatternsView 
                     bench={bench || 'JAIPUR'} 
                     courtNo={courtNo} 
+                  />
+                </TabsContent>
+
+                {/* Chamber Sharing Settings */}
+                <TabsContent value="sharing" className="mt-3">
+                  <ChamberSharingPanel 
+                    onSharingChange={() => refetch()}
                   />
                 </TabsContent>
               </Tabs>
