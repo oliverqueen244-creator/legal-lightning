@@ -10,6 +10,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { SensitiveViewGuard } from '@/components/ui/SensitiveViewGuard';
 import { ExternalLink, ChevronDown, ChevronRight, BookOpen, Search, Loader2, Info, RefreshCw, Paperclip, Check, X } from 'lucide-react';
 import { format } from 'date-fns';
 import { AiDisclaimer } from '@/components/ui/AiDisclaimer';
@@ -298,100 +299,107 @@ export function JudgmentReferencesPanel({
 
         <CollapsibleContent>
           <CardContent className="pt-0 px-4 pb-4">
-            <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'live' | 'saved')}>
-              <div className="flex items-center justify-between mb-3">
-                <TabsList className="flex-1">
-                  <TabsTrigger value="live" className="flex-1 text-xs">
-                    <Search className="h-3 w-3 mr-1" />
-                    Live Search
-                    {isSearching && <Loader2 className="h-3 w-3 ml-1 animate-spin" />}
-                  </TabsTrigger>
-                  <TabsTrigger value="saved" className="flex-1 text-xs">
-                    <BookOpen className="h-3 w-3 mr-1" />
-                    Saved ({savedCount})
-                  </TabsTrigger>
-                </TabsList>
-                
-                {activeTab === 'live' && !isSearching && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 w-7 p-0 ml-2"
-                    onClick={() => refetch()}
-                    title="Refresh search"
-                  >
-                    <RefreshCw className="h-3.5 w-3.5" />
-                  </Button>
-                )}
-              </div>
+            <SensitiveViewGuard 
+              contentType="judicial-outcomes"
+              showWatermark={true}
+              disableSelection={true}
+              disableContextMenu={true}
+            >
+              <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'live' | 'saved')}>
+                <div className="flex items-center justify-between mb-3">
+                  <TabsList className="flex-1">
+                    <TabsTrigger value="live" className="flex-1 text-xs">
+                      <Search className="h-3 w-3 mr-1" />
+                      Live Search
+                      {isSearching && <Loader2 className="h-3 w-3 ml-1 animate-spin" />}
+                    </TabsTrigger>
+                    <TabsTrigger value="saved" className="flex-1 text-xs">
+                      <BookOpen className="h-3 w-3 mr-1" />
+                      Saved ({savedCount})
+                    </TabsTrigger>
+                  </TabsList>
+                  
+                  {activeTab === 'live' && !isSearching && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 w-7 p-0 ml-2"
+                      onClick={() => refetch()}
+                      title="Refresh search"
+                    >
+                      <RefreshCw className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
+                </div>
 
-              {/* Live Search Tab */}
-              <TabsContent value="live" className="mt-0">
-                {isSearching ? (
-                  <div className="flex flex-col items-center justify-center py-6 gap-2">
-                    <Loader2 className="h-5 w-5 text-primary animate-spin" />
-                    <p className="text-xs text-muted-foreground">
-                      Searching Indian Kanoon...
+                {/* Live Search Tab */}
+                <TabsContent value="live" className="mt-0">
+                  {isSearching ? (
+                    <div className="flex flex-col items-center justify-center py-6 gap-2">
+                      <Loader2 className="h-5 w-5 text-primary animate-spin" />
+                      <p className="text-xs text-muted-foreground">
+                        Searching Indian Kanoon...
+                      </p>
+                    </div>
+                  ) : liveCount === 0 ? (
+                    <p className="text-sm text-muted-foreground/70 text-center py-4">
+                      No judgments found for current criteria
                     </p>
-                  </div>
-                ) : liveCount === 0 ? (
-                  <p className="text-sm text-muted-foreground/70 text-center py-4">
-                    No judgments found for current criteria
-                  </p>
-                ) : (
-                  <ScrollArea className="h-[280px]">
-                    <div className="space-y-2">
-                      {liveJudgments.map((judgment) => (
-                        <JudgmentCard 
-                          key={judgment.id} 
-                          judgment={judgment}
-                          docketId={docketId}
-                          isAttached={isAttached(judgment.url)}
-                          onAttach={() => handleAttach(judgment, 'live-search')}
-                          onDetach={() => handleDetach(judgment.url)}
-                          isAttaching={isAttaching || isDetaching}
-                        />
-                      ))}
-                    </div>
-                  </ScrollArea>
-                )}
-                
-                {lastChecked && (
-                  <p className="text-[10px] text-muted-foreground/40 mt-2">
-                    Last checked: {format(new Date(lastChecked), 'dd MMM yyyy, HH:mm')}
-                  </p>
-                )}
-              </TabsContent>
+                  ) : (
+                    <ScrollArea className="h-[280px]">
+                      <div className="space-y-2">
+                        {liveJudgments.map((judgment) => (
+                          <JudgmentCard 
+                            key={judgment.id} 
+                            judgment={judgment}
+                            docketId={docketId}
+                            isAttached={isAttached(judgment.url)}
+                            onAttach={() => handleAttach(judgment, 'live-search')}
+                            onDetach={() => handleDetach(judgment.url)}
+                            isAttaching={isAttaching || isDetaching}
+                          />
+                        ))}
+                      </div>
+                    </ScrollArea>
+                  )}
+                  
+                  {lastChecked && (
+                    <p className="text-[10px] text-muted-foreground/40 mt-2">
+                      Last checked: {format(new Date(lastChecked), 'dd MMM yyyy, HH:mm')}
+                    </p>
+                  )}
+                </TabsContent>
 
-              {/* Saved References Tab */}
-              <TabsContent value="saved" className="mt-0">
-                {isLoadingSaved ? (
-                  <div className="flex items-center justify-center py-4">
-                    <BookOpen className="h-5 w-5 text-muted-foreground/50 animate-pulse" />
-                  </div>
-                ) : savedCount === 0 ? (
-                  <p className="text-sm text-muted-foreground/70 text-center py-4">
-                    No saved references. Use Live Search to find judgments.
-                  </p>
-                ) : (
-                  <ScrollArea className="h-[280px]">
-                    <div className="space-y-2">
-                      {savedJudgments.map((judgment) => (
-                        <JudgmentCard 
-                          key={judgment.id} 
-                          judgment={judgment}
-                          docketId={docketId}
-                          isAttached={isAttached(judgment.url)}
-                          onAttach={() => handleAttach(judgment, 'saved')}
-                          onDetach={() => handleDetach(judgment.url)}
-                          isAttaching={isAttaching || isDetaching}
-                        />
-                      ))}
+                {/* Saved References Tab */}
+                <TabsContent value="saved" className="mt-0">
+                  {isLoadingSaved ? (
+                    <div className="flex items-center justify-center py-4">
+                      <BookOpen className="h-5 w-5 text-muted-foreground/50 animate-pulse" />
                     </div>
-                  </ScrollArea>
-                )}
-              </TabsContent>
-            </Tabs>
+                  ) : savedCount === 0 ? (
+                    <p className="text-sm text-muted-foreground/70 text-center py-4">
+                      No saved references. Use Live Search to find judgments.
+                    </p>
+                  ) : (
+                    <ScrollArea className="h-[280px]">
+                      <div className="space-y-2">
+                        {savedJudgments.map((judgment) => (
+                          <JudgmentCard 
+                            key={judgment.id} 
+                            judgment={judgment}
+                            docketId={docketId}
+                            isAttached={isAttached(judgment.url)}
+                            onAttach={() => handleAttach(judgment, 'saved')}
+                            onDetach={() => handleDetach(judgment.url)}
+                            isAttaching={isAttaching || isDetaching}
+                          />
+                        ))}
+                      </div>
+                    </ScrollArea>
+                  )}
+                </TabsContent>
+              </Tabs>
+            </SensitiveViewGuard>
 
             {/* Disclaimer - Always visible */}
             <div className="mt-3 pt-3 border-t border-border/30 space-y-2">

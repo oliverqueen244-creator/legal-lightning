@@ -7,7 +7,8 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { 
+import { SensitiveViewGuard, SensitiveContentNotice } from '@/components/ui/SensitiveViewGuard';
+import {
   Brain, 
   ChevronDown, 
   ChevronRight, 
@@ -354,60 +355,75 @@ export function JudgeIntelligencePanel({
 
         <CollapsibleContent>
           <CardContent className="pt-0 px-4 pb-4 space-y-3">
+            {/* Sensitive content notice */}
+            <SensitiveContentNotice />
+            
             {/* Mandatory disclaimer */}
             <JudgeIntelligenceDisclaimer />
 
-            <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'personal' | 'patterns')}>
-              <TabsList className="w-full">
-                <TabsTrigger value="personal" className="flex-1 text-xs">
-                  <User className="h-3 w-3 mr-1" />
-                  Observations
-                </TabsTrigger>
-                <TabsTrigger value="patterns" className="flex-1 text-xs">
-                  <Clock className="h-3 w-3 mr-1" />
-                  Patterns
-                </TabsTrigger>
-              </TabsList>
+            {/* Wrap sensitive observations in guard */}
+            <SensitiveViewGuard 
+              contentType="judge-intelligence"
+              showWatermark={true}
+              disableSelection={true}
+              disableContextMenu={true}
+            >
+              <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'personal' | 'patterns')}>
+                <TabsList className="w-full">
+                  <TabsTrigger value="personal" className="flex-1 text-xs">
+                    <User className="h-3 w-3 mr-1" />
+                    Observations
+                  </TabsTrigger>
+                  <TabsTrigger value="patterns" className="flex-1 text-xs">
+                    <Clock className="h-3 w-3 mr-1" />
+                    Patterns
+                  </TabsTrigger>
+                </TabsList>
 
-              {/* Personal/Chamber Observations */}
-              <TabsContent value="personal" className="mt-3 space-y-3">
-                {isLoading ? (
-                  <div className="flex items-center justify-center py-4">
-                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                  </div>
-                ) : judgeObservations.length === 0 ? (
-                  <p className="text-xs text-muted-foreground/70 text-center py-4">
-                    No observations recorded for this judge
-                  </p>
-                ) : (
-                  <ScrollArea className="h-[200px]">
-                    <div className="space-y-2">
-                      {judgeObservations.map((obs) => (
-                        <ObservationCard key={obs.id} observation={obs} />
-                      ))}
+                {/* Personal/Chamber Observations */}
+                <TabsContent value="personal" className="mt-3 space-y-3">
+                  {isLoading ? (
+                    <div className="flex items-center justify-center py-4">
+                      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                     </div>
-                  </ScrollArea>
-                )}
+                  ) : judgeObservations.length === 0 ? (
+                    <p className="text-xs text-muted-foreground/70 text-center py-4">
+                      No observations recorded for this judge
+                    </p>
+                  ) : (
+                    <ScrollArea className="h-[200px]">
+                      <div className="space-y-2">
+                        {judgeObservations.map((obs) => (
+                          <ObservationCard key={obs.id} observation={obs} />
+                        ))}
+                      </div>
+                    </ScrollArea>
+                  )}
 
-                {/* Add observation form */}
-                <AddObservationForm
-                  judgeName={judgeName}
-                  bench={bench || 'JAIPUR'}
-                  courtNo={courtNo}
-                  sourceDocketId={docketId}
-                  sourceCaseNumber={caseNumber}
-                  onSuccess={() => refetch()}
-                />
-              </TabsContent>
+                  {/* Add observation form - outside guard for usability */}
+                </TabsContent>
 
-              {/* Procedural Patterns */}
-              <TabsContent value="patterns" className="mt-3">
-                <ProceduralPatternsView 
-                  bench={bench || 'JAIPUR'} 
-                  courtNo={courtNo} 
-                />
-              </TabsContent>
-            </Tabs>
+                {/* Procedural Patterns */}
+                <TabsContent value="patterns" className="mt-3">
+                  <ProceduralPatternsView 
+                    bench={bench || 'JAIPUR'} 
+                    courtNo={courtNo} 
+                  />
+                </TabsContent>
+              </Tabs>
+            </SensitiveViewGuard>
+            
+            {/* Add observation form - outside sensitive guard for usability */}
+            {activeTab === 'personal' && (
+              <AddObservationForm
+                judgeName={judgeName}
+                bench={bench || 'JAIPUR'}
+                courtNo={courtNo}
+                sourceDocketId={docketId}
+                sourceCaseNumber={caseNumber}
+                onSuccess={() => refetch()}
+              />
+            )}
 
             {/* Source attribution */}
             <p className="text-[10px] text-muted-foreground/40 pt-2 border-t border-border/30">
