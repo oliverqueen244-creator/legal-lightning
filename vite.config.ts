@@ -39,6 +39,53 @@ export default defineConfig(({ mode }) => ({
         navigateFallback: "/index.html",
         navigateFallbackDenylist: [/^\/api/, /^\/supabase/],
         runtimeCaching: [
+          // P1 FIX: Supabase REST API - ALWAYS NetworkFirst (never serve stale court data)
+          {
+            urlPattern: /^https:\/\/.*supabase.*\/rest\/v1\//i,
+            handler: "NetworkFirst",
+            options: {
+              cacheName: "supabase-api-cache",
+              networkTimeoutSeconds: 10,
+              expiration: {
+                maxEntries: 50,
+                maxAgeSeconds: 60 * 5, // 5 minutes max
+              },
+              cacheableResponse: {
+                statuses: [0, 200],
+              },
+            },
+          },
+          // P1 FIX: Supabase Realtime/Auth - NetworkOnly (never cache)
+          {
+            urlPattern: /^https:\/\/.*supabase.*\/(auth|realtime)\//i,
+            handler: "NetworkOnly",
+          },
+          // P1 FIX: Live Board endpoints - NetworkFirst with short cache
+          {
+            urlPattern: /^https:\/\/.*supabase.*\/functions\/v1\/(sync-live-board|scrape-live-board)/i,
+            handler: "NetworkFirst",
+            options: {
+              cacheName: "live-board-cache",
+              networkTimeoutSeconds: 5,
+              expiration: {
+                maxEntries: 10,
+                maxAgeSeconds: 60, // 1 minute max
+              },
+            },
+          },
+          // P1 FIX: Other Edge Functions - NetworkFirst
+          {
+            urlPattern: /^https:\/\/.*supabase.*\/functions\/v1\//i,
+            handler: "NetworkFirst",
+            options: {
+              cacheName: "edge-functions-cache",
+              networkTimeoutSeconds: 15,
+              expiration: {
+                maxEntries: 20,
+                maxAgeSeconds: 60 * 10, // 10 minutes
+              },
+            },
+          },
           // Cache PDF documents
           {
             urlPattern: /\.pdf$/i,
@@ -54,7 +101,7 @@ export default defineConfig(({ mode }) => ({
               },
             },
           },
-          // Cache Supabase storage (documents)
+          // Cache Supabase storage (documents) - StaleWhileRevalidate is OK for static files
           {
             urlPattern: /^https:\/\/.*supabase.*\/storage\//i,
             handler: "StaleWhileRevalidate",
