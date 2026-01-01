@@ -12,6 +12,7 @@ import ProductDossier from "./pages/ProductDossier";
 import Onboarding from "./pages/Onboarding";
 import NotFound from "./pages/NotFound";
 import CourtroomMode from "./pages/CourtroomMode";
+import Install from "./pages/Install";
 import { GlobalOfflineBanner } from "./components/layout/GlobalOfflineBanner";
 import { SyncConflictProvider } from "./contexts/SyncConflictContext";
 
@@ -40,6 +41,7 @@ const App = () => (
             <Route path="/war-room/:caseId" element={<WarRoom />} />
             <Route path="/control-deck/:caseId" element={<ControlDeck />} />
             <Route path="/courtroom" element={<CourtroomMode />} />
+            <Route path="/install" element={<Install />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
