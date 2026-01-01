@@ -4,19 +4,20 @@ import { supabase } from '@/integrations/supabase/client';
 import type { DocketItem } from '@/types/database';
 import { useAuth } from './useAuth';
 
-export function useDocket() {
+export function useDocket(date?: string) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const targetDate = date || new Date().toISOString().split('T')[0];
   
   const query = useQuery({
-    queryKey: ['docket', user?.id],
+    queryKey: ['docket', user?.id, targetDate],
     queryFn: async () => {
       // First try to get items matched to the current user
       if (user?.id) {
         const { data: matchedData, error: matchedError } = await supabase
           .from('daily_court_docket')
           .select('*')
-          .eq('date', new Date().toISOString().split('T')[0])
+          .eq('date', targetDate)
           .eq('matched_profile_id', user.id)
           .order('list_type', { ascending: false })
           .order('item_no', { ascending: true });
