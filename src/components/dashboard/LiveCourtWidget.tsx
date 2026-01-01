@@ -144,10 +144,10 @@ export function LiveCourtWidget({
         />
       )}
 
-      {/* Stale Data Warning Banner */}
+      {/* Stale Data Warning Banner - HARDENING: Never auto-refresh silently */}
       {showStaleWarning && (
-        <div className="absolute top-0 left-0 right-0 bg-destructive/90 text-destructive-foreground text-xs text-center py-1 px-2 z-20">
-          ⚠️ Data may be outdated ({syncHealth.staleSeconds}s since last sync)
+        <div className="absolute top-0 left-0 right-0 bg-destructive/90 text-destructive-foreground text-xs text-center py-1.5 px-2 z-20">
+          <span className="font-semibold">⚠️ STALE DATA</span> — Last known: {syncHealth.staleSeconds}s ago. Verify before acting.
         </div>
       )}
 
