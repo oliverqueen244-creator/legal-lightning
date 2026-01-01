@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { format } from 'date-fns';
 import { DocketCard } from '@/components/dashboard/DocketCard';
 import { LiveTicker } from '@/components/dashboard/LiveTicker';
@@ -10,7 +10,7 @@ import { ScraperStatusWidget } from '@/components/dashboard/ScraperStatusWidget'
 import { CourtMetadataWidget } from '@/components/dashboard/CourtMetadataWidget';
 import { CauseListNotesWidget } from '@/components/dashboard/CauseListNotesWidget';
 import { DateSelector } from '@/components/dashboard/DateSelector';
-import { Header } from '@/components/layout/Header';
+import { AppHeader } from '@/components/layout/AppHeader';
 import { AuthGuard } from '@/components/layout/AuthGuard';
 import { MorningBriefPanel } from '@/components/morning-brief/MorningBriefPanel';
 import { PostCourtCapturePanel } from '@/components/post-court/PostCourtCapturePanel';
@@ -24,20 +24,37 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Scale, AlertCircle, Search, Sun, Gavel, Calendar } from 'lucide-react';
+import { Scale, AlertCircle, Search, Sun, Gavel, Calendar, CheckCircle, Upload, MessageCircle, ClipboardList } from 'lucide-react';
 import { LiveBoardSimulator } from '@/components/dashboard/LiveBoardSimulator';
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
-  const [activeTab, setActiveTab] = useState('brief');
+  
+  // Role-based default tab: SENIOR -> brief (Today View), JUNIOR -> tasks (Assigned Work)
+  const { role, profile, isAdmin } = useAuth();
+  const defaultTab = role === 'JUNIOR' ? 'tasks' : 'brief';
+  const tabFromUrl = searchParams.get('tab');
+  const [activeTab, setActiveTab] = useState(tabFromUrl || defaultTab);
+
+  // Sync tab with URL
+  useEffect(() => {
+    if (tabFromUrl && tabFromUrl !== activeTab) {
+      setActiveTab(tabFromUrl);
+    }
+  }, [tabFromUrl]);
+
+  const handleTabChange = (tab: string) => {
+    setActiveTab(tab);
+    setSearchParams({ tab });
+  };
   
   // Format date for API calls - must be before useDocket
   const formattedDate = format(selectedDate, 'yyyy-MM-dd');
   
   const { data: docket, isLoading: docketLoading, refetch } = useDocket(formattedDate);
   const { data: liveBoards, isLoading: liveBoardLoading } = useLiveBoard();
-  const { role, profile, isAdmin } = useAuth();
   const { data: morningBrief, isLoading: briefLoading, refetch: refetchBrief } = useMorningBrief();
   const { data: pendingCaptures } = usePendingCaptures();
   const { data: upcomingCases, isLoading: upcomingLoading } = useUpcomingCases();
@@ -88,10 +105,14 @@ export default function Dashboard() {
     refetch();
   };
 
+  // Check if user is a Junior (for showing assigned work view)
+  const isJunior = role === 'JUNIOR';
+  const isSenior = role === 'SENIOR' || role === 'ADMIN';
+
   return (
     <AuthGuard>
-      <div className="min-h-screen bg-background">
-        <Header />
+      <div className="min-h-screen bg-background pb-20 md:pb-0">
+        <AppHeader />
 
         {/* Post-Court Capture - shows after court hours for pending cases */}
         {pendingCaptures && pendingCaptures.length > 0 && (
@@ -127,17 +148,27 @@ export default function Dashboard() {
                 </Button>
               </div>
               
-              <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-                <TabsList className="grid w-full grid-cols-5 gap-1 mb-4 h-auto p-1.5">
+              <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
+                <TabsList className={`grid w-full gap-1 mb-4 h-auto p-1.5 ${isJunior ? 'grid-cols-5' : 'grid-cols-5'}`}>
+                  {/* Junior-First: Assigned Work Tab */}
+                  {isJunior && (
+                    <TabsTrigger value="tasks" className="flex items-center gap-1.5 px-2 py-2 text-xs sm:text-sm">
+                      <ClipboardList className="h-3 w-3 shrink-0" />
+                      <span className="hidden xs:inline">Tasks</span>
+                    </TabsTrigger>
+                  )}
+                  
+                  {/* Senior-First: Morning Brief */}
                   <TabsTrigger value="brief" className="flex items-center gap-1.5 px-2 py-2 text-xs sm:text-sm">
                     <Sun className="h-3 w-3 shrink-0" />
-                    <span className="hidden xs:inline">Brief</span>
+                    <span className="hidden xs:inline">{isSenior ? 'Today' : 'Brief'}</span>
                     {morningBrief && morningBrief.summary.high_risk_count > 0 && (
                       <span className="h-4 w-4 rounded-full bg-destructive text-destructive-foreground text-[10px] flex items-center justify-center font-medium">
                         {morningBrief.summary.high_risk_count}
                       </span>
                     )}
                   </TabsTrigger>
+                  
                   <TabsTrigger value="daily" className="flex items-center gap-1.5 px-2 py-2 text-xs sm:text-sm">
                     <div className="h-2 w-2 rounded-full bg-primary shrink-0" />
                     <span className="hidden xs:inline">Cases</span>
@@ -145,6 +176,7 @@ export default function Dashboard() {
                       {dailyItems.length}
                     </span>
                   </TabsTrigger>
+                  
                   <TabsTrigger value="supplementary" className="flex items-center gap-1.5 px-2 py-2 text-xs sm:text-sm">
                     <div className="h-2 w-2 rounded-full bg-court-warning shrink-0" />
                     <span className="hidden xs:inline">Urgent</span>
@@ -154,18 +186,111 @@ export default function Dashboard() {
                       </span>
                     )}
                   </TabsTrigger>
-                  <TabsTrigger value="upcoming" className="flex items-center gap-1.5 px-2 py-2 text-xs sm:text-sm">
-                    <Calendar className="h-3 w-3 shrink-0" />
-                    <span className="hidden xs:inline">Later</span>
-                  </TabsTrigger>
+                  
+                  {!isJunior && (
+                    <TabsTrigger value="upcoming" className="flex items-center gap-1.5 px-2 py-2 text-xs sm:text-sm">
+                      <Calendar className="h-3 w-3 shrink-0" />
+                      <span className="hidden xs:inline">Later</span>
+                    </TabsTrigger>
+                  )}
+                  
                   <TabsTrigger value="search" className="flex items-center gap-1.5 px-2 py-2 text-xs sm:text-sm">
                     <Search className="h-3 w-3 shrink-0" />
                     <span className="hidden xs:inline">Find</span>
                   </TabsTrigger>
                 </TabsList>
 
-                {/* Morning Brief Tab */}
+                {/* Junior: Assigned Work Tab - Action-First View */}
+                {isJunior && (
+                  <TabsContent value="tasks" className="mt-0 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h2 className="font-display text-lg font-semibold text-foreground tracking-wide">
+                          Your Assigned Work
+                        </h2>
+                        <p className="text-sm text-muted-foreground">
+                          Priority tasks and instructions from seniors
+                        </p>
+                      </div>
+                    </div>
+                    
+                    {/* Quick Action Buttons */}
+                    <div className="flex flex-wrap gap-2">
+                      <Button size="sm" variant="outline" className="flex items-center gap-2">
+                        <Upload className="h-4 w-4" />
+                        Upload Document
+                      </Button>
+                      <Button size="sm" variant="outline" className="flex items-center gap-2">
+                        <MessageCircle className="h-4 w-4" />
+                        Send Whisper
+                      </Button>
+                      <Button size="sm" variant="outline" className="flex items-center gap-2">
+                        <CheckCircle className="h-4 w-4" />
+                        Mark Done
+                      </Button>
+                    </div>
+                    
+                    {/* Today's Cases as Tasks */}
+                    <div className="space-y-3">
+                      {docketLoading ? (
+                        <div className="space-y-3">
+                          {[1, 2, 3].map((i) => (
+                            <Skeleton key={i} className="h-24 w-full rounded-lg" />
+                          ))}
+                        </div>
+                      ) : dailyItems.length === 0 ? (
+                        <div className="text-center py-12 text-muted-foreground glass-card rounded-lg">
+                          <CheckCircle className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                          <p>No assigned tasks today</p>
+                          <p className="text-xs mt-2">Check with your senior for new assignments</p>
+                        </div>
+                      ) : (
+                        dailyItems.map((item) => (
+                          <div 
+                            key={item.id}
+                            className="glass-card p-4 rounded-lg space-y-2 cursor-pointer hover:bg-secondary/50 transition-colors"
+                            onClick={() => navigate(`/control-deck/${item.id}`)}
+                          >
+                            <div className="flex items-center justify-between">
+                              <Badge variant="outline" className="text-xs">
+                                Item #{item.item_no}
+                              </Badge>
+                              <Badge variant="secondary" className="text-xs">
+                                Court {item.court_room_no}
+                              </Badge>
+                            </div>
+                            <h3 className="font-medium text-foreground">
+                              {item.case_number}
+                            </h3>
+                            <p className="text-sm text-muted-foreground line-clamp-1">
+                              {item.petitioner} vs {item.respondent}
+                            </p>
+                            <div className="flex gap-2 pt-2">
+                              <Button size="sm" variant="ghost" className="h-8 text-xs">
+                                <Upload className="h-3 w-3 mr-1" />
+                                Upload
+                              </Button>
+                              <Button size="sm" variant="ghost" className="h-8 text-xs">
+                                <MessageCircle className="h-3 w-3 mr-1" />
+                                Note
+                              </Button>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </TabsContent>
+                )}
+
+                {/* Morning Brief Tab - SENIOR's Today View */}
                 <TabsContent value="brief" className="mt-0">
+                  {isSenior && (
+                    <div className="mb-4 p-3 rounded-lg bg-primary/5 border border-primary/20">
+                      <p className="text-sm text-muted-foreground">
+                        <span className="font-medium text-foreground">Today's Overview:</span> {dailyItems.length} cases scheduled, {supplementaryItems.length} supplementary
+                      </p>
+                    </div>
+                  )}
                   <MorningBriefPanel
                     brief={morningBrief}
                     isLoading={briefLoading}
