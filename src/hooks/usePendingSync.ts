@@ -3,6 +3,7 @@ import { useOfflineCache } from './useOfflineCache';
 import { useNetworkStatus } from './useNetworkStatus';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import type { ConflictData } from '@/components/sync/ConflictResolutionDialog';
 
 export interface PendingMutation {
   id?: number;
@@ -16,8 +17,13 @@ export interface PendingMutation {
 /**
  * Hook to manage pending mutations sync.
  * Only used for post-court notes.
+ * 
+ * HARDENING FIX: Now accepts a conflict handler callback from SyncConflictContext
+ * to ensure conflicts are always surfaced via the global dialog.
  */
-export function usePendingSync() {
+export function usePendingSync(
+  onConflictDetected?: (conflict: ConflictData) => Promise<'keep-local' | 'discard-local'>
+) {
   const { isOnline } = useNetworkStatus();
   const { 
     queueMutation, 
@@ -68,9 +74,24 @@ export function usePendingSync() {
             const conflict = await checkForConflict(typedMutation);
             
             if (conflict) {
-              // Don't auto-sync conflicting notes - user must resolve
-              failed++;
-              continue;
+              // HARDENING FIX: Surface conflict via global dialog if handler provided
+              if (onConflictDetected) {
+                const choice = await onConflictDetected(conflict);
+                
+                if (choice === 'discard-local') {
+                  // User chose to discard - clear mutation without applying
+                  await clearPendingMutation(mutation.id!);
+                  toast.info('Local changes discarded', {
+                    description: 'Loaded latest version from server.',
+                  });
+                  continue;
+                }
+                // choice === 'keep-local' - proceed with upsert below
+              } else {
+                // No handler - skip and mark as needing review
+                failed++;
+                continue;
+              }
             }
           }
 
@@ -94,13 +115,13 @@ export function usePendingSync() {
 
       if (synced > 0) {
         toast.success(`Synced ${synced} pending change${synced > 1 ? 's' : ''}`, {
-          description: 'Your offline changes have been saved.',
+          description: 'Your personal notes have been saved.',
         });
       }
 
       if (failed > 0) {
         toast.warning(`${failed} change${failed > 1 ? 's' : ''} need${failed === 1 ? 's' : ''} review`, {
-          description: 'Some changes could not be synced automatically.',
+          description: 'Some notes could not be synced automatically.',
         });
       }
     } finally {
@@ -108,26 +129,53 @@ export function usePendingSync() {
     }
   };
 
-  const checkForConflict = async (mutation: PendingMutation): Promise<boolean> => {
-    if (mutation.table !== 'post_court_notes') return false;
+  /**
+   * Check for conflict and return conflict data if found
+   */
+  const checkForConflict = async (mutation: PendingMutation): Promise<ConflictData | null> => {
+    if (mutation.table !== 'post_court_notes') return null;
 
-    const { case_fingerprint, hearing_date, author_id, updated_at: localUpdatedAt } = mutation.data;
+    const { 
+      case_fingerprint, 
+      hearing_date, 
+      author_id, 
+      updated_at: localUpdatedAt,
+      what_happened,
+      next_direction,
+      note_for_next,
+    } = mutation.data;
     
-    if (!localUpdatedAt) return false;
+    if (!localUpdatedAt) return null;
 
     const { data: serverNote } = await supabase
       .from('post_court_notes')
-      .select('updated_at')
+      .select('*')
       .eq('case_fingerprint', case_fingerprint)
       .eq('hearing_date', hearing_date)
       .eq('author_id', author_id)
       .maybeSingle();
 
     if (serverNote && new Date(serverNote.updated_at) > new Date(localUpdatedAt)) {
-      return true;
+      // HARDENING FIX: Return full conflict data for dialog
+      return {
+        localVersion: {
+          what_happened,
+          next_direction,
+          note_for_next,
+          updated_at: localUpdatedAt,
+        },
+        serverVersion: {
+          what_happened: serverNote.what_happened,
+          next_direction: serverNote.next_direction,
+          note_for_next: serverNote.note_for_next,
+          updated_at: serverNote.updated_at,
+        },
+        caseFingerprint: case_fingerprint,
+        hearingDate: hearing_date,
+      };
     }
 
-    return false;
+    return null;
   };
 
   const performMutation = async (mutation: PendingMutation): Promise<any> => {
@@ -161,6 +209,11 @@ export function usePendingSync() {
       updated_at: new Date().toISOString(),
     });
     await refreshPendingCount();
+    
+    // HARDENING FIX: Precise offline language
+    toast.success('Saved locally', {
+      description: 'Personal notes will sync when online.',
+    });
   }, [queueMutation, refreshPendingCount]);
 
   return {

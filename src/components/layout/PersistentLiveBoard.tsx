@@ -89,12 +89,12 @@ export function PersistentLiveBoard({ className }: PersistentLiveBoardProps) {
       role="status"
       aria-live="polite"
     >
-      {/* P0 FIX: OFFLINE OVERLAY - Always visible when offline */}
+      {/* HARDENING FIX: OFFLINE OVERLAY - Precise language */}
       {!isOnline && (
         <div className="absolute inset-0 flex items-center justify-center bg-background/80 rounded-lg z-10">
           <div className="flex items-center gap-2 text-destructive font-medium text-sm">
             <WifiOff className="h-4 w-4" />
-            <span>OFFLINE — COURT STATUS MAY BE OUTDATED</span>
+            <span>OFFLINE — Court status may be outdated</span>
           </div>
         </div>
       )}

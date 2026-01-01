@@ -12,32 +12,38 @@ import ProductDossier from "./pages/ProductDossier";
 import Onboarding from "./pages/Onboarding";
 import NotFound from "./pages/NotFound";
 import CourtroomMode from "./pages/CourtroomMode";
+import { GlobalOfflineBanner } from "./components/layout/GlobalOfflineBanner";
+import { SyncConflictProvider } from "./contexts/SyncConflictContext";
 
 const queryClient = new QueryClient();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
-      <Toaster 
-        position="top-center"
-        toastOptions={{
-          className: 'bg-background border-2 border-primary text-primary font-bold shadow-[0_0_20px_hsl(48_97%_54%/0.4)]',
-        }}
-      />
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/auth" element={<Auth />} />
-          <Route path="/onboarding" element={<Onboarding />} />
-          <Route path="/docs" element={<Documentation />} />
-          <Route path="/dossier" element={<ProductDossier />} />
-          <Route path="/admin" element={<Admin />} />
-          <Route path="/war-room/:caseId" element={<WarRoom />} />
-          <Route path="/control-deck/:caseId" element={<ControlDeck />} />
-          <Route path="/courtroom" element={<CourtroomMode />} />
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
+      <SyncConflictProvider>
+        <Toaster 
+          position="top-center"
+          toastOptions={{
+            className: 'bg-background border-2 border-primary text-primary font-bold shadow-[0_0_20px_hsl(48_97%_54%/0.4)]',
+          }}
+        />
+        {/* HARDENING FIX: Global offline banner - single source of truth */}
+        <GlobalOfflineBanner />
+        <BrowserRouter>
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/auth" element={<Auth />} />
+            <Route path="/onboarding" element={<Onboarding />} />
+            <Route path="/docs" element={<Documentation />} />
+            <Route path="/dossier" element={<ProductDossier />} />
+            <Route path="/admin" element={<Admin />} />
+            <Route path="/war-room/:caseId" element={<WarRoom />} />
+            <Route path="/control-deck/:caseId" element={<ControlDeck />} />
+            <Route path="/courtroom" element={<CourtroomMode />} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </BrowserRouter>
+      </SyncConflictProvider>
     </TooltipProvider>
   </QueryClientProvider>
 );

@@ -37,13 +37,15 @@ export function useNetworkStatus() {
   /**
    * Blocks an action if offline. Shows a blocking toast.
    * Returns true if action should be blocked (offline).
+   * 
+   * HARDENING FIX: Uses precise language about offline capabilities.
    */
   const blockIfOffline = useCallback((actionName?: string): boolean => {
     if (!navigator.onLine) {
-      toast.error('Internet connection required', {
+      toast.error('Connection required for this action', {
         description: actionName 
-          ? `Cannot ${actionName} while offline.`
-          : 'This action requires an internet connection.',
+          ? `Cannot ${actionName} while offline. Viewing is available.`
+          : 'This action requires a connection. Viewing is available.',
         duration: 4000,
       });
       return true;

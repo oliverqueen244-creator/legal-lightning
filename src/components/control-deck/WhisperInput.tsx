@@ -48,11 +48,11 @@ export function WhisperInput({ docketId }: WhisperInputProps) {
 
   return (
     <div className="fixed bottom-0 left-0 right-0 bg-card border-t border-border p-4 z-50">
-      {/* P1 FIX: Connection status indicator */}
+      {/* HARDENING FIX: Precise offline language */}
       {!isOnline && (
         <div className="max-w-4xl mx-auto mb-2 flex items-center gap-2 text-sm text-destructive">
           <WifiOff className="h-4 w-4" />
-          <span>Offline — Messaging requires internet connection</span>
+          <span>Offline — Viewing available. Messaging requires connection.</span>
         </div>
       )}
       <div className="max-w-4xl mx-auto flex items-center gap-3">
@@ -64,7 +64,7 @@ export function WhisperInput({ docketId }: WhisperInputProps) {
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder={isOnline ? "Type note to Senior..." : "Offline — Cannot send messages"}
+          placeholder={isOnline ? "Type note to Senior..." : "Viewing available — messaging requires connection"}
           className="flex-1 bg-background border-border focus:border-primary"
           disabled={!isOnline}
         />
