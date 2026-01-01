@@ -14,6 +14,7 @@ import { PostCourtNoteCard } from '@/components/post-court/PostCourtNoteCard';
 import { ClientUpdateButton } from '@/components/client-update/ClientUpdateButton';
 import { WhisperNotification } from '@/components/war-room/WhisperNotification';
 import { WhisperDrawer } from '@/components/war-room/WhisperDrawer';
+import { WarRoomUploadPanel } from '@/components/war-room/WarRoomUploadPanel';
 import { AuthGuard } from '@/components/layout/AuthGuard';
 import { NetworkStatusPill } from '@/components/layout/NetworkStatusPill';
 import { useDocketItem } from '@/hooks/useDocket';
@@ -22,6 +23,7 @@ import { useExtendedDocuments, useDocumentReview } from '@/hooks/useDocumentMana
 import { useLiveBoardForCourt } from '@/hooks/useLiveBoard';
 import { useCaseHistory, useCaseHasHistory } from '@/hooks/useCaseHistory';
 import { usePostCourtNotes } from '@/hooks/usePostCourtCapture';
+import { useAuth } from '@/hooks/useAuth';
 import type { CaseArgument } from '@/types/database';
 import { cn } from '@/lib/utils';
 
@@ -36,9 +38,10 @@ export default function WarRoom() {
   const [fontSize, setFontSize] = useState<'normal' | 'large' | 'xlarge'>('normal');
   const [leftPanelTab, setLeftPanelTab] = useState<'arguments' | 'documents' | 'history'>('arguments');
 
+  const { role } = useAuth();
   const { data: docketItem, isLoading: docketLoading } = useDocketItem(caseId!);
   const { data: args } = useArguments(caseId!);
-  const { data: documents, isLoading: docsLoading } = useExtendedDocuments(caseId!);
+  const { data: documents, isLoading: docsLoading, refetch: refetchDocs } = useExtendedDocuments(caseId!);
   const { approveDocument, rejectDocument, setPrimaryDocument } = useDocumentReview(caseId!);
   const { data: caseHistory, isLoading: historyLoading } = useCaseHistory(caseId!);
   const { data: hasHistoryData } = useCaseHasHistory(caseId!);
@@ -240,6 +243,10 @@ export default function WarRoom() {
               </TabsContent>
               
               <TabsContent value="documents" className="flex-1 m-0 overflow-hidden p-2">
+                {/* Upload Panel - SENIOR/ADMIN only */}
+                {(role === 'SENIOR' || role === 'ADMIN') && (
+                  <WarRoomUploadPanel docketId={caseId!} />
+                )}
                 <DocumentReviewPanel
                   documents={documents || []}
                   onApprove={approveDocument}
