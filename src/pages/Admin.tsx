@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Scale, Calendar, FileText, Settings, Activity, FileCheck, Database, Gavel, Brain } from 'lucide-react';
+import { ArrowLeft, Scale, Calendar, FileText, Settings, Activity, FileCheck, Database, Gavel, Brain, ClipboardCheck } from 'lucide-react';
 import { AuthGuard } from '@/components/layout/AuthGuard';
 import { useAuth } from '@/hooks/useAuth';
 import { DocketManager } from '@/components/admin/DocketManager';
@@ -13,6 +13,7 @@ import { DataValidationPanel } from '@/components/admin/DataValidationPanel';
 import { CauseListScraper } from '@/components/admin/CauseListScraper';
 import { JudgmentReferencesManager } from '@/components/admin/JudgmentReferencesManager';
 import { AiJobsMonitor } from '@/components/admin/AiJobsMonitor';
+import { AuditConsole } from '@/components/admin/audit/AuditConsole';
 
 export default function Admin() {
   const navigate = useNavigate();
@@ -77,7 +78,11 @@ export default function Admin() {
         {/* Main Content */}
         <main className="flex-1 container mx-auto px-4 py-6">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-            <TabsList className="grid w-full max-w-6xl grid-cols-8">
+            <TabsList className="grid w-full max-w-7xl grid-cols-9">
+              <TabsTrigger value="audit" className="flex items-center gap-2">
+                <ClipboardCheck className="h-4 w-4" />
+                <span className="hidden sm:inline">Audit</span>
+              </TabsTrigger>
               <TabsTrigger value="scraper" className="flex items-center gap-2">
                 <Database className="h-4 w-4" />
                 <span className="hidden sm:inline">Scraper</span>
@@ -111,6 +116,10 @@ export default function Admin() {
                 <span className="hidden sm:inline">Validate</span>
               </TabsTrigger>
             </TabsList>
+
+            <TabsContent value="audit" className="space-y-4">
+              <AuditConsole />
+            </TabsContent>
 
             <TabsContent value="scraper" className="space-y-4">
               <CauseListScraper />
