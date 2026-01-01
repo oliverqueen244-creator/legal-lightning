@@ -3,6 +3,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
+import { AiDisclaimer } from '@/components/ui/AiDisclaimer';
 import {
   Sun,
   AlertTriangle,
@@ -159,7 +160,7 @@ export function MorningBriefPanel({ brief, isLoading, onRefresh }: MorningBriefP
               </div>
             </div>
 
-            {/* Suggestion */}
+            {/* Suggestion - prefixed with "Suggested:" to avoid implying certainty */}
             <div
               className={cn(
                 'flex items-center gap-2 p-2 rounded-lg text-sm',
@@ -171,7 +172,9 @@ export function MorningBriefPanel({ brief, isLoading, onRefresh }: MorningBriefP
               {caseItem.suggestion === 'attend' && <Scale className="h-4 w-4" />}
               {caseItem.suggestion === 'delegate' && <Users className="h-4 w-4" />}
               {caseItem.suggestion === 'monitor' && <Eye className="h-4 w-4" />}
-              <span className="font-medium capitalize">{caseItem.suggestion}</span>
+              <span className="font-medium">
+                Suggested: <span className="capitalize">{caseItem.suggestion}</span>
+              </span>
               <span className="text-xs opacity-80">— {caseItem.suggestionReason}</span>
             </div>
           </div>
@@ -196,7 +199,9 @@ export function MorningBriefPanel({ brief, isLoading, onRefresh }: MorningBriefP
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-6 px-0">
-        {/* Summary stats - larger, clearer */}
+        {/* AI Disclaimer - MANDATORY, NOT DISMISSIBLE */}
+        <AiDisclaimer />
+        {/* Summary stats - larger, clearer - labels prefixed with "Suggested:" */}
         <div className="grid grid-cols-4 gap-3">
           <div className="text-center p-3 rounded-lg bg-muted/50">
             <p className="text-3xl font-bold text-foreground">{brief.total_cases}</p>
@@ -204,15 +209,15 @@ export function MorningBriefPanel({ brief, isLoading, onRefresh }: MorningBriefP
           </div>
           <div className="text-center p-3 rounded-lg bg-court-danger/5 border border-court-danger/20">
             <p className="text-3xl font-bold text-court-danger-light">{brief.summary.attend_count}</p>
-            <p className="text-xs text-muted-foreground mt-1">Attend</p>
+            <p className="text-xs text-muted-foreground mt-1">Sugg. Attend</p>
           </div>
           <div className="text-center p-3 rounded-lg bg-court-success/5 border border-court-success/20">
             <p className="text-3xl font-bold text-court-success">{brief.summary.delegate_count}</p>
-            <p className="text-xs text-muted-foreground mt-1">Delegate</p>
+            <p className="text-xs text-muted-foreground mt-1">Sugg. Delegate</p>
           </div>
           <div className="text-center p-3 rounded-lg bg-muted/30 border border-border/50">
             <p className="text-3xl font-bold text-muted-foreground">{brief.summary.monitor_count}</p>
-            <p className="text-xs text-muted-foreground mt-1">Monitor</p>
+            <p className="text-xs text-muted-foreground mt-1">Sugg. Monitor</p>
           </div>
         </div>
 

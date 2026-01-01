@@ -201,6 +201,8 @@ export default function Dashboard() {
                 </TabsList>
 
                 {/* Junior: Assigned Work Tab - Action-First View */}
+                {/* AUDIT FIX: Removed non-functional quick action buttons from header */}
+                {/* Navigation to control-deck provides access to functional upload/whisper */}
                 {isJunior && (
                   <TabsContent value="tasks" className="mt-0 space-y-4">
                     <div className="flex items-center justify-between">
@@ -209,25 +211,9 @@ export default function Dashboard() {
                           Your Assigned Work
                         </h2>
                         <p className="text-sm text-muted-foreground">
-                          Priority tasks and instructions from seniors
+                          Click on a case to upload documents or send notes
                         </p>
                       </div>
-                    </div>
-                    
-                    {/* Quick Action Buttons */}
-                    <div className="flex flex-wrap gap-2">
-                      <Button size="sm" variant="outline" className="flex items-center gap-2">
-                        <Upload className="h-4 w-4" />
-                        Upload Document
-                      </Button>
-                      <Button size="sm" variant="outline" className="flex items-center gap-2">
-                        <MessageCircle className="h-4 w-4" />
-                        Send Whisper
-                      </Button>
-                      <Button size="sm" variant="outline" className="flex items-center gap-2">
-                        <CheckCircle className="h-4 w-4" />
-                        Mark Done
-                      </Button>
                     </div>
                     
                     {/* Today's Cases as Tasks */}
@@ -265,16 +251,9 @@ export default function Dashboard() {
                             <p className="text-sm text-muted-foreground line-clamp-1">
                               {item.petitioner} vs {item.respondent}
                             </p>
-                            <div className="flex gap-2 pt-2">
-                              <Button size="sm" variant="ghost" className="h-8 text-xs">
-                                <Upload className="h-3 w-3 mr-1" />
-                                Upload
-                              </Button>
-                              <Button size="sm" variant="ghost" className="h-8 text-xs">
-                                <MessageCircle className="h-3 w-3 mr-1" />
-                                Note
-                              </Button>
-                            </div>
+                            <p className="text-xs text-primary mt-2">
+                              Tap to view case details →
+                            </p>
                           </div>
                         ))
                       )}

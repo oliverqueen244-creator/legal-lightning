@@ -2,18 +2,10 @@ import { useNavigate } from 'react-router-dom';
 import {
   User,
   LogOut,
-  Settings,
-  Bell,
-  Users,
-  CreditCard,
   MapPin,
-  Clock,
   Fingerprint,
   Shield,
-  HelpCircle,
-  FileText,
-  Calendar,
-  ChevronRight,
+  Check,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -30,16 +22,22 @@ import {
   DropdownMenuSubTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { useQueryClient } from '@tanstack/react-query';
 
 /**
  * Role-Aware User Menu (Top Right Dropdown)
- * All non-urgent and configuration actions live here
- * NEVER surface settings during execution
+ * 
+ * AUDIT FIX: Removed all non-functional menu items.
+ * Only functional, implemented routes and handlers are included.
+ * 
+ * Bench selection now properly mutates profile state and refetches data.
  */
 export function UserMenu() {
   const navigate = useNavigate();
-  const { profile, role, isAdmin, signOut } = useAuth();
+  const queryClient = useQueryClient();
+  const { user, profile, role, isAdmin, signOut } = useAuth();
 
   const handleSignOut = async () => {
     const { error } = await signOut();
@@ -51,8 +49,31 @@ export function UserMenu() {
     }
   };
 
+  // Handle bench selection - actually mutates profile and refetches data
+  const handleBenchChange = async (bench: 'JAIPUR' | 'JODHPUR' | 'JAIPUR,JODHPUR') => {
+    if (!user?.id) return;
+
+    const { error } = await supabase
+      .from('profiles')
+      .update({ bench })
+      .eq('id', user.id);
+
+    if (error) {
+      toast.error('Failed to update bench');
+      return;
+    }
+
+    toast.success(`Bench updated to ${bench === 'JAIPUR,JODHPUR' ? 'Both Benches' : bench}`);
+    
+    // Invalidate and refetch relevant queries
+    queryClient.invalidateQueries({ queryKey: ['profile'] });
+    queryClient.invalidateQueries({ queryKey: ['docket'] });
+    queryClient.invalidateQueries({ queryKey: ['live-board'] });
+    queryClient.invalidateQueries({ queryKey: ['morning-brief'] });
+  };
+
   const isSenior = role === 'SENIOR';
-  const isJunior = role === 'JUNIOR';
+  const currentBench = profile?.bench || 'JODHPUR';
 
   return (
     <DropdownMenu>
@@ -81,13 +102,13 @@ export function UserMenu() {
           <div className="flex flex-col space-y-1">
             <p className="text-sm font-medium leading-none">{profile?.full_name}</p>
             <p className="text-xs leading-none text-muted-foreground">
-              {role} • {profile?.bench || 'No bench'}
+              {role} • {currentBench || 'No bench'}
             </p>
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
 
-        {/* Common Menu Items */}
+        {/* Functional Menu Items Only */}
         <DropdownMenuGroup>
           <DropdownMenuItem 
             onClick={() => navigate('/onboarding')}
@@ -95,138 +116,47 @@ export function UserMenu() {
           >
             <User className="mr-2 h-4 w-4" />
             Profile
-            <ChevronRight className="ml-auto h-4 w-4 text-muted-foreground" />
           </DropdownMenuItem>
 
-          {/* Bench Selection */}
+          {/* Bench Selection - FUNCTIONAL: updates profile and refetches data */}
           <DropdownMenuSub>
             <DropdownMenuSubTrigger className="min-h-touch">
               <MapPin className="mr-2 h-4 w-4" />
               Bench
               <Badge variant="outline" className="ml-auto text-xs">
-                {profile?.bench || 'JODHPUR'}
+                {currentBench === 'JAIPUR,JODHPUR' ? 'Both' : currentBench}
               </Badge>
             </DropdownMenuSubTrigger>
             <DropdownMenuSubContent className="glass-card">
-              <DropdownMenuItem>Jaipur Bench</DropdownMenuItem>
-              <DropdownMenuItem>Jodhpur Bench</DropdownMenuItem>
-              <DropdownMenuItem>Both Benches</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleBenchChange('JAIPUR')}>
+                {currentBench === 'JAIPUR' && <Check className="mr-2 h-4 w-4" />}
+                {currentBench !== 'JAIPUR' && <span className="mr-6" />}
+                Jaipur Bench
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleBenchChange('JODHPUR')}>
+                {currentBench === 'JODHPUR' && <Check className="mr-2 h-4 w-4" />}
+                {currentBench !== 'JODHPUR' && <span className="mr-6" />}
+                Jodhpur Bench
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleBenchChange('JAIPUR,JODHPUR')}>
+                {currentBench === 'JAIPUR,JODHPUR' && <Check className="mr-2 h-4 w-4" />}
+                {currentBench !== 'JAIPUR,JODHPUR' && <span className="mr-6" />}
+                Both Benches
+              </DropdownMenuItem>
             </DropdownMenuSubContent>
           </DropdownMenuSub>
 
-          {/* Alias Management */}
+          {/* Alias Management - FUNCTIONAL: navigates to onboarding with aliases step */}
           <DropdownMenuItem 
             onClick={() => navigate('/onboarding?step=aliases')}
             className="min-h-touch"
           >
             <Fingerprint className="mr-2 h-4 w-4" />
             Name Aliases
-            <ChevronRight className="ml-auto h-4 w-4 text-muted-foreground" />
           </DropdownMenuItem>
         </DropdownMenuGroup>
 
-        <DropdownMenuSeparator />
-
-        {/* Settings Groups */}
-        <DropdownMenuGroup>
-          {/* Court Settings */}
-          <DropdownMenuSub>
-            <DropdownMenuSubTrigger className="min-h-touch">
-              <Clock className="mr-2 h-4 w-4" />
-              Court Settings
-            </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent className="glass-card w-56">
-              <DropdownMenuItem>Court Hours</DropdownMenuItem>
-              <DropdownMenuItem>Court Mode Auto-Enable</DropdownMenuItem>
-              <DropdownMenuItem>Escalation Preferences</DropdownMenuItem>
-            </DropdownMenuSubContent>
-          </DropdownMenuSub>
-
-          {/* Notification Settings */}
-          <DropdownMenuSub>
-            <DropdownMenuSubTrigger className="min-h-touch">
-              <Bell className="mr-2 h-4 w-4" />
-              Notifications
-            </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent className="glass-card w-56">
-              <DropdownMenuItem>Alert Types</DropdownMenuItem>
-              <DropdownMenuItem>WhatsApp Escalation</DropdownMenuItem>
-              <DropdownMenuItem>Quiet Hours</DropdownMenuItem>
-            </DropdownMenuSubContent>
-          </DropdownMenuSub>
-        </DropdownMenuGroup>
-
-        {/* Senior-Only Items */}
-        {isSenior && (
-          <>
-            <DropdownMenuSeparator />
-            <DropdownMenuGroup>
-              <DropdownMenuLabel className="text-xs text-muted-foreground">
-                Senior Options
-              </DropdownMenuLabel>
-              <DropdownMenuItem className="min-h-touch">
-                <Users className="mr-2 h-4 w-4" />
-                Team Overview
-                <ChevronRight className="ml-auto h-4 w-4 text-muted-foreground" />
-              </DropdownMenuItem>
-              <DropdownMenuItem className="min-h-touch">
-                <Settings className="mr-2 h-4 w-4" />
-                AI Preferences
-                <ChevronRight className="ml-auto h-4 w-4 text-muted-foreground" />
-              </DropdownMenuItem>
-              <DropdownMenuItem className="min-h-touch">
-                <FileText className="mr-2 h-4 w-4" />
-                Export Notes
-              </DropdownMenuItem>
-              <DropdownMenuItem className="min-h-touch">
-                <Calendar className="mr-2 h-4 w-4" />
-                Archive / History
-              </DropdownMenuItem>
-            </DropdownMenuGroup>
-          </>
-        )}
-
-        {/* Junior-Only Items */}
-        {isJunior && (
-          <>
-            <DropdownMenuSeparator />
-            <DropdownMenuGroup>
-              <DropdownMenuLabel className="text-xs text-muted-foreground">
-                Junior Options
-              </DropdownMenuLabel>
-              <DropdownMenuItem className="min-h-touch">
-                <Users className="mr-2 h-4 w-4" />
-                Assigned Seniors
-                <ChevronRight className="ml-auto h-4 w-4 text-muted-foreground" />
-              </DropdownMenuItem>
-              <DropdownMenuItem className="min-h-touch">
-                <FileText className="mr-2 h-4 w-4" />
-                Task History
-              </DropdownMenuItem>
-              <DropdownMenuItem className="min-h-touch">
-                <Clock className="mr-2 h-4 w-4" />
-                Availability Status
-              </DropdownMenuItem>
-            </DropdownMenuGroup>
-          </>
-        )}
-
-        <DropdownMenuSeparator />
-
-        {/* Account & Support */}
-        <DropdownMenuGroup>
-          <DropdownMenuItem className="min-h-touch">
-            <CreditCard className="mr-2 h-4 w-4" />
-            Subscription
-            <ChevronRight className="ml-auto h-4 w-4 text-muted-foreground" />
-          </DropdownMenuItem>
-          <DropdownMenuItem className="min-h-touch">
-            <HelpCircle className="mr-2 h-4 w-4" />
-            Help & Support
-          </DropdownMenuItem>
-        </DropdownMenuGroup>
-
-        {/* Admin Panel - Only for Admins */}
+        {/* Admin Panel - Only for Admins - FUNCTIONAL */}
         {isAdmin && (
           <>
             <DropdownMenuSeparator />
@@ -236,14 +166,13 @@ export function UserMenu() {
             >
               <Shield className="mr-2 h-4 w-4" />
               Admin Panel
-              <ChevronRight className="ml-auto h-4 w-4 text-muted-foreground" />
             </DropdownMenuItem>
           </>
         )}
 
         <DropdownMenuSeparator />
 
-        {/* Sign Out */}
+        {/* Sign Out - FUNCTIONAL */}
         <DropdownMenuItem 
           onClick={handleSignOut} 
           className="text-destructive min-h-touch"
