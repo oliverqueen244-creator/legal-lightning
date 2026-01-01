@@ -6,6 +6,7 @@ import {
   Fingerprint,
   Shield,
   Check,
+  RefreshCw,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -46,6 +47,43 @@ export function UserMenu() {
     } else {
       toast.success('Signed out successfully');
       navigate('/auth');
+    }
+  };
+
+  // SUPPORT FIX: Clear cache & reload for recovery
+  const handleClearCache = async () => {
+    try {
+      // Clear service worker caches
+      if ('caches' in window) {
+        const cacheNames = await caches.keys();
+        await Promise.all(cacheNames.map(name => caches.delete(name)));
+      }
+
+      // Clear IndexedDB (offline cache)
+      const databases = await indexedDB.databases();
+      for (const db of databases) {
+        if (db.name) {
+          indexedDB.deleteDatabase(db.name);
+        }
+      }
+
+      // Unregister service workers
+      if ('serviceWorker' in navigator) {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(registrations.map(r => r.unregister()));
+      }
+
+      toast.success('Cache cleared', {
+        description: 'Reloading application...',
+      });
+
+      // Reload after a brief delay
+      setTimeout(() => {
+        window.location.reload();
+      }, 500);
+    } catch (error) {
+      console.error('Failed to clear cache:', error);
+      toast.error('Failed to clear cache');
     }
   };
 
@@ -171,6 +209,15 @@ export function UserMenu() {
         )}
 
         <DropdownMenuSeparator />
+
+        {/* SUPPORT FIX: Clear Cache & Reload - for support recovery */}
+        <DropdownMenuItem 
+          onClick={handleClearCache} 
+          className="text-muted-foreground min-h-touch"
+        >
+          <RefreshCw className="mr-2 h-4 w-4" aria-hidden="true" />
+          Clear cache & reload
+        </DropdownMenuItem>
 
         {/* Sign Out - FUNCTIONAL */}
         <DropdownMenuItem 
