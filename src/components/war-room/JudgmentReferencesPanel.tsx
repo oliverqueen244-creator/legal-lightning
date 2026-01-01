@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useReferenceJudgments, useSavedReferences } from '@/hooks/useReferenceJudgments';
 import { useAdvocateAliases } from '@/hooks/useJudgmentReferences';
+import { useJudgmentAttachments } from '@/hooks/useJudgmentAttachments';
 import { useAuth } from '@/hooks/useAuth';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -9,12 +10,13 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { ExternalLink, ChevronDown, ChevronRight, BookOpen, Search, Loader2, Info, RefreshCw } from 'lucide-react';
+import { ExternalLink, ChevronDown, ChevronRight, BookOpen, Search, Loader2, Info, RefreshCw, Paperclip, Check, X } from 'lucide-react';
 import { format } from 'date-fns';
 import { AiDisclaimer } from '@/components/ui/AiDisclaimer';
 import { SIGNAL_DEFINITIONS, getSignalVariant, type RankedJudgment } from '@/lib/judgmentRanking';
 
 interface JudgmentReferencesPanelProps {
+  docketId?: string;
   caseNumber?: string | null;
   judgeName?: string | null;
   court?: string | null;
@@ -49,8 +51,22 @@ function SignalBadge({ signal }: { signal: string }) {
   );
 }
 
-// Judgment card component
-function JudgmentCard({ judgment }: { judgment: RankedJudgment }) {
+// Judgment card component with attachment support
+function JudgmentCard({ 
+  judgment, 
+  docketId,
+  isAttached,
+  onAttach,
+  onDetach,
+  isAttaching,
+}: { 
+  judgment: RankedJudgment;
+  docketId?: string;
+  isAttached: boolean;
+  onAttach: () => void;
+  onDetach: () => void;
+  isAttaching: boolean;
+}) {
   return (
     <div className="p-3 rounded border border-border/30 bg-background/50 space-y-2">
       <div className="flex items-start justify-between gap-2">
@@ -71,15 +87,45 @@ function JudgmentCard({ judgment }: { judgment: RankedJudgment }) {
             )}
           </div>
         </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="shrink-0 h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
-          onClick={() => window.open(judgment.url, '_blank')}
-          aria-label="View on Indian Kanoon"
-        >
-          <ExternalLink className="h-3.5 w-3.5" />
-        </Button>
+        <div className="flex items-center gap-1 shrink-0">
+          {/* Attach/Detach button */}
+          {docketId && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant={isAttached ? "secondary" : "ghost"}
+                    size="sm"
+                    className={`h-7 w-7 p-0 ${isAttached ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+                    onClick={isAttached ? onDetach : onAttach}
+                    disabled={isAttaching}
+                  >
+                    {isAttaching ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : isAttached ? (
+                      <Check className="h-3.5 w-3.5" />
+                    ) : (
+                      <Paperclip className="h-3.5 w-3.5" />
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="text-xs">
+                  {isAttached ? 'Remove from case' : 'Attach to case'}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+          
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+            onClick={() => window.open(judgment.url, '_blank')}
+            aria-label="View on Indian Kanoon"
+          >
+            <ExternalLink className="h-3.5 w-3.5" />
+          </Button>
+        </div>
       </div>
       
       {/* Priority signal badges */}
@@ -88,6 +134,14 @@ function JudgmentCard({ judgment }: { judgment: RankedJudgment }) {
           {judgment.matchedSignals.map((signal) => (
             <SignalBadge key={signal} signal={signal} />
           ))}
+        </div>
+      )}
+      
+      {/* Attached indicator */}
+      {isAttached && (
+        <div className="flex items-center gap-1 text-[10px] text-primary/70">
+          <Paperclip className="h-3 w-3" />
+          <span>User-attached reference judgment</span>
         </div>
       )}
       
@@ -110,6 +164,7 @@ function JudgmentCard({ judgment }: { judgment: RankedJudgment }) {
 }
 
 export function JudgmentReferencesPanel({
+  docketId,
   caseNumber,
   judgeName,
   court,
@@ -122,6 +177,16 @@ export function JudgmentReferencesPanel({
   
   // Get user's aliases
   const { data: aliases = [] } = useAdvocateAliases(user?.id);
+  
+  // Attachments hook
+  const { 
+    attachments, 
+    attach, 
+    detach, 
+    isAttaching, 
+    isDetaching,
+    isAttached 
+  } = useJudgmentAttachments(docketId);
   
   // Build advocate names list
   const advocateNames = [
@@ -158,6 +223,39 @@ export function JudgmentReferencesPanel({
 
   const liveCount = liveJudgments.length;
   const savedCount = savedJudgments.length;
+  const attachedCount = attachments.length;
+
+  // Helper to handle attachment
+  const handleAttach = (judgment: RankedJudgment, source: 'live-search' | 'saved') => {
+    // Build signal scores from the signals array for audit
+    const rankingSignals: Record<string, number> = {};
+    judgment.signals.forEach(s => {
+      if (s.matched) {
+        rankingSignals[s.signal] = s.weight;
+      }
+    });
+    
+    attach({
+      docketId,
+      judgmentUrl: judgment.url,
+      judgmentTitle: judgment.title,
+      judgmentCourt: judgment.court,
+      judgmentDate: judgment.date,
+      prioritySignals: judgment.matchedSignals,
+      source,
+      searchVector: judgment.searchVector,
+      rankingScore: judgment.score,
+      rankingSignals,
+    });
+  };
+
+  // Helper to handle detachment
+  const handleDetach = (url: string) => {
+    const attachment = attachments.find(a => a.judgment_url === url);
+    if (attachment) {
+      detach(attachment.id);
+    }
+  };
 
   if (!judgeName && !court) {
     return null;
@@ -174,6 +272,11 @@ export function JudgmentReferencesPanel({
                 <CardTitle className="text-sm font-normal text-muted-foreground">
                   Reference Judgments (Contextual)
                 </CardTitle>
+                {attachedCount > 0 && (
+                  <Badge variant="secondary" className="text-[10px] h-4 px-1.5">
+                    {attachedCount} attached
+                  </Badge>
+                )}
               </div>
               {isOpen ? (
                 <ChevronDown className="h-4 w-4 text-muted-foreground" />
@@ -239,7 +342,15 @@ export function JudgmentReferencesPanel({
                   <ScrollArea className="h-[280px]">
                     <div className="space-y-2">
                       {liveJudgments.map((judgment) => (
-                        <JudgmentCard key={judgment.id} judgment={judgment} />
+                        <JudgmentCard 
+                          key={judgment.id} 
+                          judgment={judgment}
+                          docketId={docketId}
+                          isAttached={isAttached(judgment.url)}
+                          onAttach={() => handleAttach(judgment, 'live-search')}
+                          onDetach={() => handleDetach(judgment.url)}
+                          isAttaching={isAttaching || isDetaching}
+                        />
                       ))}
                     </div>
                   </ScrollArea>
@@ -266,7 +377,15 @@ export function JudgmentReferencesPanel({
                   <ScrollArea className="h-[280px]">
                     <div className="space-y-2">
                       {savedJudgments.map((judgment) => (
-                        <JudgmentCard key={judgment.id} judgment={judgment} />
+                        <JudgmentCard 
+                          key={judgment.id} 
+                          judgment={judgment}
+                          docketId={docketId}
+                          isAttached={isAttached(judgment.url)}
+                          onAttach={() => handleAttach(judgment, 'saved')}
+                          onDetach={() => handleDetach(judgment.url)}
+                          isAttaching={isAttaching || isDetaching}
+                        />
                       ))}
                     </div>
                   </ScrollArea>

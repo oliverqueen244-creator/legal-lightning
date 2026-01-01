@@ -851,6 +851,82 @@ export type Database = {
         }
         Relationships: []
       }
+      judgment_attachments: {
+        Row: {
+          argument_id: string | null
+          attached_at: string
+          attached_by: string
+          docket_id: string | null
+          id: string
+          judgment_court: string | null
+          judgment_date: string | null
+          judgment_title: string
+          judgment_url: string
+          priority_signals: string[] | null
+          ranking_score: number | null
+          ranking_signals: Json | null
+          search_vector: string | null
+          source: string
+          user_note: string | null
+        }
+        Insert: {
+          argument_id?: string | null
+          attached_at?: string
+          attached_by: string
+          docket_id?: string | null
+          id?: string
+          judgment_court?: string | null
+          judgment_date?: string | null
+          judgment_title: string
+          judgment_url: string
+          priority_signals?: string[] | null
+          ranking_score?: number | null
+          ranking_signals?: Json | null
+          search_vector?: string | null
+          source?: string
+          user_note?: string | null
+        }
+        Update: {
+          argument_id?: string | null
+          attached_at?: string
+          attached_by?: string
+          docket_id?: string | null
+          id?: string
+          judgment_court?: string | null
+          judgment_date?: string | null
+          judgment_title?: string
+          judgment_url?: string
+          priority_signals?: string[] | null
+          ranking_score?: number | null
+          ranking_signals?: Json | null
+          search_vector?: string | null
+          source?: string
+          user_note?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "judgment_attachments_argument_id_fkey"
+            columns: ["argument_id"]
+            isOneToOne: false
+            referencedRelation: "case_arguments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "judgment_attachments_docket_id_fkey"
+            columns: ["docket_id"]
+            isOneToOne: false
+            referencedRelation: "daily_court_docket"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "judgment_attachments_docket_id_fkey"
+            columns: ["docket_id"]
+            isOneToOne: false
+            referencedRelation: "user_docket_view"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       lawyer_aliases: {
         Row: {
           alias_name: string
