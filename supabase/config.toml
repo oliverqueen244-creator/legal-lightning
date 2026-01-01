@@ -56,3 +56,6 @@ verify_jwt = false
 
 [functions.escalate-whatsapp]
 verify_jwt = true
+
+[functions.search-indian-kanoon]
+verify_jwt = false
