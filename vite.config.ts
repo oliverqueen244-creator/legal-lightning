@@ -15,22 +15,44 @@ export default defineConfig(({ mode }) => ({
     mode === "development" && componentTagger(),
     VitePWA({
       registerType: "autoUpdate",
-      includeAssets: ["favicon.ico", "robots.txt"],
+      includeAssets: ["favicon.ico", "robots.txt", "pwa-192x192.png", "pwa-512x512.png"],
       manifest: {
-        name: "Vakalat-OS",
+        name: "Vakalat-OS — Litigation Operating System",
         short_name: "Vakalat",
-        description: "Criminal Litigation Operating System for Rajasthan High Court",
+        description: "Criminal Litigation Operating System for Rajasthan High Court. Connection-aware design ensures accurate court information.",
         theme_color: "#0f172a",
         background_color: "#0f172a",
         display: "standalone",
         orientation: "any",
         start_url: "/",
         scope: "/",
+        categories: ["productivity", "business"],
         icons: [
           {
             src: "/favicon.ico",
             sizes: "64x64",
             type: "image/x-icon",
+          },
+          {
+            src: "/pwa-192x192.png",
+            sizes: "192x192",
+            type: "image/png",
+            purpose: "any",
+          },
+          {
+            src: "/pwa-512x512.png",
+            sizes: "512x512",
+            type: "image/png",
+            purpose: "any maskable",
+          },
+        ],
+        // INSTALLABILITY SAFETY: No shortcuts that imply offline works fully
+        shortcuts: [
+          {
+            name: "Today's Docket",
+            short_name: "Docket",
+            url: "/",
+            description: "View today's court schedule",
           },
         ],
       },
