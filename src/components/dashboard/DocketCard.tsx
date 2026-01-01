@@ -4,7 +4,8 @@ import { format } from 'date-fns';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Scale, Clock, AlertTriangle, ChevronRight, SkipForward, Coffee, Ban, Zap, Play, Calendar } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Scale, Clock, AlertTriangle, ChevronRight, SkipForward, Coffee, Ban, Zap, Play, Calendar, FileText, Upload } from 'lucide-react';
 import type { DocketItem, LiveBoardCache, BoardStatus } from '@/types/database';
 import { cn } from '@/lib/utils';
 import type { AppRole } from '@/hooks/useAuth';
@@ -18,9 +19,10 @@ interface DocketCardProps {
   userRole?: AppRole | null;
   onForceActive?: (itemId: string) => void;
   showDate?: boolean;
+  pendingDocCount?: number;
 }
 
-export function DocketCard({ item, liveBoard, userRole, onForceActive, showDate }: DocketCardProps) {
+export function DocketCard({ item, liveBoard, userRole, onForceActive, showDate, pendingDocCount = 0 }: DocketCardProps) {
   const navigate = useNavigate();
   const [isForcing, setIsForcing] = useState(false);
   
@@ -212,6 +214,48 @@ export function DocketCard({ item, liveBoard, userRole, onForceActive, showDate 
                 <span className="text-muted-foreground">Opposing: </span>
                 <span className="text-foreground">{item.respondent_lawyer}</span>
               </div>
+            )}
+
+            {/* Document Status Indicator */}
+            {pendingDocCount > 0 && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="mt-2 inline-flex items-center gap-1">
+                      <Badge variant="outline" className="text-xs flex items-center gap-1 border-court-warning/50 text-court-warning">
+                        <FileText className="h-3 w-3" />
+                        {pendingDocCount} pending review
+                      </Badge>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="max-w-xs">
+                    <p className="text-xs">
+                      {userRole === 'SENIOR' || userRole === 'ADMIN' 
+                        ? 'Open War Room → Documents tab to review and approve'
+                        : 'Documents uploaded, awaiting senior review'}
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+
+            {/* Upload Location Hint - Show for JUNIOR/CLERK */}
+            {(userRole === 'JUNIOR' || userRole === 'CLERK') && !isPassover && !isDone && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="mt-1 inline-flex items-center gap-1 text-xs text-muted-foreground cursor-help">
+                      <Upload className="h-3 w-3" />
+                      <span>Upload in Control Deck</span>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="max-w-xs">
+                    <p className="text-xs">
+                      Click to open Control Deck where you can upload case documents
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             )}
           </div>
           
