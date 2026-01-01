@@ -4,6 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useAudioRecorder, formatRecordingTime } from '@/hooks/useAudioRecorder';
 import { useNotificationSound } from '@/hooks/useNotificationSound';
+import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -15,7 +16,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from '@/components/ui/sheet';
-import { MessageCircle, Send, Mic, Square, X, Play, Pause, Loader2, Volume2, VolumeX } from 'lucide-react';
+import { MessageCircle, Send, Mic, Square, X, Play, Pause, Loader2, Volume2, VolumeX, WifiOff, Wifi } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
@@ -112,6 +113,9 @@ export function WhisperDrawer({ docketId }: WhisperDrawerProps) {
   const holdTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isHoldingRef = useRef(false);
   const prevMessageCountRef = useRef(0);
+  
+  // P1 FIX: Network status for connection indicator
+  const { isOnline } = useNetworkStatus();
   
   const { playNotification, setEnabled } = useNotificationSound();
   
@@ -278,6 +282,11 @@ export function WhisperDrawer({ docketId }: WhisperDrawerProps) {
   // Send message mutation
   const sendMessage = useMutation({
     mutationFn: async (message: string) => {
+      // P0 FIX: Block write action when offline
+      if (!navigator.onLine) {
+        throw new Error('OFFLINE_BLOCKED');
+      }
+
       const { error } = await supabase
         .from('live_courtroom_feed')
         .insert({
@@ -293,10 +302,26 @@ export function WhisperDrawer({ docketId }: WhisperDrawerProps) {
       setNewMessage('');
       queryClient.invalidateQueries({ queryKey: ['whispers', docketId] });
     },
+    onError: (error: any) => {
+      if (error.message === 'OFFLINE_BLOCKED') {
+        toast.error('Internet connection required', {
+          description: 'Cannot send message while offline.',
+        });
+      }
+    },
   });
 
   const handleSend = (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // P0 FIX: Block if offline
+    if (!isOnline) {
+      toast.error('Internet connection required', {
+        description: 'Cannot send message while offline.',
+      });
+      return;
+    }
+    
     if (newMessage.trim()) {
       sendMessage.mutate(newMessage.trim());
     }
@@ -395,6 +420,18 @@ export function WhisperDrawer({ docketId }: WhisperDrawerProps) {
             <span className="flex items-center gap-2">
               <MessageCircle className="h-5 w-5 text-primary" aria-hidden="true" />
               Whisper Chat
+              {/* P1 FIX: Connection status indicator */}
+              {isOnline ? (
+                <Badge variant="outline" className="text-xs flex items-center gap-1 text-court-success border-court-success/30">
+                  <Wifi className="h-3 w-3" />
+                  Online
+                </Badge>
+              ) : (
+                <Badge variant="destructive" className="text-xs flex items-center gap-1">
+                  <WifiOff className="h-3 w-3" />
+                  Offline
+                </Badge>
+              )}
             </span>
             <Button
               variant="ghost"
@@ -498,10 +535,16 @@ export function WhisperDrawer({ docketId }: WhisperDrawerProps) {
             <Input
               value={newMessage}
               onChange={(e) => setNewMessage(e.target.value)}
-              placeholder={isRecording ? 'Recording...' : 'Type a whisper...'}
+              placeholder={
+                !isOnline 
+                  ? 'Offline — Cannot send messages' 
+                  : isRecording 
+                    ? 'Recording...' 
+                    : 'Type a whisper...'
+              }
               className="flex-1 bg-secondary/50 border-border"
               aria-label="Message input"
-              disabled={isRecording || isUploading}
+              disabled={isRecording || isUploading || !isOnline}
             />
             
             {/* Voice Record Button - Hold to record on touch devices, click on desktop */}
@@ -514,7 +557,7 @@ export function WhisperDrawer({ docketId }: WhisperDrawerProps) {
               onPointerUp={handlePointerUp}
               onPointerLeave={handlePointerLeave}
               onPointerCancel={handlePointerLeave}
-              disabled={isUploading}
+              disabled={isUploading || !isOnline}
               className={cn(
                 'min-h-touch min-w-touch transition-all touch-none select-none',
                 isRecording && 'animate-pulse scale-110'
@@ -522,6 +565,7 @@ export function WhisperDrawer({ docketId }: WhisperDrawerProps) {
               aria-label={isRecording ? 'Release to send voice memo' : 'Hold to record voice memo, or tap to toggle recording'}
               role="button"
               aria-pressed={isRecording}
+              title={!isOnline ? 'Messaging requires internet connection' : undefined}
             >
               {isUploading ? (
                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
@@ -536,9 +580,10 @@ export function WhisperDrawer({ docketId }: WhisperDrawerProps) {
             <Button 
               type="submit" 
               size="icon"
-              disabled={!newMessage.trim() || sendMessage.isPending || isRecording || isUploading}
+              disabled={!newMessage.trim() || sendMessage.isPending || isRecording || isUploading || !isOnline}
               className="min-h-touch min-w-touch"
               aria-label="Send message"
+              title={!isOnline ? 'Messaging requires internet connection' : undefined}
             >
               <Send className="h-4 w-4" />
             </Button>

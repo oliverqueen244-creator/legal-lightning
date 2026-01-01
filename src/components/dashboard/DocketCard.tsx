@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { format } from 'date-fns';
+import { format, formatDistanceToNow } from 'date-fns';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { Scale, Clock, AlertTriangle, ChevronRight, SkipForward, Coffee, Ban, Zap, Play, Calendar, FileText, Upload } from 'lucide-react';
+import { Scale, Clock, AlertTriangle, ChevronRight, SkipForward, Coffee, Ban, Zap, Play, Calendar, FileText, Upload, Database } from 'lucide-react';
 import type { DocketItem, LiveBoardCache, BoardStatus } from '@/types/database';
 import { cn } from '@/lib/utils';
 import type { AppRole } from '@/hooks/useAuth';
@@ -14,15 +14,17 @@ import { toast } from 'sonner';
 import { CaseTimeEstimatorCompact } from './CaseTimeEstimator';
 
 interface DocketCardProps {
-  item: DocketItem & { status?: string; force_active?: boolean };
+  item: DocketItem & { status?: string; force_active?: boolean; created_at?: string };
   liveBoard?: LiveBoardCache;
   userRole?: AppRole | null;
   onForceActive?: (itemId: string) => void;
   showDate?: boolean;
   pendingDocCount?: number;
+  /** P1 FIX: If provided, shows "Cached at" timestamp for offline data */
+  cachedAt?: number;
 }
 
-export function DocketCard({ item, liveBoard, userRole, onForceActive, showDate, pendingDocCount = 0 }: DocketCardProps) {
+export function DocketCard({ item, liveBoard, userRole, onForceActive, showDate, pendingDocCount = 0, cachedAt }: DocketCardProps) {
   const navigate = useNavigate();
   const [isForcing, setIsForcing] = useState(false);
   
@@ -137,6 +139,13 @@ export function DocketCard({ item, liveBoard, userRole, onForceActive, showDate,
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-2 flex-wrap">
+              {/* P1 FIX: Show cached timestamp when data is from offline cache */}
+              {cachedAt && (
+                <Badge variant="outline" className="flex items-center gap-1 text-muted-foreground border-muted">
+                  <Database className="h-3 w-3" />
+                  Cached {formatDistanceToNow(cachedAt, { addSuffix: true })}
+                </Badge>
+              )}
               {showDate && item.date && (
                 <Badge variant="outline" className="flex items-center gap-1">
                   <Calendar className="h-3 w-3" />

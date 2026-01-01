@@ -2,7 +2,6 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
-
 export interface JudgmentAttachment {
   id: string;
   docket_id: string | null;
@@ -61,6 +60,11 @@ export function useJudgmentAttachments(docketId?: string) {
   // Attach a judgment
   const attachMutation = useMutation({
     mutationFn: async (params: AttachJudgmentParams) => {
+      // P0 FIX: Block write action when offline
+      if (!navigator.onLine) {
+        throw new Error('OFFLINE_BLOCKED');
+      }
+
       if (!user?.id) throw new Error('Not authenticated');
 
       const { data, error } = await supabase
@@ -91,6 +95,12 @@ export function useJudgmentAttachments(docketId?: string) {
       toast.success('Reference judgment attached');
     },
     onError: (error) => {
+      if (error.message === 'OFFLINE_BLOCKED') {
+        toast.error('Internet connection required', {
+          description: 'Cannot attach judgment while offline.',
+        });
+        return;
+      }
       toast.error('Failed to attach judgment: ' + error.message);
     },
   });

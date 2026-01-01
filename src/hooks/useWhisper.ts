@@ -68,6 +68,11 @@ export function useSendWhisper() {
 
   return useMutation({
     mutationFn: async ({ docketId, message }: { docketId: string; message: string }) => {
+      // P0 FIX: Block write action when offline
+      if (!navigator.onLine) {
+        throw new Error('OFFLINE_BLOCKED');
+      }
+
       const { data, error } = await supabase
         .from('live_courtroom_feed')
         .insert({
@@ -82,6 +87,13 @@ export function useSendWhisper() {
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['whisper', variables.docketId] });
+    },
+    onError: (error) => {
+      if (error.message === 'OFFLINE_BLOCKED') {
+        toast.error('Internet connection required', {
+          description: 'Cannot send message while offline.',
+        });
+      }
     },
   });
 }
