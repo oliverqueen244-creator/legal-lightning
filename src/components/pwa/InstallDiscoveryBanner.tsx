@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Download, X } from 'lucide-react';
+import { useCourtMode } from '@/hooks/useCourtMode';
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -19,7 +20,7 @@ const DISMISS_DURATION_MS = 7 * 24 * 60 * 60 * 1000; // 1 week
  * - Appears at most once per user per week
  * - Never blocks workflow
  * - Never claims offline reliability
- * - Never shows during court mode
+ * - Never shows during court mode (uses actual court mode state, not time heuristics)
  */
 export function InstallDiscoveryBanner() {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
@@ -28,18 +29,13 @@ export function InstallDiscoveryBanner() {
   const [isInstalling, setIsInstalling] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
 
-  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+  // FIX 2: Robust iOS/iPadOS detection (handles iPadOS 13+ which reports as macOS)
+  const isIOS =
+    /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   
-  // Check if in court mode - banner should NOT show during active court hours
-  const isCourtMode = useCallback(() => {
-    // Court hours: 10 AM - 5 PM IST on weekdays
-    const now = new Date();
-    const hours = now.getHours();
-    const day = now.getDay();
-    const isWeekday = day >= 1 && day <= 5;
-    const isCourtHours = hours >= 10 && hours < 17;
-    return isWeekday && isCourtHours;
-  }, []);
+  // FIX 1: Use actual court mode state instead of hard-coded time logic
+  const { isCourtModeEnabled } = useCourtMode();
 
   useEffect(() => {
     // Check if already installed
@@ -48,11 +44,17 @@ export function InstallDiscoveryBanner() {
       return;
     }
 
-    // Check if dismissed recently
-    const dismissedAt = localStorage.getItem(DISMISS_KEY);
-    if (dismissedAt) {
-      const dismissedTime = parseInt(dismissedAt, 10);
-      if (Date.now() - dismissedTime < DISMISS_DURATION_MS) {
+    // Check dismissal state
+    const dismissedValue = localStorage.getItem(DISMISS_KEY);
+    if (dismissedValue) {
+      // FIX 4: Treat 'installed' as permanent dismissal
+      if (dismissedValue === 'installed') {
+        setIsDismissed(true);
+        return;
+      }
+      // Otherwise check if within dismissal duration
+      const dismissedTime = parseInt(dismissedValue, 10);
+      if (!isNaN(dismissedTime) && Date.now() - dismissedTime < DISMISS_DURATION_MS) {
         setIsDismissed(true);
         return;
       }
@@ -69,6 +71,8 @@ export function InstallDiscoveryBanner() {
       setIsInstalled(true);
       setDeferredPrompt(null);
       setIsVisible(false);
+      // FIX 4: Persist dismissal permanently on successful install
+      localStorage.setItem(DISMISS_KEY, 'installed');
     };
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstall);
@@ -82,10 +86,11 @@ export function InstallDiscoveryBanner() {
 
   // Determine visibility based on all conditions
   useEffect(() => {
+    // FIX 1: Never show during court mode (actual state, not time heuristics)
     const shouldShow = 
       !isInstalled && 
       !isDismissed && 
-      !isCourtMode() &&
+      !isCourtModeEnabled &&
       (deferredPrompt !== null || isIOS);
     
     // Small delay to prevent layout shift
@@ -95,7 +100,7 @@ export function InstallDiscoveryBanner() {
     } else {
       setIsVisible(false);
     }
-  }, [isInstalled, isDismissed, deferredPrompt, isIOS, isCourtMode]);
+  }, [isInstalled, isDismissed, deferredPrompt, isIOS, isCourtModeEnabled]);
 
   const handleInstall = async () => {
     if (isIOS) {
@@ -113,6 +118,8 @@ export function InstallDiscoveryBanner() {
       
       if (outcome === 'accepted') {
         setIsInstalled(true);
+        // FIX 4: Persist dismissal permanently on successful install
+        localStorage.setItem(DISMISS_KEY, 'installed');
       }
       setDeferredPrompt(null);
     } finally {
@@ -140,8 +147,9 @@ export function InstallDiscoveryBanner() {
             <h3 className="font-semibold text-foreground text-sm">
               Install VAKALAT-OS
             </h3>
+            {/* FIX 3: Softened copy - no mention of court hours or reliability */}
             <p className="text-sm text-muted-foreground mt-1">
-              Add VAKALAT-OS to your home screen for faster access during court hours.
+              Add VAKALAT-OS to your home screen for quicker access.
             </p>
             <p className="text-xs text-muted-foreground/70 mt-1">
               Some features require an internet connection.
