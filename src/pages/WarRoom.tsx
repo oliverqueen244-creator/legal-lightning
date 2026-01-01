@@ -10,6 +10,7 @@ import { DocumentSelector } from '@/components/war-room/DocumentSelector';
 import { DocumentReviewPanel } from '@/components/documents/DocumentReviewPanel';
 import { CaseHistoryPanel } from '@/components/case-history/CaseHistoryPanel';
 import { JudgmentReferencesPanel } from '@/components/war-room/JudgmentReferencesPanel';
+import { JudgeIntelligencePanel } from '@/components/judge-intelligence';
 import { PostCourtNoteCard } from '@/components/post-court/PostCourtNoteCard';
 import { ClientUpdateButton } from '@/components/client-update/ClientUpdateButton';
 import { WhisperNotification } from '@/components/war-room/WhisperNotification';
@@ -278,6 +279,17 @@ export default function WarRoom() {
                 />
               </TabsContent>
             </Tabs>
+            
+            {/* Judge Intelligence Panel */}
+            <div className="p-2 border-t border-border">
+              <JudgeIntelligencePanel
+                judgeName={docketItem.judge_names}
+                bench={docketItem.court_location}
+                courtNo={docketItem.court_room_no}
+                docketId={caseId}
+                caseNumber={docketItem.case_number}
+              />
+            </div>
             
             {/* Judgment References Panel - Collapsed by Default */}
             <div className="p-2 border-t border-border">

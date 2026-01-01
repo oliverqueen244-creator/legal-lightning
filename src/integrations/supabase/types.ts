@@ -237,6 +237,42 @@ export type Database = {
         }
         Relationships: []
       }
+      bench_procedural_patterns: {
+        Row: {
+          avg_lunch_duration_minutes: number | null
+          avg_start_time: string | null
+          bench: string
+          court_no: string
+          created_at: string
+          id: string
+          observations_count: number
+          pattern_date: string
+          typical_items_per_hour: number | null
+        }
+        Insert: {
+          avg_lunch_duration_minutes?: number | null
+          avg_start_time?: string | null
+          bench: string
+          court_no: string
+          created_at?: string
+          id?: string
+          observations_count?: number
+          pattern_date?: string
+          typical_items_per_hour?: number | null
+        }
+        Update: {
+          avg_lunch_duration_minutes?: number | null
+          avg_start_time?: string | null
+          bench?: string
+          court_no?: string
+          created_at?: string
+          id?: string
+          observations_count?: number
+          pattern_date?: string
+          typical_items_per_hour?: number | null
+        }
+        Relationships: []
+      }
       case_arguments: {
         Row: {
           created_at: string | null
@@ -850,6 +886,93 @@ export type Database = {
           lawyer_names?: string[] | null
         }
         Relationships: []
+      }
+      judge_observation_sharing: {
+        Row: {
+          chamber_id: string
+          consented_at: string
+          id: string
+          lawyer_id: string
+          revoked_at: string | null
+          share_own_observations: boolean
+          view_chamber_observations: boolean
+        }
+        Insert: {
+          chamber_id: string
+          consented_at?: string
+          id?: string
+          lawyer_id: string
+          revoked_at?: string | null
+          share_own_observations?: boolean
+          view_chamber_observations?: boolean
+        }
+        Update: {
+          chamber_id?: string
+          consented_at?: string
+          id?: string
+          lawyer_id?: string
+          revoked_at?: string | null
+          share_own_observations?: boolean
+          view_chamber_observations?: boolean
+        }
+        Relationships: []
+      }
+      judge_observations: {
+        Row: {
+          bench: string
+          court_no: string | null
+          created_at: string
+          hearing_date: string | null
+          id: string
+          judge_name: string
+          lawyer_id: string
+          observation_text: string
+          observation_type: string
+          source_case_number: string | null
+          source_docket_id: string | null
+        }
+        Insert: {
+          bench: string
+          court_no?: string | null
+          created_at?: string
+          hearing_date?: string | null
+          id?: string
+          judge_name: string
+          lawyer_id: string
+          observation_text: string
+          observation_type?: string
+          source_case_number?: string | null
+          source_docket_id?: string | null
+        }
+        Update: {
+          bench?: string
+          court_no?: string | null
+          created_at?: string
+          hearing_date?: string | null
+          id?: string
+          judge_name?: string
+          lawyer_id?: string
+          observation_text?: string
+          observation_type?: string
+          source_case_number?: string | null
+          source_docket_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "judge_observations_source_docket_id_fkey"
+            columns: ["source_docket_id"]
+            isOneToOne: false
+            referencedRelation: "daily_court_docket"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "judge_observations_source_docket_id_fkey"
+            columns: ["source_docket_id"]
+            isOneToOne: false
+            referencedRelation: "user_docket_view"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       judgment_attachments: {
         Row: {

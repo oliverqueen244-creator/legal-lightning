@@ -1,0 +1,1 @@
+export { JudgeIntelligencePanel } from './JudgeIntelligencePanel';
