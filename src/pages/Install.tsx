@@ -65,7 +65,9 @@ export default function Install() {
     }
   };
 
-  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+  // FIX 2: Robust iOS/iPadOS detection (handles iPadOS 13+ which reports as macOS)
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   const isAndroid = /Android/.test(navigator.userAgent);
 
   return (
