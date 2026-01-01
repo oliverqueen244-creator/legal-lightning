@@ -90,8 +90,8 @@ export function useSendWhisper() {
     },
     onError: (error) => {
       if (error.message === 'OFFLINE_BLOCKED') {
-        toast.error('Internet connection required', {
-          description: 'Cannot send message while offline.',
+        toast.error('Connection required', {
+          description: 'Viewing is available. Messaging requires connection.',
         });
       }
     },

@@ -96,8 +96,8 @@ export function useJudgmentAttachments(docketId?: string) {
     },
     onError: (error) => {
       if (error.message === 'OFFLINE_BLOCKED') {
-        toast.error('Internet connection required', {
-          description: 'Cannot attach judgment while offline.',
+        toast.error('Connection required', {
+          description: 'Viewing is available. Attaching judgments requires connection.',
         });
         return;
       }

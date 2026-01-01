@@ -304,8 +304,8 @@ export function WhisperDrawer({ docketId }: WhisperDrawerProps) {
     },
     onError: (error: any) => {
       if (error.message === 'OFFLINE_BLOCKED') {
-        toast.error('Internet connection required', {
-          description: 'Cannot send message while offline.',
+        toast.error('Connection required', {
+          description: 'Viewing is available. Messaging requires connection.',
         });
       }
     },
@@ -314,10 +314,10 @@ export function WhisperDrawer({ docketId }: WhisperDrawerProps) {
   const handleSend = (e: React.FormEvent) => {
     e.preventDefault();
     
-    // P0 FIX: Block if offline
+    // HARDENING FIX: Precise offline language
     if (!isOnline) {
-      toast.error('Internet connection required', {
-        description: 'Cannot send message while offline.',
+      toast.error('Connection required', {
+        description: 'Viewing is available. Messaging requires connection.',
       });
       return;
     }
@@ -537,7 +537,7 @@ export function WhisperDrawer({ docketId }: WhisperDrawerProps) {
               onChange={(e) => setNewMessage(e.target.value)}
               placeholder={
                 !isOnline 
-                  ? 'Offline — Cannot send messages' 
+                  ? 'Viewing available — messaging requires connection' 
                   : isRecording 
                     ? 'Recording...' 
                     : 'Type a whisper...'
@@ -565,7 +565,7 @@ export function WhisperDrawer({ docketId }: WhisperDrawerProps) {
               aria-label={isRecording ? 'Release to send voice memo' : 'Hold to record voice memo, or tap to toggle recording'}
               role="button"
               aria-pressed={isRecording}
-              title={!isOnline ? 'Messaging requires internet connection' : undefined}
+              title={!isOnline ? 'Viewing available — messaging requires connection' : undefined}
             >
               {isUploading ? (
                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
@@ -583,7 +583,7 @@ export function WhisperDrawer({ docketId }: WhisperDrawerProps) {
               disabled={!newMessage.trim() || sendMessage.isPending || isRecording || isUploading || !isOnline}
               className="min-h-touch min-w-touch"
               aria-label="Send message"
-              title={!isOnline ? 'Messaging requires internet connection' : undefined}
+              title={!isOnline ? 'Viewing available — messaging requires connection' : undefined}
             >
               <Send className="h-4 w-4" />
             </Button>
