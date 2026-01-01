@@ -30,16 +30,17 @@ import { LiveBoardSimulator } from '@/components/dashboard/LiveBoardSimulator';
 export default function Dashboard() {
   const navigate = useNavigate();
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
-  const { data: docket, isLoading: docketLoading, refetch } = useDocket();
+  const [activeTab, setActiveTab] = useState('brief');
+  
+  // Format date for API calls - must be before useDocket
+  const formattedDate = format(selectedDate, 'yyyy-MM-dd');
+  
+  const { data: docket, isLoading: docketLoading, refetch } = useDocket(formattedDate);
   const { data: liveBoards, isLoading: liveBoardLoading } = useLiveBoard();
   const { role, profile, isAdmin } = useAuth();
   const { data: morningBrief, isLoading: briefLoading, refetch: refetchBrief } = useMorningBrief();
   const { data: pendingCaptures } = usePendingCaptures();
   const { data: upcomingCases, isLoading: upcomingLoading } = useUpcomingCases();
-  const [activeTab, setActiveTab] = useState('brief');
-  
-  // Format date for API calls
-  const formattedDate = format(selectedDate, 'yyyy-MM-dd');
 
   // Get user's selected benches (could be "JAIPUR", "JODHPUR", or "JAIPUR,JODHPUR")
   const userBenches = profile?.bench?.split(',').map(b => b.trim().toUpperCase()) ?? [];
