@@ -15,6 +15,7 @@ import CourtroomMode from "./pages/CourtroomMode";
 import Install from "./pages/Install";
 import { GlobalOfflineBanner } from "./components/layout/GlobalOfflineBanner";
 import { SyncConflictProvider } from "./contexts/SyncConflictContext";
+import { InstallDiscoveryBanner, PostInstallConfirmation } from "./components/pwa";
 
 const queryClient = new QueryClient();
 
@@ -30,6 +31,10 @@ const App = () => (
         />
         {/* HARDENING FIX: Global offline banner - single source of truth */}
         <GlobalOfflineBanner />
+        {/* PWA Install Discovery - safe, non-intrusive, respects dismissal */}
+        <InstallDiscoveryBanner />
+        {/* PWA Post-Install Confirmation - shows once after first install launch */}
+        <PostInstallConfirmation />
         <BrowserRouter>
           <Routes>
             <Route path="/" element={<Dashboard />} />
