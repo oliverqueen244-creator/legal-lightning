@@ -104,6 +104,139 @@ export type Database = {
         }
         Relationships: []
       }
+      audit_findings: {
+        Row: {
+          area: string
+          audit_run_id: string
+          created_at: string
+          dimension: Database["public"]["Enums"]["audit_dimension"]
+          id: string
+          issue: string
+          recommendation: string | null
+          severity: Database["public"]["Enums"]["finding_severity"]
+          status: Database["public"]["Enums"]["finding_status"]
+          updated_at: string
+          verified_feature: string | null
+        }
+        Insert: {
+          area: string
+          audit_run_id: string
+          created_at?: string
+          dimension: Database["public"]["Enums"]["audit_dimension"]
+          id?: string
+          issue: string
+          recommendation?: string | null
+          severity?: Database["public"]["Enums"]["finding_severity"]
+          status?: Database["public"]["Enums"]["finding_status"]
+          updated_at?: string
+          verified_feature?: string | null
+        }
+        Update: {
+          area?: string
+          audit_run_id?: string
+          created_at?: string
+          dimension?: Database["public"]["Enums"]["audit_dimension"]
+          id?: string
+          issue?: string
+          recommendation?: string | null
+          severity?: Database["public"]["Enums"]["finding_severity"]
+          status?: Database["public"]["Enums"]["finding_status"]
+          updated_at?: string
+          verified_feature?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "audit_findings_audit_run_id_fkey"
+            columns: ["audit_run_id"]
+            isOneToOne: false
+            referencedRelation: "audit_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      audit_risks: {
+        Row: {
+          audit_run_id: string
+          created_at: string
+          description: string
+          id: string
+          impact: string
+          mitigation: string | null
+          risk_type: Database["public"]["Enums"]["risk_type"]
+          severity: Database["public"]["Enums"]["finding_severity"]
+        }
+        Insert: {
+          audit_run_id: string
+          created_at?: string
+          description: string
+          id?: string
+          impact: string
+          mitigation?: string | null
+          risk_type: Database["public"]["Enums"]["risk_type"]
+          severity?: Database["public"]["Enums"]["finding_severity"]
+        }
+        Update: {
+          audit_run_id?: string
+          created_at?: string
+          description?: string
+          id?: string
+          impact?: string
+          mitigation?: string | null
+          risk_type?: Database["public"]["Enums"]["risk_type"]
+          severity?: Database["public"]["Enums"]["finding_severity"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "audit_risks_audit_run_id_fkey"
+            columns: ["audit_run_id"]
+            isOneToOne: false
+            referencedRelation: "audit_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      audit_runs: {
+        Row: {
+          audit_name: string
+          audit_scope: Database["public"]["Enums"]["audit_scope"]
+          completed_at: string | null
+          conducted_by: string
+          created_at: string
+          go_decision: Database["public"]["Enums"]["go_decision"] | null
+          go_justification: string | null
+          id: string
+          notes: string | null
+          overall_status: Database["public"]["Enums"]["audit_status"] | null
+          started_at: string
+        }
+        Insert: {
+          audit_name: string
+          audit_scope?: Database["public"]["Enums"]["audit_scope"]
+          completed_at?: string | null
+          conducted_by: string
+          created_at?: string
+          go_decision?: Database["public"]["Enums"]["go_decision"] | null
+          go_justification?: string | null
+          id?: string
+          notes?: string | null
+          overall_status?: Database["public"]["Enums"]["audit_status"] | null
+          started_at?: string
+        }
+        Update: {
+          audit_name?: string
+          audit_scope?: Database["public"]["Enums"]["audit_scope"]
+          completed_at?: string | null
+          conducted_by?: string
+          created_at?: string
+          go_decision?: Database["public"]["Enums"]["go_decision"] | null
+          go_justification?: string | null
+          id?: string
+          notes?: string | null
+          overall_status?: Database["public"]["Enums"]["audit_status"] | null
+          started_at?: string
+        }
+        Relationships: []
+      }
       case_arguments: {
         Row: {
           created_at: string | null
@@ -1406,6 +1539,15 @@ export type Database = {
     }
     Enums: {
       app_role: "SENIOR" | "JUNIOR" | "CLERK" | "ADMIN"
+      audit_dimension:
+        | "user_experience"
+        | "role_permissions"
+        | "product_coherence"
+        | "system_failure"
+        | "operator_readiness"
+        | "business_liability"
+      audit_scope: "release" | "feature" | "full-system"
+      audit_status: "pass" | "conditional" | "fail"
       board_status: "hearing" | "passover" | "lunch" | "adjourned"
       document_format: "TYPED" | "SCANNED" | "HANDWRITTEN"
       document_language: "EN" | "HI" | "MIXED" | "UNKNOWN"
@@ -1418,6 +1560,10 @@ export type Database = {
         | "ORDER"
         | "ANNEXURES"
         | "NOTES"
+      finding_severity: "low" | "medium" | "high" | "critical"
+      finding_status: "open" | "acknowledged" | "fixed"
+      go_decision: "go" | "conditional_go" | "no_go"
+      risk_type: "ux" | "trust" | "operational" | "legal" | "scale"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1546,6 +1692,16 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["SENIOR", "JUNIOR", "CLERK", "ADMIN"],
+      audit_dimension: [
+        "user_experience",
+        "role_permissions",
+        "product_coherence",
+        "system_failure",
+        "operator_readiness",
+        "business_liability",
+      ],
+      audit_scope: ["release", "feature", "full-system"],
+      audit_status: ["pass", "conditional", "fail"],
       board_status: ["hearing", "passover", "lunch", "adjourned"],
       document_format: ["TYPED", "SCANNED", "HANDWRITTEN"],
       document_language: ["EN", "HI", "MIXED", "UNKNOWN"],
@@ -1559,6 +1715,10 @@ export const Constants = {
         "ANNEXURES",
         "NOTES",
       ],
+      finding_severity: ["low", "medium", "high", "critical"],
+      finding_status: ["open", "acknowledged", "fixed"],
+      go_decision: ["go", "conditional_go", "no_go"],
+      risk_type: ["ux", "trust", "operational", "legal", "scale"],
     },
   },
 } as const
