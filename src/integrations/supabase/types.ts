@@ -494,6 +494,148 @@ export type Database = {
           },
         ]
       }
+      chamber_invites: {
+        Row: {
+          chamber_id: string
+          created_at: string
+          created_by: string
+          expires_at: string
+          id: string
+          invite_code: string
+          invited_email: string | null
+          role_in_chamber: Database["public"]["Enums"]["chamber_role"]
+          used_at: string | null
+          used_by: string | null
+        }
+        Insert: {
+          chamber_id: string
+          created_at?: string
+          created_by: string
+          expires_at?: string
+          id?: string
+          invite_code?: string
+          invited_email?: string | null
+          role_in_chamber?: Database["public"]["Enums"]["chamber_role"]
+          used_at?: string | null
+          used_by?: string | null
+        }
+        Update: {
+          chamber_id?: string
+          created_at?: string
+          created_by?: string
+          expires_at?: string
+          id?: string
+          invite_code?: string
+          invited_email?: string | null
+          role_in_chamber?: Database["public"]["Enums"]["chamber_role"]
+          used_at?: string | null
+          used_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chamber_invites_chamber_id_fkey"
+            columns: ["chamber_id"]
+            isOneToOne: false
+            referencedRelation: "chambers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chamber_invites_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chamber_invites_used_by_fkey"
+            columns: ["used_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chamber_memberships: {
+        Row: {
+          chamber_id: string
+          id: string
+          invited_by: string | null
+          joined_at: string
+          lawyer_id: string
+          revoked_at: string | null
+          role_in_chamber: Database["public"]["Enums"]["chamber_role"]
+        }
+        Insert: {
+          chamber_id: string
+          id?: string
+          invited_by?: string | null
+          joined_at?: string
+          lawyer_id: string
+          revoked_at?: string | null
+          role_in_chamber?: Database["public"]["Enums"]["chamber_role"]
+        }
+        Update: {
+          chamber_id?: string
+          id?: string
+          invited_by?: string | null
+          joined_at?: string
+          lawyer_id?: string
+          revoked_at?: string | null
+          role_in_chamber?: Database["public"]["Enums"]["chamber_role"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chamber_memberships_chamber_id_fkey"
+            columns: ["chamber_id"]
+            isOneToOne: false
+            referencedRelation: "chambers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chamber_memberships_invited_by_fkey"
+            columns: ["invited_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chamber_memberships_lawyer_id_fkey"
+            columns: ["lawyer_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chambers: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          owner_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          owner_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          owner_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chambers_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       court_metadata: {
         Row: {
           bench: string
@@ -890,6 +1032,7 @@ export type Database = {
       judge_observation_sharing: {
         Row: {
           chamber_id: string
+          chamber_uuid: string | null
           consented_at: string
           id: string
           lawyer_id: string
@@ -899,6 +1042,7 @@ export type Database = {
         }
         Insert: {
           chamber_id: string
+          chamber_uuid?: string | null
           consented_at?: string
           id?: string
           lawyer_id: string
@@ -908,6 +1052,7 @@ export type Database = {
         }
         Update: {
           chamber_id?: string
+          chamber_uuid?: string | null
           consented_at?: string
           id?: string
           lawyer_id?: string
@@ -915,7 +1060,15 @@ export type Database = {
           share_own_observations?: boolean
           view_chamber_observations?: boolean
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "judge_observation_sharing_chamber_uuid_fkey"
+            columns: ["chamber_uuid"]
+            isOneToOne: false
+            referencedRelation: "chambers"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       judge_observations: {
         Row: {
@@ -1748,6 +1901,7 @@ export type Database = {
       audit_scope: "release" | "feature" | "full-system"
       audit_status: "pass" | "conditional" | "fail"
       board_status: "hearing" | "passover" | "lunch" | "adjourned"
+      chamber_role: "senior" | "junior" | "clerk"
       document_format: "TYPED" | "SCANNED" | "HANDWRITTEN"
       document_language: "EN" | "HI" | "MIXED" | "UNKNOWN"
       document_legibility: "CLEAR" | "AVERAGE" | "POOR"
@@ -1902,6 +2056,7 @@ export const Constants = {
       audit_scope: ["release", "feature", "full-system"],
       audit_status: ["pass", "conditional", "fail"],
       board_status: ["hearing", "passover", "lunch", "adjourned"],
+      chamber_role: ["senior", "junior", "clerk"],
       document_format: ["TYPED", "SCANNED", "HANDWRITTEN"],
       document_language: ["EN", "HI", "MIXED", "UNKNOWN"],
       document_legibility: ["CLEAR", "AVERAGE", "POOR"],

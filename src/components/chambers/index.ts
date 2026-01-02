@@ -1,0 +1,1 @@
+export { ChamberManagementPanel } from './ChamberManagementPanel';
