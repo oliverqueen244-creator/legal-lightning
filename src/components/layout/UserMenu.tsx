@@ -10,6 +10,8 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { ChamberMenuItem } from '@/components/chambers/ChamberMenuItem';
+import { Badge } from '@/components/ui/badge';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -155,6 +157,9 @@ export function UserMenu() {
             <User className="mr-2 h-4 w-4" />
             Profile
           </DropdownMenuItem>
+
+          {/* Chamber Management */}
+          <ChamberMenuItem />
 
           {/* Bench Selection - FUNCTIONAL: updates profile and refetches data */}
           <DropdownMenuSub>
