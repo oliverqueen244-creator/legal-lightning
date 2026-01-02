@@ -128,6 +128,7 @@ export function LiveCourtWidget({
   const showStaleWarning = syncHealth.status === 'stale' && isActive && courtHoursStatus.inSession;
 
   return (
+    // FIX 4: Strengthened right-column court presence on iPad
     <div
       className={`
         glass-card p-6 md:p-8 relative overflow-hidden
@@ -137,6 +138,7 @@ export function LiveCourtWidget({
         ${status === 'passover' ? 'card-passover' : ''}
         ${!isActive || !courtHoursStatus.inSession ? 'opacity-75' : ''}
         ${statusConfig.bgClass} ${statusConfig.borderClass}
+        md:border-2 md:shadow-lg
       `}
       role="region"
       aria-label={`Live court status for ${courtRoom}`}
@@ -226,17 +228,19 @@ export function LiveCourtWidget({
       )}
 
       {/* Giant Item Number or Not In Session Message */}
+      {/* FIX 2: De-absolutized messaging - context added */}
       <div className="text-center py-8 relative z-10">
         {!courtHoursStatus.inSession ? (
           <>
             <Moon className="h-16 w-16 text-muted-foreground mx-auto mb-3 opacity-50" />
             <p className="text-muted-foreground text-lg">Courts not in session</p>
-            <p className="text-sm text-muted-foreground mt-1">{courtHoursStatus.reason}</p>
+            <p className="text-sm text-muted-foreground mt-1">As per last update · {courtHoursStatus.reason}</p>
           </>
         ) : !isActive ? (
           <>
             <Ban className="h-16 w-16 text-muted-foreground mx-auto mb-3 opacity-50" />
             <p className="text-muted-foreground text-lg">Court not sitting today</p>
+            <p className="text-sm text-muted-foreground mt-1">As per last update</p>
           </>
         ) : (
           <>

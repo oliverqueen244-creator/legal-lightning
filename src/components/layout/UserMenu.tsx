@@ -24,6 +24,7 @@ import {
   DropdownMenuSubTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useAuth } from '@/hooks/useAuth';
+import { useCourtMode } from '@/hooks/useCourtMode';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
@@ -40,6 +41,9 @@ export function UserMenu() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { user, profile, role, isAdmin, signOut } = useAuth();
+  
+  // FIX 5: Court Mode suppresses role badges during court
+  const { isCourtModeEnabled } = useCourtMode();
 
   const handleSignOut = async () => {
     const { error } = await signOut();
@@ -126,12 +130,15 @@ export function UserMenu() {
           <span className="hidden sm:inline max-w-[120px] truncate">
             {profile?.full_name || 'User'}
           </span>
-          <Badge 
-            variant={isSenior || isAdmin ? 'gold' : 'secondary'} 
-            className="ml-1"
-          >
-            {role || 'USER'}
-          </Badge>
+          {/* FIX 5: Hide role badge when Court Mode is active - cognitive purge */}
+          {!isCourtModeEnabled && (
+            <Badge 
+              variant={isSenior || isAdmin ? 'gold' : 'secondary'} 
+              className="ml-1"
+            >
+              {role || 'USER'}
+            </Badge>
+          )}
         </Button>
       </DropdownMenuTrigger>
 
