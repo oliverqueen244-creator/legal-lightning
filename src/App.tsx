@@ -16,6 +16,7 @@ import Install from "./pages/Install";
 import { GlobalOfflineBanner } from "./components/layout/GlobalOfflineBanner";
 import { SyncConflictProvider } from "./contexts/SyncConflictContext";
 import { InstallDiscoveryBanner, PostInstallConfirmation } from "./components/pwa";
+import { CourtFocusOverlay } from "./components/court-focus";
 
 const queryClient = new QueryClient();
 
@@ -35,6 +36,8 @@ const App = () => (
         <InstallDiscoveryBanner />
         {/* PWA Post-Install Confirmation - shows once after first install launch */}
         <PostInstallConfirmation />
+        {/* Court Focus Mode - Full screen overlay for critical court moments */}
+        <CourtFocusOverlay />
         <BrowserRouter>
           <Routes>
             <Route path="/" element={<Dashboard />} />

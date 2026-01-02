@@ -16,17 +16,19 @@ import { MorningBriefPanel } from '@/components/morning-brief/MorningBriefPanel'
 import { PostCourtCapturePanel } from '@/components/post-court/PostCourtCapturePanel';
 import { FreshnessIndicator } from '@/components/ui/FreshnessIndicator';
 import { PullToRefreshHint } from '@/components/ui/PullToRefreshHint';
+import { CourtFocusTrigger } from '@/components/court-focus';
 import { useDocket } from '@/hooks/useDocket';
 import { useLiveBoard } from '@/hooks/useLiveBoard';
 import { useAuth } from '@/hooks/useAuth';
 import { useMorningBrief } from '@/hooks/useMorningBrief';
 import { usePendingCaptures } from '@/hooks/usePostCourtCapture';
 import { useUpcomingCases } from '@/hooks/useUpcomingCases';
+import { useCourtMode } from '@/hooks/useCourtMode';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Scale, AlertCircle, Search, Sun, Gavel, Calendar, CheckCircle, Upload, MessageCircle, ClipboardList } from 'lucide-react';
+import { Scale, AlertCircle, Search, Sun, Gavel, Calendar, CheckCircle, Upload, MessageCircle, ClipboardList, Focus } from 'lucide-react';
 import { LiveBoardSimulator } from '@/components/dashboard/LiveBoardSimulator';
 
 export default function Dashboard() {
@@ -60,6 +62,7 @@ export default function Dashboard() {
   const { data: morningBrief, isLoading: briefLoading, refetch: refetchBrief, dataUpdatedAt: briefUpdatedAt, isFetching: briefFetching } = useMorningBrief();
   const { data: pendingCaptures } = usePendingCaptures();
   const { data: upcomingCases, isLoading: upcomingLoading, dataUpdatedAt: upcomingUpdatedAt, isFetching: upcomingFetching, refetch: refetchUpcoming } = useUpcomingCases();
+  const { isCourtModeEnabled } = useCourtMode();
 
   // Get user's selected benches (could be "JAIPUR", "JODHPUR", or "JAIPUR,JODHPUR")
   const userBenches = profile?.bench?.split(',').map(b => b.trim().toUpperCase()) ?? [];
@@ -167,6 +170,10 @@ export default function Dashboard() {
                     selectedDate={formattedDate}
                     onRefreshComplete={refetch}
                   />
+                  {/* Court Focus Mode Trigger - Manual activation */}
+                  {isCourtModeEnabled && (
+                    <CourtFocusTrigger variant="compact" />
+                  )}
                   <Button
                     variant="outline"
                     size="sm"
