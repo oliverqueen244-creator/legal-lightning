@@ -86,7 +86,7 @@ export function useAuth() {
         emailRedirectTo: redirectUrl,
         data: {
           full_name: fullName,
-          role: role,
+          role: selectedRole,
         },
       },
     });
