@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowLeft, Scale, AlertTriangle, FileText, List, History } from 'lucide-react';
+import { ArrowLeft, Scale, AlertTriangle, FileText, List, History, UserCheck } from 'lucide-react';
 import { ArgumentsPanel } from '@/components/war-room/ArgumentsPanel';
 import { SmartPdfViewer } from '@/components/war-room/SmartPdfViewer';
 import { DocumentSelector } from '@/components/war-room/DocumentSelector';
@@ -25,6 +25,7 @@ import { useLiveBoardForCourt } from '@/hooks/useLiveBoard';
 import { useCaseHistory, useCaseHasHistory } from '@/hooks/useCaseHistory';
 import { usePostCourtNotes } from '@/hooks/usePostCourtCapture';
 import { useAuth } from '@/hooks/useAuth';
+import { useEffectiveJudge } from '@/hooks/useEffectiveJudge';
 import type { CaseArgument } from '@/types/database';
 import { cn } from '@/lib/utils';
 
@@ -52,6 +53,14 @@ export default function WarRoom() {
     docketItem?.court_location ?? '',
     docketItem?.court_room_no ?? ''
   );
+
+  // Dynamic judge resolution - updates when court/item changes
+  const effectiveJudge = useEffectiveJudge({
+    courtLocation: docketItem?.court_location,
+    courtNo: docketItem?.court_room_no,
+    itemNo: docketItem?.item_no,
+    fallbackJudgeName: docketItem?.judge_names
+  });
 
   // Auto-select first approved/primary document when loaded
   useEffect(() => {
@@ -176,12 +185,21 @@ export default function WarRoom() {
                   
                   <p className="text-sm text-muted-foreground">
                     Court {docketItem.court_room_no} • {docketItem.court_location} • Item #{docketItem.item_no}
+                    {effectiveJudge.judgeName && (
+                      <span className="ml-2">• {effectiveJudge.judgeName.replace(/^(MR\. JUSTICE |MRS\. JUSTICE |MS\. JUSTICE )/gi, 'J. ')}</span>
+                    )}
                   </p>
                 </div>
               </div>
               
               <div className="flex items-center gap-3">
                 <NetworkStatusPill />
+                {effectiveJudge.isOverride && (
+                  <Badge variant="outline" className="text-amber-400 border-amber-400/50 flex items-center gap-1">
+                    <UserCheck className="h-3 w-3" />
+                    Substitute Judge
+                  </Badge>
+                )}
                 <Badge variant="secondary" className="text-sm">
                   PREPARE
                 </Badge>
@@ -283,7 +301,7 @@ export default function WarRoom() {
             {/* Judge Intelligence Panel */}
             <div className="p-2 border-t border-border">
               <JudgeIntelligencePanel
-                judgeName={docketItem.judge_names}
+                judgeName={effectiveJudge.judgeName}
                 bench={docketItem.court_location}
                 courtNo={docketItem.court_room_no}
                 docketId={caseId}
@@ -296,7 +314,7 @@ export default function WarRoom() {
               <JudgmentReferencesPanel
                 docketId={caseId}
                 caseNumber={docketItem.case_number}
-                judgeName={docketItem.judge_names}
+                judgeName={effectiveJudge.judgeName}
                 court={docketItem.court_location}
                 petitionerLawyer={docketItem.petitioner_lawyer}
                 respondentLawyer={docketItem.respondent_lawyer}
