@@ -5,16 +5,18 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { Scale, User, Search, CheckCircle2, ArrowRight, ArrowLeft } from 'lucide-react';
+import { Scale, User, Search, CheckCircle2, ArrowRight, ArrowLeft, Users } from 'lucide-react';
 import ProfileStep from '@/components/onboarding/ProfileStep';
 import AliasManager from '@/components/onboarding/AliasManager';
 import CourtScan from '@/components/onboarding/CourtScan';
+import { ChamberOnboardingStep } from '@/components/onboarding/ChamberOnboardingStep';
 import { toast } from 'sonner';
 
 const STEPS = [
   { id: 1, title: 'Profile Setup', icon: User },
   { id: 2, title: 'Name Variations', icon: Scale },
-  { id: 3, title: 'Court Sync', icon: Search },
+  { id: 3, title: 'Chamber', icon: Users },
+  { id: 4, title: 'Court Sync', icon: Search },
 ];
 
 export default function Onboarding() {
@@ -168,7 +170,8 @@ export default function Onboarding() {
             <CardDescription>
               {currentStep === 1 && 'Tell us about yourself and your practice'}
               {currentStep === 2 && 'Add the name variations used in court records'}
-              {currentStep === 3 && 'Find your cases in the High Court records'}
+              {currentStep === 3 && 'Set up or join a chamber for coordination'}
+              {currentStep === 4 && 'Find your cases in the High Court records'}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -182,6 +185,12 @@ export default function Onboarding() {
               <AliasManager defaultName={profileData.full_name} />
             )}
             {currentStep === 3 && (
+              <ChamberOnboardingStep 
+                role={profile?.role || null}
+                onComplete={handleNext}
+              />
+            )}
+            {currentStep === 4 && (
               <CourtScan bench={profileData.bench as 'JAIPUR' | 'JODHPUR' | 'BOTH'} />
             )}
           </CardContent>
