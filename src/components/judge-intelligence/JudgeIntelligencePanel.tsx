@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { SensitiveViewGuard, SensitiveContentNotice } from '@/components/ui/SensitiveViewGuard';
+import { FreshnessIndicator } from '@/components/ui/FreshnessIndicator';
 import { ChamberSharingPanel } from './ChamberSharingPanel';
 import {
   Brain, 
@@ -308,7 +309,9 @@ export function JudgeIntelligencePanel({
   const { 
     data: observations = [], 
     isLoading,
-    refetch 
+    refetch,
+    dataUpdatedAt,
+    isFetching,
   } = useJudgeObservations({ 
     judgeName, 
     bench,
@@ -364,6 +367,14 @@ export function JudgeIntelligencePanel({
 
         <CollapsibleContent>
           <CardContent className="pt-0 px-4 pb-4 space-y-3">
+            {/* COURT-SAFETY: Freshness indicator in collapsible panels */}
+            <FreshnessIndicator
+              lastUpdated={dataUpdatedAt ? new Date(dataUpdatedAt) : undefined}
+              onRefresh={refetch}
+              isRefetching={isFetching}
+              size="sm"
+            />
+            
             {/* Sensitive content notice */}
             <SensitiveContentNotice />
             

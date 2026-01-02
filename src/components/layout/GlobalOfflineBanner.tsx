@@ -95,7 +95,7 @@ export function GlobalOfflineBanner() {
             className="ml-2 text-xs underline opacity-80 hover:opacity-100"
             aria-expanded={showExpanded}
           >
-            {showExpanded ? 'Hide details' : 'What works?'}
+            {showExpanded ? 'Hide' : 'Details'}
           </button>
         </div>
         

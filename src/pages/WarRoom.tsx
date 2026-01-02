@@ -18,6 +18,7 @@ import { WhisperDrawer } from '@/components/war-room/WhisperDrawer';
 import { WarRoomUploadPanel } from '@/components/war-room/WarRoomUploadPanel';
 import { AuthGuard } from '@/components/layout/AuthGuard';
 import { NetworkStatusPill } from '@/components/layout/NetworkStatusPill';
+import { FreshnessIndicator } from '@/components/ui/FreshnessIndicator';
 import { useDocketItem } from '@/hooks/useDocket';
 import { useArguments } from '@/hooks/useArguments';
 import { useExtendedDocuments, useDocumentReview } from '@/hooks/useDocumentManagement';
@@ -41,9 +42,9 @@ export default function WarRoom() {
   const [leftPanelTab, setLeftPanelTab] = useState<'arguments' | 'documents' | 'history'>('arguments');
 
   const { role } = useAuth();
-  const { data: docketItem, isLoading: docketLoading } = useDocketItem(caseId!);
+  const { data: docketItem, isLoading: docketLoading, dataUpdatedAt: docketUpdatedAt, refetch: refetchDocket, isFetching: docketFetching } = useDocketItem(caseId!);
   const { data: args } = useArguments(caseId!);
-  const { data: documents, isLoading: docsLoading, refetch: refetchDocs } = useExtendedDocuments(caseId!);
+  const { data: documents, isLoading: docsLoading, refetch: refetchDocs, dataUpdatedAt: docsUpdatedAt, isFetching: docsFetching } = useExtendedDocuments(caseId!);
   const { approveDocument, rejectDocument, setPrimaryDocument } = useDocumentReview(caseId!);
   const { data: caseHistory, isLoading: historyLoading } = useCaseHistory(caseId!);
   const { data: hasHistoryData } = useCaseHasHistory(caseId!);
@@ -193,6 +194,13 @@ export default function WarRoom() {
               </div>
               
               <div className="flex items-center gap-3">
+                {/* COURT-SAFETY: Data freshness always visible */}
+                <FreshnessIndicator
+                  lastUpdated={new Date(Math.min(docketUpdatedAt || Date.now(), docsUpdatedAt || Date.now()))}
+                  onRefresh={() => { refetchDocket(); refetchDocs(); }}
+                  isRefetching={docketFetching || docsFetching}
+                  size="sm"
+                />
                 <NetworkStatusPill />
                 {effectiveJudge.isOverride && (
                   <Badge variant="outline" className="text-amber-400 border-amber-400/50 flex items-center gap-1">

@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { AiDisclaimer } from '@/components/ui/AiDisclaimer';
+import { FreshnessIndicator } from '@/components/ui/FreshnessIndicator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   Sun,
@@ -78,7 +79,7 @@ export function MorningBriefPanel({ brief, isLoading, onRefresh }: MorningBriefP
         </CardHeader>
         <CardContent>
           <p className="text-muted-foreground text-center py-12 text-lg">
-            No cases scheduled for today
+            No cases found in last sync
           </p>
         </CardContent>
       </Card>
@@ -217,27 +218,12 @@ export function MorningBriefPanel({ brief, isLoading, onRefresh }: MorningBriefP
             <Sun className="h-5 w-5 text-primary" />
             Today's Brief
           </div>
-          {/* P1 FIX: Freshness indicator with staleness treatment */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div 
-                className={cn(
-                  'flex items-center gap-1 text-xs font-normal',
-                  isStale ? 'text-muted-foreground' : 'text-muted-foreground'
-                )}
-              >
-                {isStale && <Clock className="h-3 w-3" />}
-                <span>Prepared at {format(new Date(brief.generated_at), 'h:mm a')} IST</span>
-              </div>
-            </TooltipTrigger>
-            {isStale && (
-              <TooltipContent side="bottom" className="max-w-xs">
-                <p className="text-sm">
-                  This brief is based on the last available court data and may not reflect recent changes.
-                </p>
-              </TooltipContent>
-            )}
-          </Tooltip>
+          {/* COURT-SAFETY: Freshness indicator - always visible */}
+          <FreshnessIndicator
+            lastUpdated={brief.generated_at}
+            onRefresh={onRefresh}
+            size="sm"
+          />
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-6 px-0">
