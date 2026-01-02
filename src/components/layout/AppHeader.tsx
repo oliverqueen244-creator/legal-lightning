@@ -1,6 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
-import { Scale, Calendar } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useRef } from 'react';
+import { Calendar } from 'lucide-react';
 import { NetworkStatusPill } from './NetworkStatusPill';
 import { NotificationBell } from '@/components/notifications/NotificationBell';
 import { CourtModeBadge } from '@/components/court-mode/CourtModeBadge';
@@ -10,6 +9,7 @@ import { OperationsConsole } from '@/components/admin/OperationsConsole';
 import { useLiveBoard } from '@/hooks/useLiveBoard';
 import { useDocket } from '@/hooks/useDocket';
 import { format } from 'date-fns';
+import logoImage from '@/assets/logo.png';
 
 /**
  * App Header - Calm, authoritative, predictable
@@ -17,7 +17,6 @@ import { format } from 'date-fns';
  * NO exploration-first elements - reaction-first only
  */
 export function AppHeader() {
-  const navigate = useNavigate();
   const formattedDate = format(new Date(), 'yyyy-MM-dd');
   const { data: liveBoards } = useLiveBoard();
   const { data: docket } = useDocket(formattedDate);
@@ -60,10 +59,10 @@ export function AppHeader() {
               if (e.key === 'Enter') handleLogoClick();
             }}
           >
-            <Scale className="h-7 w-7 text-primary" aria-hidden="true" />
+            <img src={logoImage} alt="Nyay-Hub Logo" className="h-8 w-8" />
             <div className="hidden sm:block">
               <h1 className="font-display text-xl font-bold text-foreground tracking-wide">
-                Vakalat OS
+                Nyay-Hub
               </h1>
               <p className="text-xs text-muted-foreground">
                 Rajasthan High Court

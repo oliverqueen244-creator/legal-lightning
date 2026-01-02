@@ -36,7 +36,7 @@ const ProductDossier = () => {
           
           {/* Title Page */}
           <div className="text-center mb-12 print:mb-8 print:page-break-after">
-            <h1 className="text-4xl font-bold text-black mb-4">VAKALAT-OS</h1>
+            <h1 className="text-4xl font-bold text-black mb-4">NYAY-HUB</h1>
             <h2 className="text-2xl text-gray-600 mb-6">Product System Dossier</h2>
             <p className="text-lg text-black font-medium">Built by Izafa Labs</p>
             <p className="text-sm text-gray-500 mt-4">
@@ -62,8 +62,8 @@ const ProductDossier = () => {
             
             <div className="space-y-4 text-gray-800">
               <div>
-                <h3 className="font-semibold text-black mb-2">What is Vakalat-OS?</h3>
-                <p>Vakalat-OS is a litigation workflow operating system purpose-built for advocates practicing at Rajasthan High Court (Jodhpur and Jaipur benches). It transforms the daily operational burden of tracking cause lists, monitoring live court boards, and preparing for hearings into an automated, role-aware digital workflow.</p>
+                <h3 className="font-semibold text-black mb-2">What is Nyay-Hub?</h3>
+                <p>Nyay-Hub is a litigation workflow operating system purpose-built for advocates practicing at Rajasthan High Court (Jodhpur and Jaipur benches). It transforms the daily operational burden of tracking cause lists, monitoring live court boards, and preparing for hearings into an automated, role-aware digital workflow.</p>
               </div>
 
               <div>
@@ -77,7 +77,7 @@ const ProductDossier = () => {
 
               <div>
                 <h3 className="font-semibold text-black mb-2">Real-World Problem Solved</h3>
-                <p>Daily cause lists at Rajasthan HC are published as multi-hundred-page PDFs. Lawyers manually search for their names across courts, track item numbers, monitor live boards for when their case is called, and coordinate with juniors — all while preparing arguments. Vakalat-OS automates this entirely.</p>
+                <p>Daily cause lists at Rajasthan HC are published as multi-hundred-page PDFs. Lawyers manually search for their names across courts, track item numbers, monitor live boards for when their case is called, and coordinate with juniors — all while preparing arguments. Nyay-Hub automates this entirely.</p>
               </div>
 
               <div>
@@ -677,7 +677,7 @@ const ProductDossier = () => {
               <div className="bg-gray-100 p-4 rounded-lg border border-gray-300">
                 <h3 className="font-semibold text-black mb-2">Legal Disclaimers</h3>
                 <p className="text-sm text-gray-700">
-                  Vakalat-OS is a workflow tool, not a legal service. It does not provide legal advice. 
+                  Nyay-Hub is a workflow tool, not a legal service. It does not provide legal advice.
                   Users are responsible for verifying all case information against official court records. 
                   Izafa Labs is not liable for missed hearings, incorrect data interpretation, or any 
                   professional consequences arising from system use.
@@ -773,12 +773,12 @@ const ProductDossier = () => {
             <div className="bg-gray-100 p-6 rounded-lg space-y-4 text-gray-800 border border-gray-300">
               <div>
                 <h3 className="font-semibold text-black mb-2">What Izafa Labs Has Built</h3>
-                <p>Vakalat-OS is a litigation workflow operating system that automates the daily operational burden of advocates practicing at Rajasthan High Court. It ingests cause lists automatically via Telegram, parses them using AI, matches cases to lawyers via configurable aliases, and provides real-time court board monitoring — all through a role-aware, offline-capable progressive web application with chamber-based team coordination.</p>
+                <p>Nyay-Hub is a litigation workflow operating system that automates the daily operational burden of advocates practicing at Rajasthan High Court. It ingests cause lists automatically via Telegram, parses them using AI, matches cases to lawyers via configurable aliases, and provides real-time court board monitoring — all through a role-aware, offline-capable progressive web application with chamber-based team coordination.</p>
               </div>
 
               <div>
                 <h3 className="font-semibold text-black mb-2">Why It Exists</h3>
-                <p>Indian High Courts publish multi-hundred-page cause lists daily. Lawyers spend significant time manually searching for their cases, tracking court progress, and coordinating with team members. Vakalat-OS eliminates this overhead, allowing lawyers to focus on legal work rather than administrative tasks.</p>
+                <p>Indian High Courts publish multi-hundred-page cause lists daily. Lawyers spend significant time manually searching for their cases, tracking court progress, and coordinating with team members. Nyay-Hub eliminates this overhead, allowing lawyers to focus on legal work rather than administrative tasks.</p>
               </div>
 
               <div>
@@ -806,7 +806,7 @@ const ProductDossier = () => {
 
             <div className="mt-8 text-center text-sm text-gray-500">
               <p>— End of Document —</p>
-              <p className="mt-2">Vakalat-OS Product System Dossier v2.0</p>
+              <p className="mt-2">Nyay-Hub Product System Dossier v2.0</p>
               <p>Built by Izafa Labs • {new Date().getFullYear()}</p>
             </div>
           </section>

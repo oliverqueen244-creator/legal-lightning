@@ -103,7 +103,7 @@ export default function Onboarding() {
       return;
     }
 
-    toast.success('Welcome to Vakalat-OS!');
+    toast.success('Welcome to Nyay-Hub!');
     navigate('/');
   };
 
@@ -122,7 +122,7 @@ export default function Onboarding() {
         <div className="text-center space-y-2">
           <div className="flex items-center justify-center gap-2">
             <Scale className="w-8 h-8 text-primary" />
-            <h1 className="text-3xl font-display font-bold text-primary">Vakalat-OS</h1>
+            <h1 className="text-3xl font-display font-bold text-primary">Nyay-Hub</h1>
           </div>
           <p className="text-muted-foreground">Complete your profile to get started</p>
         </div>
