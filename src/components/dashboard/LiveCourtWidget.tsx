@@ -6,6 +6,7 @@ import { SyncStatusBadge, SyncTimestamp } from './SyncStatusBadge';
 import { useCourtSyncHealth } from '@/hooks/useSyncHealth';
 import { isCourtHours } from '@/hooks/useLiveBoard';
 import { useCourtOverrides, findOverrideForItem } from '@/hooks/useCourtOverrides';
+import { useEffectiveJudge } from '@/hooks/useEffectiveJudge';
 
 interface LiveCourtWidgetProps {
   courtRoom: string;
@@ -35,6 +36,13 @@ export function LiveCourtWidget({
   
   // Fetch court overrides for today
   const { data: overrides = [] } = useCourtOverrides(courtLocation, courtRoom);
+  
+  // Dynamic judge resolution
+  const effectiveJudge = useEffectiveJudge({
+    courtLocation,
+    courtNo: courtRoom,
+    itemNo: currentItem
+  });
   
   // Check if current item has a judge override
   const currentOverride = findOverrideForItem(overrides, courtRoom, currentItem);
@@ -159,7 +167,14 @@ export function LiveCourtWidget({
             <h2 className="font-display text-xl md:text-2xl font-bold text-foreground tracking-wide">
               COURTROOM {courtRoom}
             </h2>
-            <p className="text-sm text-muted-foreground">{courtLocation}</p>
+            <p className="text-sm text-muted-foreground">
+              {courtLocation}
+              {effectiveJudge.judgeName && isActive && courtHoursStatus.inSession && (
+                <span className="ml-1">
+                  • {effectiveJudge.judgeName.replace(/^(MR\. JUSTICE |MRS\. JUSTICE |MS\. JUSTICE )/gi, 'J. ')}
+                </span>
+              )}
+            </p>
           </div>
         </div>
         
