@@ -1,4 +1,4 @@
-// Document management types for Vakalat-OS
+// Document management types for Nyay-Hub
 
 export type DocumentType = 
   | 'CAUSELIST_PDF'

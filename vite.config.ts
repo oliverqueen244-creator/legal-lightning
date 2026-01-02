@@ -15,11 +15,11 @@ export default defineConfig(({ mode }) => ({
     mode === "development" && componentTagger(),
     VitePWA({
       registerType: "autoUpdate",
-      includeAssets: ["favicon.ico", "robots.txt", "pwa-192x192.png", "pwa-512x512.png"],
+      includeAssets: ["favicon.png", "favicon.ico", "robots.txt", "pwa-192x192.png", "pwa-512x512.png"],
       manifest: {
-        name: "Vakalat-OS — Litigation Operating System",
-        short_name: "Vakalat",
-        description: "Criminal Litigation Operating System for Rajasthan High Court. Connection-aware design ensures accurate court information.",
+        name: "Nyay-Hub — Litigation Operating System",
+        short_name: "Nyay-Hub",
+        description: "Litigation Operating System for Rajasthan High Court. Connection-aware design ensures accurate court information.",
         theme_color: "#0f172a",
         background_color: "#0f172a",
         display: "standalone",
@@ -29,9 +29,9 @@ export default defineConfig(({ mode }) => ({
         categories: ["productivity", "business"],
         icons: [
           {
-            src: "/favicon.ico",
+            src: "/favicon.png",
             sizes: "64x64",
-            type: "image/x-icon",
+            type: "image/png",
           },
           {
             src: "/pwa-192x192.png",

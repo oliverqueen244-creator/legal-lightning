@@ -3,14 +3,14 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { CheckCircle2 } from 'lucide-react';
 
-const SHOWN_KEY = 'vakalat_post_install_shown';
+const SHOWN_KEY = 'nyayhub_post_install_shown';
 
 /**
  * Post-Install Confirmation
  * 
  * Shows exactly ONCE after first launch in standalone mode.
  * Exact copy (from spec):
- * "VAKALAT-OS is installed. Connection-aware features help prevent misleading court information."
+ * "NYAY-HUB is installed. Connection-aware features help prevent misleading court information."
  * 
  * No tutorial. No walkthrough.
  */
@@ -49,7 +49,7 @@ export function PostInstallConfirmation() {
           </div>
           
           <h2 className="font-display text-xl font-semibold text-foreground mb-3">
-            VAKALAT-OS is installed
+            NYAY-HUB is installed
           </h2>
           
           <p className="text-muted-foreground text-sm">

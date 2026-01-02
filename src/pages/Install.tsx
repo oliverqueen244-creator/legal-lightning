@@ -76,7 +76,7 @@ export default function Install() {
         {/* Header */}
         <div className="text-center space-y-2">
           <h1 className="font-display text-3xl font-bold tracking-wide text-foreground">
-            Install Vakalat-OS
+            Install Nyay-Hub
           </h1>
           <p className="text-muted-foreground">
             Access your litigation dashboard from your home screen
@@ -92,7 +92,7 @@ export default function Install() {
                 <div>
                   <p className="font-semibold">Already Installed</p>
                   <p className="text-sm text-muted-foreground">
-                    Vakalat-OS is on your home screen.
+                    Nyay-Hub is on your home screen.
                   </p>
                 </div>
               </div>
@@ -109,7 +109,7 @@ export default function Install() {
                 Ready to Install
               </CardTitle>
               <CardDescription>
-                Add Vakalat-OS to your device for quick access
+                Add Nyay-Hub to your device for quick access
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -156,7 +156,7 @@ export default function Install() {
               ) : (
                 <ol className="list-decimal list-inside space-y-2 text-sm text-muted-foreground">
                   <li>Click the <strong>install icon</strong> in the address bar</li>
-                  <li>Or open browser menu → <strong>Install Vakalat-OS</strong></li>
+                  <li>Or open browser menu → <strong>Install Nyay-Hub</strong></li>
                   <li>Click <strong>Install</strong> to confirm</li>
                 </ol>
               )}
@@ -174,7 +174,7 @@ export default function Install() {
           </CardHeader>
           <CardContent className="space-y-3 text-sm text-muted-foreground">
             <p>
-              <strong>VAKALAT-OS adapts to connection quality</strong> to prevent 
+              <strong>NYAY-HUB adapts to connection quality</strong> to prevent 
               misleading court information. Some features require an active internet 
               connection.
             </p>

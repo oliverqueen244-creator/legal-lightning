@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { Scale, Calendar, MapPin, LogOut, User, Settings, Download, ChevronDown } from 'lucide-react';
+import { Calendar, MapPin, LogOut, User, Settings, ChevronDown } from 'lucide-react';
+import logoImage from '@/assets/logo.png';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -147,10 +148,10 @@ export function Header() {
             tabIndex={0}
             onKeyDown={(e) => { if (e.key === 'Enter') handleLogoClick(); }}
           >
-            <Scale className="h-8 w-8 text-primary" aria-hidden="true" />
+            <img src={logoImage} alt="Nyay-Hub Logo" className="h-8 w-8" />
             <div>
               <h1 className="font-display text-2xl font-bold text-foreground tracking-wide">
-                Nyay Hub
+                Nyay-Hub
               </h1>
               <p className="text-sm text-muted-foreground">
                 Rajasthan High Court

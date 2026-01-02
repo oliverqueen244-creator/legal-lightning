@@ -18,7 +18,7 @@ interface PullToRefreshHintProps {
   className?: string;
 }
 
-const HINT_STORAGE_KEY = 'vakalat_pull_refresh_hint_seen';
+const HINT_STORAGE_KEY = 'nyayhub_pull_refresh_hint_seen';
 
 export function PullToRefreshHint({
   onRefresh,

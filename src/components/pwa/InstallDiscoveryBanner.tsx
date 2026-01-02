@@ -9,7 +9,7 @@ interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
 }
 
-const DISMISS_KEY = 'vakalat_install_banner_dismissed';
+const DISMISS_KEY = 'nyayhub_install_banner_dismissed';
 const DISMISS_DURATION_MS = 7 * 24 * 60 * 60 * 1000; // 1 week
 
 /**
@@ -145,11 +145,11 @@ export function InstallDiscoveryBanner() {
           
           <div className="flex-1 min-w-0">
             <h3 className="font-semibold text-foreground text-sm">
-              Install VAKALAT-OS
+              Install NYAY-HUB
             </h3>
             {/* FIX 3: Softened copy - no mention of court hours or reliability */}
             <p className="text-sm text-muted-foreground mt-1">
-              Add VAKALAT-OS to your home screen for quicker access.
+              Add NYAY-HUB to your home screen for quicker access.
             </p>
             <p className="text-xs text-muted-foreground/70 mt-1">
               Some features require an internet connection.
