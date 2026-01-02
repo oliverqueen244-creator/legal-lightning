@@ -5,6 +5,8 @@ import { useAuth } from './useAuth';
 import { useCourtMode } from './useCourtMode';
 import { useLiveBoard } from './useLiveBoard';
 import { useDocket } from './useDocket';
+import { useNetworkStatus } from './useNetworkStatus';
+import { useOfflineThresholdMemory } from './useOfflineThresholdMemory';
 import type { DocketItem, LiveBoardCache } from '@/types/database';
 
 export type NotificationSeverity = 'info' | 'warning' | 'critical';
@@ -61,12 +63,21 @@ export function useCourtNotifications() {
   const { isCourtModeEnabled, isWithinCourtHours, settings: courtModeSettings } = useCourtMode();
   const { data: liveBoards } = useLiveBoard();
   const { data: docketItems } = useDocket();
+  const { isOnline } = useNetworkStatus();
+  const { 
+    trackOfflineThreshold, 
+    getCasesForReplay, 
+    markAsReplayed,
+  } = useOfflineThresholdMemory();
   
   // Track which thresholds we've already notified for each case
   const notifiedThresholds = useRef<Map<string, ThresholdLevel>>(new Map());
   
   // Track previous item distances to detect threshold crossings
   const previousDistances = useRef<Map<string, number>>(new Map());
+  
+  // Track previous online state for reconnect detection
+  const wasOfflineRef = useRef<boolean>(!navigator.onLine);
 
   // Query notifications
   const query = useQuery({
@@ -214,8 +225,26 @@ export function useCourtNotifications() {
       // Store current distance for next comparison
       previousDistances.current.set(item.id, distance);
 
+      // P0 FIX: Track thresholds while offline for later replay
+      if (!isOnline && distance >= 0 && distance <= 10) {
+        const caseFingerprint = (item as any).case_fingerprint || item.case_number || '';
+        const hearingDate = item.date || new Date().toISOString().split('T')[0];
+        trackOfflineThreshold(
+          caseFingerprint,
+          hearingDate,
+          item.id,
+          item.case_number || '',
+          item.court_room_no || '',
+          item.item_no,
+          distance
+        );
+      }
+
       // Skip if this is the first check (no previous distance)
       if (previousDistance === undefined) return;
+
+      // Only create notifications when ONLINE
+      if (!isOnline) return;
 
       // Only notify when CROSSING a threshold boundary (not on every decrement)
       const previousThreshold = getThresholdForDistance(previousDistance);
@@ -236,7 +265,41 @@ export function useCourtNotifications() {
         createNotification(item, 'skipped', distance, exceptionThreshold);
       }
     });
-  }, [liveBoards, docketItems, isCourtModeEnabled, createNotification]);
+  }, [liveBoards, docketItems, isCourtModeEnabled, isOnline, createNotification, trackOfflineThreshold]);
+
+  // P0 FIX: Replay notifications on reconnect
+  useEffect(() => {
+    // Detect online transition
+    const wasOffline = wasOfflineRef.current;
+    wasOfflineRef.current = !isOnline;
+    
+    // Only trigger replay when transitioning from offline to online
+    if (!wasOffline || !isOnline || !user?.id) return;
+
+    const casesToReplay = getCasesForReplay();
+    
+    casesToReplay.forEach(async (entry) => {
+      // Create synthesized reconnect notification
+      const { error } = await supabase
+        .from('notifications')
+        .insert({
+          user_id: user.id,
+          docket_id: entry.docketId,
+          notification_type: 'approaching',
+          severity: 'critical',
+          title: 'Court Alert (After Reconnect)',
+          message: `Your case crossed a critical proximity threshold while you were offline.\nPlease verify the current court status.`,
+          item_distance: entry.lastKnownDistance,
+          threshold_crossed: 'immediate',
+          status: 'sent',
+        });
+
+      if (!error) {
+        markAsReplayed(entry.caseFingerprint, entry.hearingDate);
+        queryClient.invalidateQueries({ queryKey: ['court-notifications'] });
+      }
+    });
+  }, [isOnline, user?.id, getCasesForReplay, markAsReplayed, queryClient]);
 
   // Get unread count
   const unreadCount = query.data?.filter(n => n.status === 'sent').length ?? 0;

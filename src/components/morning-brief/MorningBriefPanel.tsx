@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { AiDisclaimer } from '@/components/ui/AiDisclaimer';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   Sun,
   AlertTriangle,
@@ -17,10 +18,11 @@ import {
   Scale,
   BookMarked,
 } from 'lucide-react';
-import { format } from 'date-fns';
+import { format, differenceInMinutes } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import type { MorningBrief, MorningBriefCase } from '@/hooks/useMorningBrief';
+import { useState, useEffect } from 'react';
 
 interface MorningBriefPanelProps {
   brief: MorningBrief | null | undefined;
@@ -30,6 +32,27 @@ interface MorningBriefPanelProps {
 
 export function MorningBriefPanel({ brief, isLoading, onRefresh }: MorningBriefPanelProps) {
   const navigate = useNavigate();
+  const [minutesSinceGeneration, setMinutesSinceGeneration] = useState(0);
+
+  // P1 FIX: Track freshness of the morning brief
+  useEffect(() => {
+    if (!brief?.generated_at) return;
+
+    const updateFreshness = () => {
+      const generatedTime = new Date(brief.generated_at);
+      const now = new Date();
+      setMinutesSinceGeneration(differenceInMinutes(now, generatedTime));
+    };
+
+    // Initial calculation
+    updateFreshness();
+
+    // Update every minute
+    const interval = setInterval(updateFreshness, 60000);
+    return () => clearInterval(interval);
+  }, [brief?.generated_at]);
+
+  const isStale = minutesSinceGeneration > 5;
 
   if (isLoading) {
     return (
@@ -186,6 +209,7 @@ export function MorningBriefPanel({ brief, isLoading, onRefresh }: MorningBriefP
   };
 
   return (
+    <TooltipProvider>
     <Card className="glass-card border-none bg-transparent shadow-none">
       <CardHeader className="pb-4 px-0">
         <CardTitle className="flex items-center justify-between font-display tracking-wide">
@@ -193,9 +217,27 @@ export function MorningBriefPanel({ brief, isLoading, onRefresh }: MorningBriefP
             <Sun className="h-5 w-5 text-primary" />
             Today's Brief
           </div>
-          <span className="text-xs text-muted-foreground font-normal">
-            {format(new Date(brief.generated_at), 'HH:mm')}
-          </span>
+          {/* P1 FIX: Freshness indicator with staleness treatment */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div 
+                className={cn(
+                  'flex items-center gap-1 text-xs font-normal',
+                  isStale ? 'text-muted-foreground' : 'text-muted-foreground'
+                )}
+              >
+                {isStale && <Clock className="h-3 w-3" />}
+                <span>Prepared at {format(new Date(brief.generated_at), 'h:mm a')} IST</span>
+              </div>
+            </TooltipTrigger>
+            {isStale && (
+              <TooltipContent side="bottom" className="max-w-xs">
+                <p className="text-sm">
+                  This brief is based on the last available court data and may not reflect recent changes.
+                </p>
+              </TooltipContent>
+            )}
+          </Tooltip>
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-6 px-0">
@@ -255,5 +297,6 @@ export function MorningBriefPanel({ brief, isLoading, onRefresh }: MorningBriefP
         )}
       </CardContent>
     </Card>
+    </TooltipProvider>
   );
 }
