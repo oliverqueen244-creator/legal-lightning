@@ -121,7 +121,7 @@ export function FreshnessIndicator({
       color: 'text-muted-foreground',
       bgColor: 'bg-muted',
       dotColor: 'bg-muted-foreground',
-      label: 'Unknown',
+      label: 'Freshness unavailable',
     },
   };
 

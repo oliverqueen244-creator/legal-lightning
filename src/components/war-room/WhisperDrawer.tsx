@@ -410,48 +410,55 @@ export function WhisperDrawer({ docketId }: WhisperDrawerProps) {
         </Button>
       </SheetTrigger>
       
-      <SheetContent 
-        side="right" 
-        className="w-full sm:w-[400px] p-0 glass-card border-l border-border"
-        aria-describedby="whisper-chat-description"
-      >
-        <SheetHeader className="p-4 border-b border-border">
-          <SheetTitle className="font-display text-xl tracking-wide flex items-center justify-between">
-            <span className="flex items-center gap-2">
-              <MessageCircle className="h-5 w-5 text-primary" aria-hidden="true" />
-              Whisper Chat
-              {/* P1 FIX: Connection status indicator */}
-              {isOnline ? (
-                <Badge variant="outline" className="text-xs flex items-center gap-1 text-court-success border-court-success/30">
-                  <Wifi className="h-3 w-3" />
-                  Online
-                </Badge>
-              ) : (
-                <Badge variant="destructive" className="text-xs flex items-center gap-1">
-                  <WifiOff className="h-3 w-3" />
-                  Offline
-                </Badge>
-              )}
-            </span>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setSoundEnabled(!soundEnabled)}
-              className="h-8 w-8"
-              aria-label={soundEnabled ? 'Mute notifications' : 'Unmute notifications'}
-              aria-pressed={soundEnabled}
-            >
-              {soundEnabled ? (
-                <Volume2 className="h-4 w-4" aria-hidden="true" />
-              ) : (
-                <VolumeX className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-              )}
-            </Button>
-          </SheetTitle>
-          <p id="whisper-chat-description" className="sr-only">
-            Real-time messaging for court communications. Hold the microphone button to record voice messages.
-          </p>
-        </SheetHeader>
+        <SheetContent 
+          side="right" 
+          className="w-full sm:w-[400px] p-0 glass-card border-l border-border"
+          aria-describedby="whisper-chat-description"
+        >
+          <SheetHeader className="p-4 border-b border-border">
+            <SheetTitle className="font-display text-xl tracking-wide flex items-center justify-between">
+              <span className="flex items-center gap-2">
+                <MessageCircle className="h-5 w-5 text-primary" aria-hidden="true" />
+                Whisper Chat
+              </span>
+              <div className="flex items-center gap-2">
+                {/* COURT-SAFETY: Connection status always visible in modals */}
+                {isOnline ? (
+                  <Badge variant="outline" className="text-xs flex items-center gap-1 text-court-success border-court-success/30">
+                    <Wifi className="h-3 w-3" />
+                  </Badge>
+                ) : (
+                  <Badge variant="destructive" className="text-xs flex items-center gap-1">
+                    <WifiOff className="h-3 w-3" />
+                    Offline
+                  </Badge>
+                )}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setSoundEnabled(!soundEnabled)}
+                  className="h-8 w-8"
+                  aria-label={soundEnabled ? 'Mute notifications' : 'Unmute notifications'}
+                  aria-pressed={soundEnabled}
+                >
+                  {soundEnabled ? (
+                    <Volume2 className="h-4 w-4" aria-hidden="true" />
+                  ) : (
+                    <VolumeX className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                  )}
+                </Button>
+              </div>
+            </SheetTitle>
+            {/* COURT-SAFETY: Cached data warning in modals */}
+            {!isOnline && (
+              <p className="text-xs text-destructive mt-1">
+                Viewing cached messages — sending requires connection
+              </p>
+            )}
+            <p id="whisper-chat-description" className="sr-only">
+              Real-time messaging for court communications. Hold the microphone button to record voice messages.
+            </p>
+          </SheetHeader>
 
         <div className="flex flex-col h-[calc(100vh-80px)]">
           {/* Messages */}

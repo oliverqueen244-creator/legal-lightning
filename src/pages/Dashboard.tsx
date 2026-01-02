@@ -258,7 +258,7 @@ export default function Dashboard() {
                       ) : dailyItems.length === 0 ? (
                         <div className="text-center py-12 text-muted-foreground glass-card rounded-lg">
                           <CheckCircle className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                          <p>No assigned tasks today</p>
+                          <p>No assigned tasks found in last sync</p>
                           <p className="text-xs mt-2">Check with your senior for new assignments</p>
                         </div>
                       ) : (
@@ -297,7 +297,7 @@ export default function Dashboard() {
                   {isSenior && (
                     <div className="mb-4 p-3 rounded-lg bg-primary/5 border border-primary/20">
                       <p className="text-sm text-muted-foreground">
-                        <span className="font-medium text-foreground">Today's Overview:</span> {dailyItems.length} cases scheduled, {supplementaryItems.length} supplementary
+                        <span className="font-medium text-foreground">As of last sync:</span> {dailyItems.length} cases scheduled, {supplementaryItems.length} supplementary
                       </p>
                     </div>
                   )}
@@ -327,7 +327,7 @@ export default function Dashboard() {
                   ) : dailyItems.length === 0 ? (
                     <div className="text-center py-12 text-muted-foreground glass-card rounded-lg">
                       <Scale className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                      <p>No cases on today's daily list</p>
+                      <p>No cases found on daily list in last sync</p>
                       <p className="text-xs mt-2">Check the Supplementary tab for urgent additions</p>
                     </div>
                   ) : (

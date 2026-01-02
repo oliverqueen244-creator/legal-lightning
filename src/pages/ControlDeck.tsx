@@ -9,6 +9,7 @@ import { WhisperInput } from '@/components/control-deck/WhisperInput';
 import { WhisperDrawer } from '@/components/war-room/WhisperDrawer';
 import { AuthGuard } from '@/components/layout/AuthGuard';
 import { NetworkStatusPill } from '@/components/layout/NetworkStatusPill';
+import { FreshnessIndicator } from '@/components/ui/FreshnessIndicator';
 import { DocumentUploadForm } from '@/components/documents/DocumentUploadForm';
 import { useDocketItem } from '@/hooks/useDocket';
 import { useWhisperFeed } from '@/hooks/useWhisper';
@@ -21,9 +22,9 @@ export default function ControlDeck() {
   const { caseId } = useParams<{ caseId: string }>();
   const navigate = useNavigate();
 
-  const { data: docketItem, isLoading: docketLoading } = useDocketItem(caseId!);
-  const { data: whispers } = useWhisperFeed(caseId!);
-  const { data: documents } = useExtendedDocuments(caseId!);
+  const { data: docketItem, isLoading: docketLoading, dataUpdatedAt: docketUpdatedAt, refetch: refetchDocket, isFetching: docketFetching } = useDocketItem(caseId!);
+  const { data: whispers, dataUpdatedAt: whispersUpdatedAt } = useWhisperFeed(caseId!);
+  const { data: documents, dataUpdatedAt: docsUpdatedAt, refetch: refetchDocs, isFetching: docsFetching } = useExtendedDocuments(caseId!);
   const liveBoard = useLiveBoardForCourt(
     docketItem?.court_location ?? '',
     docketItem?.court_room_no ?? ''
@@ -111,6 +112,13 @@ export default function ControlDeck() {
               </div>
               
               <div className="flex items-center gap-3">
+                {/* COURT-SAFETY: Data freshness always visible */}
+                <FreshnessIndicator
+                  lastUpdated={new Date(Math.min(docketUpdatedAt || Date.now(), docsUpdatedAt || Date.now()))}
+                  onRefresh={() => { refetchDocket(); refetchDocs(); }}
+                  isRefetching={docketFetching || docsFetching}
+                  size="sm"
+                />
                 <NetworkStatusPill />
                 <Badge variant="secondary" className="text-sm">
                   PREPARATION MODE

@@ -14,6 +14,7 @@ import {
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { AuthGuard } from '@/components/layout/AuthGuard';
+import { FreshnessIndicator } from '@/components/ui/FreshnessIndicator';
 import { useCourtroomSnapshot, CourtroomCase } from '@/hooks/useCourtroomSnapshot';
 
 export default function CourtroomMode() {
@@ -41,7 +42,7 @@ export default function CourtroomMode() {
             No Cases Today
           </h1>
           <p className="text-muted-foreground text-center max-w-md">
-            No scheduled cases found.
+            No cases found in last sync
           </p>
           <Button
             variant="outline"
@@ -155,13 +156,13 @@ export default function CourtroomMode() {
             <Scale className="h-5 w-5 text-muted-foreground" />
             <div>
               <h1 className="font-display text-lg text-foreground">Court</h1>
-              <p className="text-xs text-muted-foreground flex items-center gap-2">
-                <Clock className="h-3 w-3" />
-                {format(new Date(snapshot.generated_at), 'HH:mm')}
-                {snapshot.is_stale && (
-                  <span className="text-muted-foreground/70">• stale</span>
-                )}
-              </p>
+              {/* COURT-SAFETY: Data freshness always visible */}
+              <FreshnessIndicator
+                lastUpdated={snapshot.generated_at}
+                onRefresh={isOnline ? () => regenerate() : undefined}
+                isRefetching={isRegenerating}
+                size="sm"
+              />
             </div>
           </div>
 
