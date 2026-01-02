@@ -4,11 +4,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { 
-  ArrowLeft, Scale, Users, FileText, Bell, Shield, 
+  ArrowLeft, Users, FileText, Bell, Shield, 
   Keyboard, Eye, Monitor, Zap, Download, Github, Code, ExternalLink,
   Database, Server, Wifi, Lock, AlertTriangle, MessageSquare, 
   Upload, Layers, Globe, Palette, Settings
 } from 'lucide-react';
+import logoImage from '@/assets/logo.png';
 
 export default function Documentation() {
   const navigate = useNavigate();
@@ -27,9 +28,9 @@ export default function Documentation() {
               <Button variant="ghost" size="icon" onClick={() => navigate('/auth')} aria-label="Go back">
                 <ArrowLeft className="h-5 w-5" />
               </Button>
-              <Scale className="h-6 w-6 text-primary" aria-hidden="true" />
+              <img src={logoImage} alt="Nyay-Hub" className="h-6 w-6" />
               <h1 className="font-display text-xl font-bold text-foreground">
-                Vakalat-OS Documentation
+                Nyay-Hub Documentation
               </h1>
             </div>
             <Button variant="gold" size="sm" onClick={handlePrint}>
@@ -45,9 +46,9 @@ export default function Documentation() {
         <ScrollArea className="h-full">
           {/* Title Section */}
           <div className="text-center mb-12">
-            <Scale className="h-16 w-16 text-primary mx-auto mb-4" aria-hidden="true" />
+            <img src={logoImage} alt="Nyay-Hub" className="h-16 w-16 mx-auto mb-4" />
             <h1 className="font-display text-4xl font-bold text-foreground mb-2">
-              Vakalat-OS
+              Nyay-Hub
             </h1>
             <p className="text-xl text-muted-foreground">
               Rajasthan High Court Case Management System
@@ -111,12 +112,12 @@ export default function Documentation() {
               <div>
                 <h3 className="font-semibold text-foreground mb-3">1. Overall System Architecture</h3>
                 <p className="text-sm text-muted-foreground mb-4">
-                  High-level view of how all components interact in the Vakalat-OS ecosystem.
+                  High-level view of how all components interact in the Nyay-Hub ecosystem.
                 </p>
                 <div className="p-4 rounded bg-muted/30 border border-border font-mono text-xs overflow-x-auto">
                   <pre className="text-muted-foreground whitespace-pre">
 {`┌─────────────────────────────────────────────────────────────────────────────┐
-│                              VAKALAT-OS SYSTEM                               │
+│                               NYAY-HUB SYSTEM                                │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
 │   ┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐ │
@@ -638,7 +639,7 @@ export default function Documentation() {
             </CardHeader>
             <CardContent className="prose prose-invert max-w-none">
               <p className="text-muted-foreground">
-                Vakalat-OS is a real-time court case management dashboard designed for advocates 
+                Nyay-Hub is a real-time court case management dashboard designed for advocates 
                 at the Rajasthan High Court. The system provides live case tracking, panic alerts 
                 for upcoming cases, document management, and seamless communication between 
                 senior advocates and their juniors.
@@ -1938,7 +1939,7 @@ Storage Path: case-documents/{docketId}/{timestamp}.{ext}       │
                 <h3 className="font-semibold text-foreground mb-3">IndexedDB Schema (useOfflineCache hook)</h3>
                 <div className="font-mono text-xs bg-muted/30 p-3 rounded overflow-x-auto">
                   <pre className="text-muted-foreground">
-{`// Database: vakalat-os-cache
+{`// Database: nyayhub-cache
 // Version: 1
 
 Object Stores:
@@ -2994,7 +2995,7 @@ ERROR: API format issues and rate limiting`}
                     </h4>
                     <p className="text-sm text-muted-foreground">
                       Build a feature where users can manually download PDFs from the HC website 
-                      and upload them to Vakalat-OS. AI vision (Gemini) extracts case data.
+                      and upload them to Nyay-Hub. AI vision (Gemini) extracts case data.
                     </p>
                     <div className="mt-2 text-xs text-green-400">
                       ✅ Feasible with current tech stack
@@ -3020,7 +3021,7 @@ ERROR: API format issues and rate limiting`}
 
           {/* Footer */}
           <div className="text-center py-8 text-muted-foreground text-sm">
-            <p>Vakalat-OS v1.0 | Rajasthan High Court Dashboard</p>
+            <p>Nyay-Hub v1.0 | Rajasthan High Court Dashboard</p>
             <p className="mt-1">© {new Date().getFullYear()} All Rights Reserved</p>
           </div>
         </ScrollArea>

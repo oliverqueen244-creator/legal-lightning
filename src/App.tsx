@@ -17,6 +17,7 @@ import { GlobalOfflineBanner } from "./components/layout/GlobalOfflineBanner";
 import { SyncConflictProvider } from "./contexts/SyncConflictContext";
 import { InstallDiscoveryBanner, PostInstallConfirmation } from "./components/pwa";
 import { CourtFocusOverlay } from "./components/court-focus";
+import { SplashScreen } from "./components/layout/SplashScreen";
 
 const queryClient = new QueryClient();
 
@@ -24,6 +25,8 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <SyncConflictProvider>
+        {/* Branded Splash Screen - shows once per session */}
+        <SplashScreen />
         <Toaster 
           position="top-center"
           toastOptions={{
