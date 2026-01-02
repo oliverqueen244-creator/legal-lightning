@@ -9,34 +9,38 @@ interface SyncStatusBadgeProps {
   className?: string;
 }
 
+/**
+ * FIX 1: Scoped sync labels - now clarifies "Court Feed" to prevent over-trust
+ * Labels scoped to connectivity status, not data freshness claims
+ */
 const statusConfig: Record<SyncStatus, { icon: string; label: string; color: string; bgColor: string }> = {
   live: {
     icon: '🟢',
-    label: 'LIVE',
+    label: 'Connected · Court Feed',
     color: 'text-green-400',
     bgColor: 'bg-green-500/20'
   },
   delayed: {
     icon: '🟡',
-    label: 'DELAYED',
+    label: 'Delayed · Court Feed',
     color: 'text-yellow-400',
     bgColor: 'bg-yellow-500/20'
   },
   stale: {
     icon: '🔴',
-    label: 'STALE',
+    label: 'Stale · Court Feed',
     color: 'text-red-400',
     bgColor: 'bg-red-500/20'
   },
   unknown: {
     icon: '⚪',
-    label: 'UNKNOWN',
+    label: 'Status unavailable',
     color: 'text-muted-foreground',
     bgColor: 'bg-muted/20'
   },
   not_in_session: {
     icon: '🌙',
-    label: 'OFFLINE',
+    label: 'No live feed',
     color: 'text-muted-foreground',
     bgColor: 'bg-muted/20'
   }

@@ -42,6 +42,7 @@ export function LiveTicker({ liveBoards }: LiveTickerProps) {
         )}
       </CardHeader>
       <CardContent className="space-y-3">
+        {/* FIX 2: De-absolutized messaging - context added */}
         {!courtHoursStatus.inSession ? (
           <div className="text-center py-6">
             <Moon className="h-10 w-10 text-muted-foreground mx-auto mb-3 opacity-50" />
@@ -49,7 +50,7 @@ export function LiveTicker({ liveBoards }: LiveTickerProps) {
               Courts not in session
             </p>
             <p className="text-xs text-muted-foreground mt-1">
-              {courtHoursStatus.reason}
+              As per last update · {courtHoursStatus.reason}
             </p>
           </div>
         ) : activeCourts.length === 0 ? (

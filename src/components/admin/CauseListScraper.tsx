@@ -154,12 +154,13 @@ export function CauseListScraper() {
                 <WifiOff className="h-5 w-5 text-court-danger-light" />
               )}
               <div>
+                {/* FIX 6: Scoped "Connected" label to clarify subsystem */}
                 <p className="font-medium">
-                  {statusLoading ? 'Checking...' : isWebhookConnected ? 'Connected' : 'Disconnected'}
+                  {statusLoading ? 'Checking...' : isWebhookConnected ? 'Connected (Notifications)' : 'Disconnected'}
                 </p>
                 {webhookStatus?.bot && (
                   <p className="text-sm text-muted-foreground">
-                    @{webhookStatus.bot.username}
+                    @{webhookStatus.bot.username} · Telegram Integration
                   </p>
                 )}
               </div>
