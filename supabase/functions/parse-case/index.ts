@@ -117,6 +117,80 @@ async function saveToCache(supabase: any, textHash: string, promptHash: string, 
   }
 }
 
+// Call Lovable AI Gateway (Primary - free, rate-limit friendly)
+async function callLovableAI(systemPrompt: string, userPrompt: string): Promise<AICallResult> {
+  const apiKey = Deno.env.get('LOVABLE_API_KEY');
+  if (!apiKey) {
+    return { success: false, content: '', provider: 'lovable', error: 'LOVABLE_API_KEY not configured' };
+  }
+
+  const maxRetries = 2;
+  const baseDelayMs = 1000;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      if (attempt === 0) {
+        console.log('[AI] Trying Lovable AI...');
+      } else {
+        console.log(`[AI] Lovable AI retry attempt ${attempt}/${maxRetries}...`);
+      }
+
+      const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: 'google/gemini-2.5-flash',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt }
+          ]
+        })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => '');
+        const status = response.status;
+
+        // Rate limit - retry with backoff
+        if (status === 429 && attempt < maxRetries) {
+          const delayMs = baseDelayMs * Math.pow(2, attempt);
+          console.log(`[AI] Lovable AI rate limited (429), waiting ${delayMs}ms before retry...`);
+          await sleep(delayMs);
+          continue;
+        }
+
+        // Payment required - skip to next provider
+        if (status === 402) {
+          console.log(`[AI] Lovable AI payment required (402), skipping to next provider`);
+          return { success: false, content: '', provider: 'lovable', error: 'Payment required' };
+        }
+
+        console.log(`[AI] Lovable AI failed: ${status} - ${errorText.substring(0, 200)}`);
+        return { success: false, content: '', provider: 'lovable', error: `HTTP ${status}` };
+      }
+
+      const result = await response.json();
+      const content = result.choices?.[0]?.message?.content || '';
+      console.log(`[AI] Lovable AI success, got ${content.length} chars`);
+      return { success: true, content, provider: 'lovable' };
+    } catch (error) {
+      if (attempt < maxRetries) {
+        const delayMs = baseDelayMs * Math.pow(2, attempt);
+        console.log(`[AI] Lovable AI network error, waiting ${delayMs}ms before retry...`, error);
+        await sleep(delayMs);
+        continue;
+      }
+      console.error('[AI] Lovable AI error after all retries:', error);
+      return { success: false, content: '', provider: 'lovable', error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  return { success: false, content: '', provider: 'lovable', error: 'Max retries exceeded' };
+}
+
 // Call Google AI API directly (Primary provider) with exponential backoff retry
 async function callGoogleAI(systemPrompt: string, userPrompt: string): Promise<AICallResult> {
   const apiKey = Deno.env.get('GOOGLE_AI_API_KEY');
@@ -351,11 +425,15 @@ async function callAIWithFallback(
   }
   lastRequestTime = Date.now();
 
+  // Provider fallback chain: Lovable AI (free) → Google → OpenAI → OpenRouter
   const providers = [
+    () => callLovableAI(systemPrompt, userPrompt),
     () => callGoogleAI(systemPrompt, userPrompt),
     () => callOpenAI(systemPrompt, userPrompt),
     () => callOpenRouter(systemPrompt, userPrompt)
   ];
+
+  const failedProviders: string[] = [];
 
   for (const callProvider of providers) {
     const result = await callProvider();
@@ -371,15 +449,30 @@ async function callAIWithFallback(
         // Don't fail if cache save fails
         console.log('[CACHE] Could not cache response:', e);
       }
+      
+      // Log fallback path if any providers failed
+      if (failedProviders.length > 0) {
+        console.log(`[AI] Successfully fell back from [${failedProviders.join(' → ')}] to ${result.provider}`);
+      }
+      
       return result;
     }
+    
+    failedProviders.push(result.provider);
     console.log(`[AI] ${result.provider} failed: ${result.error}, trying next...`);
     
     // Add delay between provider switches
     await sleep(500);
   }
 
-  return { success: false, content: '', provider: 'none', error: 'All AI providers failed' };
+  // All providers failed - return graceful degradation result
+  console.error(`[AI] ALL PROVIDERS FAILED: [${failedProviders.join(' → ')}]`);
+  return { 
+    success: false, 
+    content: '', 
+    provider: 'none', 
+    error: `All AI providers failed after trying: ${failedProviders.join(', ')}` 
+  };
 }
 
 // Configuration for batch processing

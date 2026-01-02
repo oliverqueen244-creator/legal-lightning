@@ -198,24 +198,51 @@ serve(async (req) => {
 
     } catch (jobError) {
       const errorMessage = jobError instanceof Error ? jobError.message : 'Unknown error';
-      console.error(`[AI-WORKER] Job ${job.id} failed:`, errorMessage);
+      
+      // Enhanced error logging with provider context
+      const isAllProvidersFailed = errorMessage.includes('All AI providers failed');
+      const isRateLimit = errorMessage.toLowerCase().includes('rate limit') || errorMessage.includes('429');
+      const isPaymentRequired = errorMessage.includes('402') || errorMessage.toLowerCase().includes('payment');
+      
+      const errorCategory = isAllProvidersFailed ? '🔴 ALL_PROVIDERS_FAILED' :
+                           isRateLimit ? '⚠️ RATE_LIMITED' :
+                           isPaymentRequired ? '💳 PAYMENT_REQUIRED' : '❌ ERROR';
+      
+      console.error(`[AI-WORKER] Job ${job.id} ${errorCategory}:`, errorMessage);
 
       // Handle retry logic
       const newRetries = job.retries + 1;
       
-      if (newRetries >= job.max_retries) {
-        // Max retries exceeded - mark as failed
+      // Determine if we should retry based on error type
+      const shouldRetry = !isPaymentRequired && newRetries < job.max_retries;
+      
+      if (!shouldRetry) {
+        // Max retries exceeded or non-retryable error - mark as failed
+        const failReason = isPaymentRequired ? 'Payment required - no retries' :
+                          `Max retries exceeded (${newRetries}/${job.max_retries})`;
+        
         await supabase
           .from('ai_jobs')
           .update({
             status: 'failed',
-            error_message: errorMessage,
+            error_message: `${errorCategory}: ${errorMessage}`,
             retries: newRetries,
             completed_at: new Date().toISOString()
           })
           .eq('id', job.id);
 
-        console.log(`[AI-WORKER] Job ${job.id} permanently failed after ${newRetries} retries`);
+        console.log(`[AI-WORKER] Job ${job.id} permanently failed: ${failReason}`);
+        
+        // GRACEFUL DEGRADATION: Log failed job details for manual review
+        console.log(`[AI-WORKER] GRACEFUL DEGRADATION - Job details for manual review:`, {
+          job_id: job.id,
+          job_type: job.job_type,
+          causelist_id: job.payload.causelist_id,
+          alias: job.payload.alias,
+          court_no: job.payload.court_no,
+          bench: job.payload.bench,
+          error_category: errorCategory
+        });
       } else {
         // Schedule retry with exponential backoff
         const delaySeconds = RETRY_DELAYS[Math.min(newRetries - 1, RETRY_DELAYS.length - 1)];
@@ -225,20 +252,22 @@ serve(async (req) => {
           .from('ai_jobs')
           .update({
             status: 'retry',
-            error_message: errorMessage,
+            error_message: `${errorCategory}: ${errorMessage}`,
             retries: newRetries,
             next_retry_at: nextRetryAt
           })
           .eq('id', job.id);
 
-        console.log(`[AI-WORKER] Job ${job.id} scheduled for retry ${newRetries} at ${nextRetryAt}`);
+        console.log(`[AI-WORKER] Job ${job.id} scheduled for retry ${newRetries}/${job.max_retries} at ${nextRetryAt} (delay: ${delaySeconds}s)`);
       }
 
       return new Response(JSON.stringify({
         success: false,
         job_id: job.id,
         error: errorMessage,
-        retries: newRetries
+        error_category: errorCategory,
+        retries: newRetries,
+        will_retry: shouldRetry
       }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -294,38 +323,130 @@ async function processJob(job: AiJob, supabase: any): Promise<{ cases: ParsedCas
 }
 
 async function callAIProviders(prompt: string, courtNo: string, parseType: 'daily' | 'search'): Promise<{ cases: ParsedCase[]; provider: string; tokensUsed: number }> {
+  // Provider fallback chain: Lovable AI (free) → Google → OpenAI → OpenRouter
   const providers = [
+    { name: 'lovable', fn: () => callLovableAI(prompt) },
     { name: 'google', fn: () => callGoogleAI(prompt) },
     { name: 'openai', fn: () => callOpenAI(prompt) },
     { name: 'openrouter', fn: () => callOpenRouter(prompt) }
   ];
 
   let lastError: Error | null = null;
+  const failedProviders: string[] = [];
 
   for (const provider of providers) {
     try {
-      console.log(`[AI-WORKER] Trying provider: ${provider.name}`);
+      console.log(`[AI-WORKER] Trying provider: ${provider.name} (attempt ${failedProviders.length + 1}/${providers.length})`);
       const result = await provider.fn();
       
       if (result.success) {
         const cases = parseType === 'search' 
           ? parseSearchResponse(result.content, courtNo)
           : parseAIResponse(result.content, courtNo);
+        
+        // Log successful fallback
+        if (failedProviders.length > 0) {
+          console.log(`[AI-WORKER] Successfully fell back from [${failedProviders.join(' → ')}] to ${provider.name}`);
+        }
+        
         return {
           cases,
           provider: provider.name,
           tokensUsed: result.tokensUsed || 0
         };
       }
+      
+      // Provider returned success: false without throwing
+      failedProviders.push(provider.name);
+      console.log(`[AI-WORKER] Provider ${provider.name} returned unsuccessful result`);
     } catch (err) {
       lastError = err instanceof Error ? err : new Error(String(err));
-      console.log(`[AI-WORKER] Provider ${provider.name} failed: ${lastError.message}`);
-      // Continue to next provider on rate limit - don't throw immediately
+      failedProviders.push(provider.name);
+      
+      // Detect specific error types for better logging
+      const errorMsg = lastError.message.toLowerCase();
+      const isRateLimit = errorMsg.includes('rate limit') || errorMsg.includes('429') || errorMsg.includes('quota');
+      const isAuth = errorMsg.includes('401') || errorMsg.includes('403') || errorMsg.includes('unauthorized');
+      const isTimeout = errorMsg.includes('timeout') || errorMsg.includes('timed out');
+      
+      const errorType = isRateLimit ? '⚠️ RATE LIMITED' : isAuth ? '🔑 AUTH ERROR' : isTimeout ? '⏱️ TIMEOUT' : '❌ ERROR';
+      console.log(`[AI-WORKER] Provider ${provider.name} ${errorType}: ${lastError.message}`);
       continue;
     }
   }
 
-  throw lastError || new Error('All AI providers failed');
+  // All providers failed - log summary
+  console.error(`[AI-WORKER] ALL PROVIDERS FAILED: [${failedProviders.join(' → ')}]`);
+  throw lastError || new Error(`All AI providers failed: ${failedProviders.join(', ')}`);
+}
+
+// Lovable AI Gateway - Primary provider (free, rate-limit friendly)
+async function callLovableAI(prompt: string): Promise<{ success: boolean; content: string; tokensUsed?: number }> {
+  const apiKey = Deno.env.get('LOVABLE_API_KEY');
+  if (!apiKey) {
+    console.log('[AI-WORKER] LOVABLE_API_KEY not configured, skipping Lovable AI');
+    return { success: false, content: '' };
+  }
+
+  const maxRetries = 2;
+  const baseDelayMs = 1000;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      if (attempt > 0) {
+        const delayMs = baseDelayMs * Math.pow(2, attempt - 1);
+        console.log(`[AI-WORKER] Lovable AI retry ${attempt}/${maxRetries} after ${delayMs}ms...`);
+        await new Promise(r => setTimeout(r, delayMs));
+      }
+
+      const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: 'google/gemini-2.5-flash',
+          messages: [
+            { role: 'system', content: 'You extract case information from legal causelists. Return only valid JSON.' },
+            { role: 'user', content: prompt }
+          ]
+        })
+      });
+
+      if (!response.ok) {
+        const status = response.status;
+        const errorText = await response.text().catch(() => '');
+        
+        // Rate limit - retry with backoff
+        if (status === 429 && attempt < maxRetries) {
+          console.log(`[AI-WORKER] Lovable AI rate limited (429), will retry...`);
+          continue;
+        }
+        
+        // Payment required - don't retry, move to next provider
+        if (status === 402) {
+          console.log(`[AI-WORKER] Lovable AI payment required (402), moving to next provider`);
+          return { success: false, content: '' };
+        }
+        
+        throw new Error(`Lovable AI error: ${status} - ${errorText.substring(0, 100)}`);
+      }
+
+      const data = await response.json();
+      const content = data.choices?.[0]?.message?.content || '';
+      const tokensUsed = data.usage?.total_tokens || 0;
+
+      console.log(`[AI-WORKER] Lovable AI success: ${content.length} chars, ${tokensUsed} tokens`);
+      return { success: true, content, tokensUsed };
+    } catch (error) {
+      if (attempt >= maxRetries) {
+        throw error;
+      }
+    }
+  }
+
+  return { success: false, content: '' };
 }
 
 // Rule-based extraction for SUPPLEMENTARY/NOTICE lists
