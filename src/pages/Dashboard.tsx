@@ -14,6 +14,8 @@ import { AppHeader } from '@/components/layout/AppHeader';
 import { AuthGuard } from '@/components/layout/AuthGuard';
 import { MorningBriefPanel } from '@/components/morning-brief/MorningBriefPanel';
 import { PostCourtCapturePanel } from '@/components/post-court/PostCourtCapturePanel';
+import { FreshnessIndicator } from '@/components/ui/FreshnessIndicator';
+import { PullToRefreshHint } from '@/components/ui/PullToRefreshHint';
 import { useDocket } from '@/hooks/useDocket';
 import { useLiveBoard } from '@/hooks/useLiveBoard';
 import { useAuth } from '@/hooks/useAuth';
@@ -53,11 +55,11 @@ export default function Dashboard() {
   // Format date for API calls - must be before useDocket
   const formattedDate = format(selectedDate, 'yyyy-MM-dd');
   
-  const { data: docket, isLoading: docketLoading, refetch } = useDocket(formattedDate);
-  const { data: liveBoards, isLoading: liveBoardLoading } = useLiveBoard();
-  const { data: morningBrief, isLoading: briefLoading, refetch: refetchBrief } = useMorningBrief();
+  const { data: docket, isLoading: docketLoading, refetch, dataUpdatedAt: docketUpdatedAt, isFetching: docketFetching } = useDocket(formattedDate);
+  const { data: liveBoards, isLoading: liveBoardLoading, dataUpdatedAt: liveBoardUpdatedAt, isFetching: liveBoardFetching, refetch: refetchLiveBoard } = useLiveBoard();
+  const { data: morningBrief, isLoading: briefLoading, refetch: refetchBrief, dataUpdatedAt: briefUpdatedAt, isFetching: briefFetching } = useMorningBrief();
   const { data: pendingCaptures } = usePendingCaptures();
-  const { data: upcomingCases, isLoading: upcomingLoading } = useUpcomingCases();
+  const { data: upcomingCases, isLoading: upcomingLoading, dataUpdatedAt: upcomingUpdatedAt, isFetching: upcomingFetching, refetch: refetchUpcoming } = useUpcomingCases();
 
   // Get user's selected benches (could be "JAIPUR", "JODHPUR", or "JAIPUR,JODHPUR")
   const userBenches = profile?.bench?.split(',').map(b => b.trim().toUpperCase()) ?? [];
@@ -109,10 +111,30 @@ export default function Dashboard() {
   const isJunior = role === 'JUNIOR';
   const isSenior = role === 'SENIOR' || role === 'ADMIN';
 
+  // Combined refresh for all data
+  const handleRefreshAll = () => {
+    refetch();
+    refetchLiveBoard();
+    refetchBrief();
+    refetchUpcoming();
+  };
+
+  const isAnyFetching = docketFetching || liveBoardFetching || briefFetching || upcomingFetching;
+  const oldestUpdate = Math.min(
+    docketUpdatedAt || Date.now(),
+    liveBoardUpdatedAt || Date.now()
+  );
+
   return (
     <AuthGuard>
       <div className="min-h-screen bg-background pb-20 md:pb-0">
         <AppHeader />
+
+        {/* COURT-SAFETY: Pull-to-refresh hint for new users */}
+        <PullToRefreshHint 
+          onRefresh={handleRefreshAll} 
+          isRefetching={isAnyFetching}
+        />
 
         {/* Post-Court Capture - shows after court hours for pending cases */}
         {pendingCaptures && pendingCaptures.length > 0 && (
@@ -126,26 +148,35 @@ export default function Dashboard() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Left: Cause List with Tabs */}
             <div className="lg:col-span-2 space-y-4">
-              {/* Quick Actions Bar */}
-              <div className="flex flex-wrap items-center gap-3">
-                <DateSelector 
-                  selectedDate={selectedDate}
-                  onDateChange={setSelectedDate}
-                />
-                <ScraperStatusWidget 
-                  bench={profile?.bench || undefined} 
-                  selectedDate={formattedDate}
-                  onRefreshComplete={refetch}
-                />
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => navigate('/courtroom')}
-                  className="ml-auto flex items-center gap-2"
-                >
-                  <Gavel className="h-4 w-4" />
-                  Court Mode
-                </Button>
+              {/* COURT-SAFETY: Data freshness indicator - always visible */}
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <DateSelector 
+                    selectedDate={selectedDate}
+                    onDateChange={setSelectedDate}
+                  />
+                  <FreshnessIndicator
+                    lastUpdated={new Date(oldestUpdate)}
+                    onRefresh={handleRefreshAll}
+                    isRefetching={isAnyFetching}
+                  />
+                </div>
+                <div className="flex items-center gap-3">
+                  <ScraperStatusWidget 
+                    bench={profile?.bench || undefined} 
+                    selectedDate={formattedDate}
+                    onRefreshComplete={refetch}
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => navigate('/courtroom')}
+                    className="flex items-center gap-2"
+                  >
+                    <Gavel className="h-4 w-4" />
+                    Court Mode
+                  </Button>
+                </div>
               </div>
               
               <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
