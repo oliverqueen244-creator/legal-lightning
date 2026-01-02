@@ -8,7 +8,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
  * - Processes ONE job at a time
  * - Enforces token budget per hour
  * - Handles retries with exponential backoff
- * - Multi-provider fallback (Google → OpenAI → OpenRouter)
+ * - Multi-provider fallback (Google → OpenAI → OpenRouter → Lovable AI last resort)
  * - Exits immediately after processing one job (cron calls repeatedly)
  */
 
@@ -323,12 +323,12 @@ async function processJob(job: AiJob, supabase: any): Promise<{ cases: ParsedCas
 }
 
 async function callAIProviders(prompt: string, courtNo: string, parseType: 'daily' | 'search'): Promise<{ cases: ParsedCase[]; provider: string; tokensUsed: number }> {
-  // Provider fallback chain: Lovable AI (free) → Google → OpenAI → OpenRouter
+  // Provider fallback chain: Google → OpenAI → OpenRouter → Lovable AI (last resort)
   const providers = [
-    { name: 'lovable', fn: () => callLovableAI(prompt) },
     { name: 'google', fn: () => callGoogleAI(prompt) },
     { name: 'openai', fn: () => callOpenAI(prompt) },
-    { name: 'openrouter', fn: () => callOpenRouter(prompt) }
+    { name: 'openrouter', fn: () => callOpenRouter(prompt) },
+    { name: 'lovable', fn: () => callLovableAI(prompt) }
   ];
 
   let lastError: Error | null = null;
@@ -380,7 +380,7 @@ async function callAIProviders(prompt: string, courtNo: string, parseType: 'dail
   throw lastError || new Error(`All AI providers failed: ${failedProviders.join(', ')}`);
 }
 
-// Lovable AI Gateway - Primary provider (free, rate-limit friendly)
+// Lovable AI Gateway - Last resort fallback (for when all other providers fail)
 async function callLovableAI(prompt: string): Promise<{ success: boolean; content: string; tokensUsed?: number }> {
   const apiKey = Deno.env.get('LOVABLE_API_KEY');
   if (!apiKey) {
