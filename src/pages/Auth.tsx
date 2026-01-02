@@ -1,15 +1,16 @@
 import { useState, useEffect, useRef } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Scale, Mail, Lock, User, AlertCircle } from 'lucide-react';
+import { Mail, Lock, User, AlertCircle } from 'lucide-react';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 import HiddenAdminPortal from '@/components/admin/HiddenAdminPortal';
+import logoImage from '@/assets/logo.png';
 
 export default function Auth() {
   const navigate = useNavigate();
@@ -107,7 +108,7 @@ export default function Auth() {
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <Scale className="h-12 w-12 text-primary animate-pulse" />
+        <img src={logoImage} alt="Nyay-Hub" className="h-12 w-12 animate-pulse" />
       </div>
     );
   }
@@ -117,13 +118,15 @@ export default function Auth() {
       <Card className="w-full max-w-md border-border">
         <CardHeader className="text-center">
           <div className="flex justify-center mb-4">
-            <Scale 
-              className="h-12 w-12 text-primary cursor-pointer hover:scale-110 transition-transform select-none" 
+            <img 
+              src={logoImage} 
+              alt="Nyay-Hub" 
+              className="h-12 w-12 cursor-pointer hover:scale-110 transition-transform select-none" 
               onClick={handleLogoClick}
             />
           </div>
           <CardTitle className="font-display text-2xl">
-            {isLogin ? 'Welcome Back' : 'Join Nyay Hub'}
+            {isLogin ? 'Welcome Back' : 'Join Nyay-Hub'}
           </CardTitle>
           <CardDescription>
             {isLogin 
