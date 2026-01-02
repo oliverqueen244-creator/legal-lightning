@@ -22,8 +22,9 @@ const corsHeaders = {
  * 
  * Tries AI providers in order:
  * 1. Google AI API (gemini-2.0-flash) - Primary
- * 2. OpenAI (gpt-4o-mini) - Fallback
- * 3. OpenRouter (as last resort)
+ * 2. OpenAI (gpt-4o-mini) - Fallback  
+ * 3. OpenRouter - Secondary fallback
+ * 4. Lovable AI (last resort only)
  */
 
 // Throttling configuration
@@ -117,7 +118,7 @@ async function saveToCache(supabase: any, textHash: string, promptHash: string, 
   }
 }
 
-// Call Lovable AI Gateway (Primary - free, rate-limit friendly)
+// Call Lovable AI Gateway (Last resort fallback - only used when all other providers fail)
 async function callLovableAI(systemPrompt: string, userPrompt: string): Promise<AICallResult> {
   const apiKey = Deno.env.get('LOVABLE_API_KEY');
   if (!apiKey) {
@@ -425,12 +426,12 @@ async function callAIWithFallback(
   }
   lastRequestTime = Date.now();
 
-  // Provider fallback chain: Lovable AI (free) → Google → OpenAI → OpenRouter
+  // Provider fallback chain: Google → OpenAI → OpenRouter → Lovable AI (last resort)
   const providers = [
-    () => callLovableAI(systemPrompt, userPrompt),
     () => callGoogleAI(systemPrompt, userPrompt),
     () => callOpenAI(systemPrompt, userPrompt),
-    () => callOpenRouter(systemPrompt, userPrompt)
+    () => callOpenRouter(systemPrompt, userPrompt),
+    () => callLovableAI(systemPrompt, userPrompt)
   ];
 
   const failedProviders: string[] = [];
