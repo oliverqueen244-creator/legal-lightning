@@ -1,11 +1,13 @@
-import { AlertTriangle, Activity, MapPin, WifiOff } from 'lucide-react';
+import { AlertTriangle, Activity, MapPin, WifiOff, Clock } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { useLiveBoard } from '@/hooks/useLiveBoard';
 import { useDocket } from '@/hooks/useDocket';
 import { useAuth } from '@/hooks/useAuth';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
-import { format } from 'date-fns';
+import { format, differenceInSeconds } from 'date-fns';
+import { useState, useEffect } from 'react';
 
 interface PersistentLiveBoardProps {
   className?: string;
@@ -18,6 +20,37 @@ interface PersistentLiveBoardProps {
  * 
  * P0 FIX: Shows OFFLINE overlay when offline to prevent false confidence
  */
+/**
+ * P0 FIX: Staleness indicator helper
+ * Calculates seconds since last update and returns visual state
+ */
+function useStalenessState(lastUpdated: string | null | undefined) {
+  const [secondsSinceUpdate, setSecondsSinceUpdate] = useState(0);
+
+  useEffect(() => {
+    if (!lastUpdated) return;
+
+    const updateStaleness = () => {
+      const lastUpdateTime = new Date(lastUpdated);
+      const now = new Date();
+      setSecondsSinceUpdate(differenceInSeconds(now, lastUpdateTime));
+    };
+
+    // Initial calculation
+    updateStaleness();
+
+    // Update every 10 seconds
+    const interval = setInterval(updateStaleness, 10000);
+    return () => clearInterval(interval);
+  }, [lastUpdated]);
+
+  // Visual states based on staleness
+  const isStale = secondsSinceUpdate > 90;
+  const isWarning = secondsSinceUpdate > 30 && secondsSinceUpdate <= 90;
+
+  return { secondsSinceUpdate, isStale, isWarning };
+}
+
 export function PersistentLiveBoard({ className }: PersistentLiveBoardProps) {
   const { profile } = useAuth();
   const { isOnline } = useNetworkStatus();
@@ -69,12 +102,21 @@ export function PersistentLiveBoard({ className }: PersistentLiveBoardProps) {
   const currentItem = board?.current_item ?? 0;
   const status = board?.status ?? 'hearing';
 
+  // P0 FIX: Staleness tracking
+  const { secondsSinceUpdate, isStale, isWarning } = useStalenessState(board?.last_updated);
+  
+  // Format last update time for display
+  const lastUpdateTime = board?.last_updated 
+    ? format(new Date(board.last_updated), 'h:mm a')
+    : null;
+
   // Urgency levels - DISABLED when offline (P0 FIX)
   const isPanic = isOnline && distance > 0 && distance <= 5;
   const isImminent = isOnline && distance > 0 && distance <= 10;
   const isRunning = isOnline && distance <= 0;
 
   return (
+    <TooltipProvider>
     <div
       className={cn(
         'relative flex items-center gap-3 px-3 py-2 rounded-lg border transition-colors',
@@ -153,6 +195,33 @@ export function PersistentLiveBoard({ className }: PersistentLiveBoardProps) {
         {isPanic && isOnline && <AlertTriangle className="h-3 w-3" />}
         {isRunning && isOnline ? 'NOW' : `${distance} away`}
       </Badge>
+
+      {/* P0 FIX: Staleness Indicator */}
+      {lastUpdateTime && isOnline && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div 
+              className={cn(
+                'flex items-center gap-1 text-xs',
+                isStale && 'text-amber-500',
+                isWarning && 'text-muted-foreground',
+                !isStale && !isWarning && 'text-muted-foreground'
+              )}
+            >
+              {(isStale || isWarning) && <Clock className="h-3 w-3" />}
+              <span className="hidden sm:inline">
+                {lastUpdateTime}
+              </span>
+            </div>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" className="max-w-xs">
+            <p className="text-sm">
+              Court position updates depend on live board availability. Verify if data appears delayed.
+            </p>
+          </TooltipContent>
+        </Tooltip>
+      )}
     </div>
+    </TooltipProvider>
   );
 }
