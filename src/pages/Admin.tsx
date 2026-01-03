@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Scale, Calendar, FileText, Settings, Activity, FileCheck, Database, Gavel, Brain, ClipboardCheck, AlertTriangle, Gauge } from 'lucide-react';
+import { ArrowLeft, Scale, Calendar, FileText, Settings, Activity, FileCheck, Database, Gavel, Brain, ClipboardCheck, AlertTriangle, Gauge, Layers } from 'lucide-react';
 import { AuthGuard } from '@/components/layout/AuthGuard';
 import { useAuth } from '@/hooks/useAuth';
 import { DocketManager } from '@/components/admin/DocketManager';
@@ -16,6 +16,7 @@ import { AiJobsMonitor } from '@/components/admin/AiJobsMonitor';
 import { AuditConsole } from '@/components/admin/audit/AuditConsole';
 import { AdminErrorConsole } from '@/components/admin/errors';
 import { ConfidenceDashboard } from '@/components/admin/ConfidenceDashboard';
+import { FallbackDashboard } from '@/components/admin/FallbackDashboard';
 
 export default function Admin() {
   const navigate = useNavigate();
@@ -80,7 +81,7 @@ export default function Admin() {
         {/* Main Content */}
         <main className="flex-1 container mx-auto px-4 py-6">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-            <TabsList className="grid w-full max-w-7xl grid-cols-11">
+            <TabsList className="grid w-full max-w-7xl grid-cols-12">
               <TabsTrigger value="errors" className="flex items-center gap-2">
                 <AlertTriangle className="h-4 w-4" />
                 <span className="hidden sm:inline">Errors</span>
@@ -88,6 +89,10 @@ export default function Admin() {
               <TabsTrigger value="confidence" className="flex items-center gap-2">
                 <Gauge className="h-4 w-4" />
                 <span className="hidden sm:inline">Confidence</span>
+              </TabsTrigger>
+              <TabsTrigger value="fallback" className="flex items-center gap-2">
+                <Layers className="h-4 w-4" />
+                <span className="hidden sm:inline">Fallback</span>
               </TabsTrigger>
               <TabsTrigger value="audit" className="flex items-center gap-2">
                 <ClipboardCheck className="h-4 w-4" />
@@ -133,6 +138,10 @@ export default function Admin() {
 
             <TabsContent value="confidence" className="space-y-4">
               <ConfidenceDashboard />
+            </TabsContent>
+
+            <TabsContent value="fallback" className="space-y-4">
+              <FallbackDashboard />
             </TabsContent>
 
             <TabsContent value="audit" className="space-y-4">
