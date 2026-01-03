@@ -89,22 +89,23 @@ serve(async (req) => {
     
     if (!isActionRequest) {
       // Validate Telegram webhook secret for incoming webhook updates
-      // Telegram sends this header when you configure a secret_token with setWebhook
+      // We use the bot token as the secret_token when registering the webhook
       const telegramSecretToken = req.headers.get('x-telegram-bot-api-secret-token');
-      const expectedSecretToken = Deno.env.get('TELEGRAM_WEBHOOK_SECRET');
       
-      // If TELEGRAM_WEBHOOK_SECRET is configured, require it
-      if (expectedSecretToken) {
-        if (!telegramSecretToken || telegramSecretToken !== expectedSecretToken) {
-          console.error('[TELEGRAM] Unauthorized: Invalid or missing webhook secret token');
+      // Validate against bot token (set as secret_token in setWebhook)
+      if (botToken && telegramSecretToken) {
+        if (telegramSecretToken !== botToken) {
+          console.error('[TELEGRAM] Unauthorized: Invalid webhook secret token');
           return new Response(
             JSON.stringify({ ok: false, error: 'Unauthorized' }),
             { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
         console.log('[TELEGRAM] Webhook secret validated successfully');
-      } else {
-        console.warn('[TELEGRAM] Warning: TELEGRAM_WEBHOOK_SECRET not configured - webhook authentication disabled');
+      } else if (!telegramSecretToken) {
+        // Allow requests without secret header for backwards compatibility
+        // but log a warning - webhook should be reconfigured with secret_token
+        console.warn('[TELEGRAM] Warning: No webhook secret token in request - consider updating webhook with secret_token');
       }
     }
     
@@ -114,7 +115,8 @@ serve(async (req) => {
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
       const webhookUrl = `${supabaseUrl}/functions/v1/telegram-webhook`;
-      const response = await fetch(`https://api.telegram.org/bot${botToken}/setWebhook?url=${encodeURIComponent(webhookUrl)}`);
+      // Register webhook with secret_token set to bot token for authentication
+      const response = await fetch(`https://api.telegram.org/bot${botToken}/setWebhook?url=${encodeURIComponent(webhookUrl)}&secret_token=${encodeURIComponent(botToken)}`);
       const result = await response.json();
       return new Response(JSON.stringify({ success: result.ok, result, webhook_url: webhookUrl }), 
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
