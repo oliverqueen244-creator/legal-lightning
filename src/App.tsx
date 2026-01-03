@@ -15,48 +15,55 @@ import CourtroomMode from "./pages/CourtroomMode";
 import Install from "./pages/Install";
 import { GlobalOfflineBanner } from "./components/layout/GlobalOfflineBanner";
 import { SyncConflictProvider } from "./contexts/SyncConflictContext";
+import { FormDirtyProvider } from "./contexts/FormDirtyContext";
 import { InstallDiscoveryBanner, PostInstallConfirmation } from "./components/pwa";
 import { CourtFocusOverlay } from "./components/court-focus";
 import { SplashScreen } from "./components/layout/SplashScreen";
+import { PWAUpdateManager } from "./components/pwa/PWAUpdateManager";
 
 const queryClient = new QueryClient();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
-      <SyncConflictProvider>
-        {/* Branded Splash Screen - shows once per session */}
-        <SplashScreen />
-        <Toaster 
-          position="top-center"
-          toastOptions={{
-            className: 'bg-background border-2 border-primary text-primary font-bold shadow-[0_0_20px_hsl(48_97%_54%/0.4)]',
-          }}
-        />
-        {/* HARDENING FIX: Global offline banner - single source of truth */}
-        <GlobalOfflineBanner />
-        {/* PWA Install Discovery - safe, non-intrusive, respects dismissal */}
-        <InstallDiscoveryBanner />
-        {/* PWA Post-Install Confirmation - shows once after first install launch */}
-        <PostInstallConfirmation />
-        {/* Court Focus Mode - Full screen overlay for critical court moments */}
-        <CourtFocusOverlay />
-        <BrowserRouter>
-          <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/auth" element={<Auth />} />
-            <Route path="/onboarding" element={<Onboarding />} />
-            <Route path="/docs" element={<Documentation />} />
-            <Route path="/dossier" element={<ProductDossier />} />
-            <Route path="/admin" element={<Admin />} />
-            <Route path="/war-room/:caseId" element={<WarRoom />} />
-            <Route path="/control-deck/:caseId" element={<ControlDeck />} />
-            <Route path="/courtroom" element={<CourtroomMode />} />
-            <Route path="/install" element={<Install />} />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </BrowserRouter>
-      </SyncConflictProvider>
+      {/* FormDirtyProvider MUST wrap SyncConflictProvider for safety checks */}
+      <FormDirtyProvider>
+        <SyncConflictProvider>
+          {/* Branded Splash Screen - shows once per session */}
+          <SplashScreen />
+          <Toaster 
+            position="top-center"
+            toastOptions={{
+              className: 'bg-background border-2 border-primary text-primary font-bold shadow-[0_0_20px_hsl(48_97%_54%/0.4)]',
+            }}
+          />
+          {/* HARDENING FIX: Global offline banner - single source of truth */}
+          <GlobalOfflineBanner />
+          {/* PWA Install Discovery - safe, non-intrusive, respects dismissal */}
+          <InstallDiscoveryBanner />
+          {/* PWA Post-Install Confirmation - shows once after first install launch */}
+          <PostInstallConfirmation />
+          {/* SAFE PWA AUTO-UPDATE: Manages update lifecycle with safety checks */}
+          <PWAUpdateManager />
+          {/* Court Focus Mode - Full screen overlay for critical court moments */}
+          <CourtFocusOverlay />
+          <BrowserRouter>
+            <Routes>
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/auth" element={<Auth />} />
+              <Route path="/onboarding" element={<Onboarding />} />
+              <Route path="/docs" element={<Documentation />} />
+              <Route path="/dossier" element={<ProductDossier />} />
+              <Route path="/admin" element={<Admin />} />
+              <Route path="/war-room/:caseId" element={<WarRoom />} />
+              <Route path="/control-deck/:caseId" element={<ControlDeck />} />
+              <Route path="/courtroom" element={<CourtroomMode />} />
+              <Route path="/install" element={<Install />} />
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </BrowserRouter>
+        </SyncConflictProvider>
+      </FormDirtyProvider>
     </TooltipProvider>
   </QueryClientProvider>
 );

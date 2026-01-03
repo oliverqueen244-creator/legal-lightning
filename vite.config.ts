@@ -57,6 +57,11 @@ export default defineConfig(({ mode }) => ({
         ],
       },
       workbox: {
+        // SAFE PWA AUTO-UPDATE: Take control immediately when new SW activates
+        clientsClaim: true,
+        // SAFE PWA AUTO-UPDATE: Skip waiting - new SW activates immediately
+        // Note: Actual reload is controlled by usePWAUpdate safety checks
+        skipWaiting: true,
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
         navigateFallback: "/index.html",
         navigateFallbackDenylist: [/^\/api/, /^\/supabase/],

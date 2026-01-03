@@ -7,6 +7,7 @@ import {
   Shield,
   Check,
   RefreshCw,
+  Download,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -25,6 +26,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { useAuth } from '@/hooks/useAuth';
 import { useCourtMode } from '@/hooks/useCourtMode';
+import { usePWAUpdate } from '@/hooks/usePWAUpdate';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
@@ -44,6 +46,9 @@ export function UserMenu() {
   
   // FIX 5: Court Mode suppresses role badges during court
   const { isCourtModeEnabled } = useCourtMode();
+  
+  // SAFE PWA AUTO-UPDATE: Manual update escape hatch
+  const { updateAvailable, applyUpdateIfSafe } = usePWAUpdate();
 
   const handleSignOut = async () => {
     const { error } = await signOut();
@@ -220,6 +225,17 @@ export function UserMenu() {
         )}
 
         <DropdownMenuSeparator />
+
+        {/* SAFE PWA AUTO-UPDATE: Manual update escape hatch */}
+        {updateAvailable && (
+          <DropdownMenuItem 
+            onClick={() => applyUpdateIfSafe()} 
+            className="text-primary min-h-touch"
+          >
+            <Download className="mr-2 h-4 w-4" aria-hidden="true" />
+            Apply update now
+          </DropdownMenuItem>
+        )}
 
         {/* SUPPORT FIX: Clear Cache & Reload - for support recovery */}
         <DropdownMenuItem 
