@@ -83,6 +83,31 @@ serve(async (req) => {
   try {
     const url = new URL(req.url);
     
+    // Authentication check for webhook calls (skip for setup/status/process-queue actions)
+    const action = url.searchParams.get('action');
+    const isActionRequest = action === 'setup' || action === 'status' || action === 'process-queue';
+    
+    if (!isActionRequest) {
+      // Validate Telegram webhook secret for incoming webhook updates
+      // Telegram sends this header when you configure a secret_token with setWebhook
+      const telegramSecretToken = req.headers.get('x-telegram-bot-api-secret-token');
+      const expectedSecretToken = Deno.env.get('TELEGRAM_WEBHOOK_SECRET');
+      
+      // If TELEGRAM_WEBHOOK_SECRET is configured, require it
+      if (expectedSecretToken) {
+        if (!telegramSecretToken || telegramSecretToken !== expectedSecretToken) {
+          console.error('[TELEGRAM] Unauthorized: Invalid or missing webhook secret token');
+          return new Response(
+            JSON.stringify({ ok: false, error: 'Unauthorized' }),
+            { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        console.log('[TELEGRAM] Webhook secret validated successfully');
+      } else {
+        console.warn('[TELEGRAM] Warning: TELEGRAM_WEBHOOK_SECRET not configured - webhook authentication disabled');
+      }
+    }
+    
     if (url.searchParams.get('action') === 'setup') {
       if (!botToken) {
         return new Response(JSON.stringify({ success: false, error: 'TELEGRAM_BOT_TOKEN not configured' }), 
