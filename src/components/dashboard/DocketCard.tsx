@@ -83,6 +83,15 @@ export function DocketCard({ item, liveBoard, userRole, onForceActive, showDate,
   const handleForceActive = async (e: React.MouseEvent) => {
     e.stopPropagation();
     
+    // P0 FIX: Block Force Active when offline - must be server-confirmed
+    if (!navigator.onLine) {
+      toast.error('Connection required', {
+        description: 'You must be online to force a case active.',
+        duration: 4000,
+      });
+      return;
+    }
+    
     if (isForcing) return;
     setIsForcing(true);
     

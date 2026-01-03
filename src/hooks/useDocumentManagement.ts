@@ -48,6 +48,11 @@ export function useDocumentUpload(docketId: string) {
   const queryClient = useQueryClient();
 
   const uploadDocument = async (file: File, metadata: DocumentUploadMetadata) => {
+    // P0 FIX: Block upload when offline - fail loudly, not silently
+    if (!navigator.onLine) {
+      throw new Error('OFFLINE_BLOCKED');
+    }
+    
     setUploading(true);
     setProgress(0);
 
