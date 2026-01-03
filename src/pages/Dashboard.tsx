@@ -10,6 +10,7 @@ import { ScraperStatusWidget } from '@/components/dashboard/ScraperStatusWidget'
 import { CourtMetadataWidget } from '@/components/dashboard/CourtMetadataWidget';
 import { CauseListNotesWidget } from '@/components/dashboard/CauseListNotesWidget';
 import { DateSelector } from '@/components/dashboard/DateSelector';
+import { DataConfidenceWarning } from '@/components/dashboard/DataConfidenceWarning';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { AuthGuard } from '@/components/layout/AuthGuard';
 import { MorningBriefPanel } from '@/components/morning-brief/MorningBriefPanel';
@@ -138,6 +139,11 @@ export default function Dashboard() {
           onRefresh={handleRefreshAll} 
           isRefetching={isAnyFetching}
         />
+
+        {/* COURT-SAFETY: Data confidence warning - shows when parsing unreliable */}
+        <div className="container mx-auto px-4 pt-2">
+          <DataConfidenceWarning />
+        </div>
 
         {/* Post-Court Capture - shows after court hours for pending cases */}
         {pendingCaptures && pendingCaptures.length > 0 && (
