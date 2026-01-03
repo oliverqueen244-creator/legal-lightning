@@ -72,56 +72,55 @@ export function usePWAUpdate(): PWAUpdateState {
   // Track when update becomes available
   useEffect(() => {
     if (needRefresh) {
-      console.log('[PWA] Update available');
+      console.log('[PWA] Update available - waiting for safe conditions');
       setUpdateAvailable(true);
       updatePendingRef.current = true;
     }
   }, [needRefresh]);
 
+  // Track if we've shown the "update ready" toast to avoid spam
+  const toastShownRef = useRef(false);
+
   // Attempt to apply update when conditions change
   useEffect(() => {
     if (!updatePendingRef.current || !needRefresh) return;
 
-    // RULE 1: If app is hidden AND safe → Silent reload
+    console.log('[PWA] Evaluating update conditions:', {
+      isVisible,
+      isSafeToReload,
+      blockingReasons,
+    });
+
+    // RULE 1: If app is hidden AND all safety checks pass → Silent reload
     if (!isVisible && isSafeToReload) {
-      console.log('[PWA] Conditions met for silent reload - applying update');
+      console.log('[PWA] ✓ Silent reload - app hidden and safe');
       updateServiceWorker(true);
       return;
     }
 
-    // RULE 2: If app is visible AND safe → We'll apply on next visibility change
-    // This is handled by the visibility effect below
-
-    // RULE 3: If not safe → Show toast (but only once)
-    if (!isSafeToReload && isVisible) {
-      // Don't spam toasts - only show when update first detected
-      if (updatePendingRef.current) {
-        toast.info('Update ready', {
-          description: 'Will apply when safe. Your work is protected.',
-          duration: 5000,
-        });
-      }
+    // RULE 2: If app is visible AND safe → Defer until hidden
+    if (isVisible && isSafeToReload) {
+      console.log('[PWA] ✓ Update ready - will apply when app is hidden');
+      // Don't show toast here - just wait silently
+      return;
     }
-  }, [needRefresh, isVisible, isSafeToReload, updateServiceWorker]);
 
-  // Apply update when app becomes hidden (if safe)
+    // RULE 3: If not safe → Show toast once
+    if (!isSafeToReload && !toastShownRef.current) {
+      toastShownRef.current = true;
+      console.log('[PWA] ✗ Update blocked:', blockingReasons);
+      toast.info('Update ready', {
+        description: 'Will apply when safe. Your work is protected.',
+        duration: 5000,
+      });
+    }
+  }, [needRefresh, isVisible, isSafeToReload, blockingReasons, updateServiceWorker]);
+
+  // Reset toast flag when update is applied or no longer needed
   useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (
-        document.visibilityState === 'hidden' &&
-        updatePendingRef.current &&
-        needRefresh
-      ) {
-        // Re-check safety at the moment of visibility change
-        // Note: We can't use isSafeToReload directly here because it includes visibility check
-        // We need to check other conditions only
-        console.log('[PWA] App hidden - checking if update can be applied');
-        // The useEffect above will handle this when isVisible changes
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+    if (!needRefresh) {
+      toastShownRef.current = false;
+    }
   }, [needRefresh]);
 
   // Manual update check

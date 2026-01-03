@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNetworkStatus } from './useNetworkStatus';
 import { usePendingSync } from './usePendingSync';
 import { useSyncConflict } from '@/contexts/SyncConflictContext';
@@ -16,7 +16,7 @@ import { useFormDirty } from '@/contexts/FormDirtyContext';
  */
 
 export interface UpdateSafetyState {
-  /** True only if ALL safety conditions are met */
+  /** True only if ALL safety conditions are met (excludes visibility) */
   isSafeToReload: boolean;
   /** Human-readable reasons why reload is blocked */
   blockingReasons: string[];
@@ -44,15 +44,18 @@ export function usePWAUpdateSafety(): UpdateSafetyState {
   // Track visibility changes
   useEffect(() => {
     const handleVisibilityChange = () => {
-      setIsVisible(document.visibilityState === 'visible');
+      const visible = document.visibilityState === 'visible';
+      setIsVisible(visible);
+      console.log('[PWA Safety] Visibility changed:', visible ? 'visible' : 'hidden');
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, []);
 
-  // Evaluate all safety conditions
-  const evaluateSafety = useCallback((): UpdateSafetyState => {
+  // Memoize safety checks to avoid recalculating on every render
+  const safetyState = useMemo((): UpdateSafetyState => {
+    // Safety checks that must ALL pass (excluding visibility - handled separately)
     const checks: SafetyCheck[] = [
       {
         name: 'pending_mutations',
@@ -75,11 +78,6 @@ export function usePWAUpdateSafety(): UpdateSafetyState {
         isSafe: !hasActiveConflict,
       },
       {
-        name: 'visibility',
-        reason: 'App is visible and interactive',
-        isSafe: !isVisible,
-      },
-      {
         name: 'connectivity',
         reason: 'Device is offline',
         isSafe: isOnline,
@@ -95,6 +93,13 @@ export function usePWAUpdateSafety(): UpdateSafetyState {
     const blockingReasons = failingChecks.map(check => check.reason);
     const isSafeToReload = failingChecks.length === 0;
 
+    // Debug logging for testing
+    if (failingChecks.length > 0) {
+      console.log('[PWA Safety] Blocking reasons:', blockingReasons);
+    } else {
+      console.log('[PWA Safety] All safety checks passed, isVisible:', isVisible);
+    }
+
     return {
       isSafeToReload,
       blockingReasons,
@@ -105,17 +110,10 @@ export function usePWAUpdateSafety(): UpdateSafetyState {
     isSyncing,
     hasDirtyForms,
     hasActiveConflict,
-    isVisible,
     isOnline,
     courtModeSettings?.court_mode_enabled,
+    isVisible,
   ]);
-
-  const [safetyState, setSafetyState] = useState<UpdateSafetyState>(() => evaluateSafety());
-
-  // Re-evaluate safety whenever dependencies change
-  useEffect(() => {
-    setSafetyState(evaluateSafety());
-  }, [evaluateSafety]);
 
   return safetyState;
 }
