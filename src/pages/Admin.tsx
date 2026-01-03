@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Scale, Calendar, FileText, Settings, Activity, FileCheck, Database, Gavel, Brain, ClipboardCheck } from 'lucide-react';
+import { ArrowLeft, Scale, Calendar, FileText, Settings, Activity, FileCheck, Database, Gavel, Brain, ClipboardCheck, AlertTriangle } from 'lucide-react';
 import { AuthGuard } from '@/components/layout/AuthGuard';
 import { useAuth } from '@/hooks/useAuth';
 import { DocketManager } from '@/components/admin/DocketManager';
@@ -14,11 +14,12 @@ import { CauseListScraper } from '@/components/admin/CauseListScraper';
 import { JudgmentReferencesManager } from '@/components/admin/JudgmentReferencesManager';
 import { AiJobsMonitor } from '@/components/admin/AiJobsMonitor';
 import { AuditConsole } from '@/components/admin/audit/AuditConsole';
+import { AdminErrorConsole } from '@/components/admin/errors';
 
 export default function Admin() {
   const navigate = useNavigate();
   const { isAdmin, loading } = useAuth();
-  const [activeTab, setActiveTab] = useState('scraper');
+  const [activeTab, setActiveTab] = useState('errors');
 
   if (loading) {
     return (
@@ -78,7 +79,11 @@ export default function Admin() {
         {/* Main Content */}
         <main className="flex-1 container mx-auto px-4 py-6">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-            <TabsList className="grid w-full max-w-7xl grid-cols-9">
+            <TabsList className="grid w-full max-w-7xl grid-cols-10">
+              <TabsTrigger value="errors" className="flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4" />
+                <span className="hidden sm:inline">Errors</span>
+              </TabsTrigger>
               <TabsTrigger value="audit" className="flex items-center gap-2">
                 <ClipboardCheck className="h-4 w-4" />
                 <span className="hidden sm:inline">Audit</span>
@@ -116,6 +121,10 @@ export default function Admin() {
                 <span className="hidden sm:inline">Validate</span>
               </TabsTrigger>
             </TabsList>
+
+            <TabsContent value="errors" className="space-y-4">
+              <AdminErrorConsole />
+            </TabsContent>
 
             <TabsContent value="audit" className="space-y-4">
               <AuditConsole />
