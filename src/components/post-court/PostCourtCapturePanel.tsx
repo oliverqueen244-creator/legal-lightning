@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -14,6 +14,9 @@ import {
   useSkipCapture,
   type PendingCapture 
 } from '@/hooks/usePostCourtCapture';
+import { useFormDirtyState } from '@/contexts/FormDirtyContext';
+
+const FORM_ID = 'post-court-capture';
 
 export function PostCourtCapturePanel() {
   const { data: pendingCases, isLoading } = usePendingCaptures();
@@ -25,6 +28,17 @@ export function PostCourtCapturePanel() {
     next_direction: '',
     note_for_next: ''
   });
+
+  // SAFE PWA AUTO-UPDATE: Track form dirty state
+  const { setDirty, setClean } = useFormDirtyState(FORM_ID);
+
+  // Mark clean when form is reset
+  useEffect(() => {
+    const hasContent = formData.what_happened || formData.next_direction || formData.note_for_next;
+    if (!hasContent) {
+      setClean();
+    }
+  }, [formData, setClean]);
 
   // Don't show if skipped for today
   if (isSkipped()) return null;
@@ -49,6 +63,8 @@ export function PostCourtCapturePanel() {
         note_for_next: formData.note_for_next || undefined,
       });
       
+      // SAFE PWA AUTO-UPDATE: Mark form clean after successful save
+      setClean();
       toast.success('Note captured');
       moveToNext();
     } catch (error) {
@@ -57,10 +73,13 @@ export function PostCourtCapturePanel() {
   };
 
   const handleSkip = () => {
+    // SAFE PWA AUTO-UPDATE: Mark form clean when skipping
+    setClean();
     moveToNext();
   };
 
   const handleSkipAll = () => {
+    setClean();
     skipAll();
     toast.success('Skipped for today');
   };
@@ -131,7 +150,10 @@ export function PostCourtCapturePanel() {
                 id="what_happened"
                 placeholder="Brief note... (optional)"
                 value={formData.what_happened}
-                onChange={(e) => setFormData(prev => ({ ...prev, what_happened: e.target.value }))}
+                onChange={(e) => {
+                  setFormData(prev => ({ ...prev, what_happened: e.target.value }));
+                  if (e.target.value) setDirty(); // SAFE PWA AUTO-UPDATE: Mark dirty on input
+                }}
                 className="mt-1 min-h-[60px] resize-none bg-muted/30 border-border/30"
               />
             </div>
@@ -144,7 +166,10 @@ export function PostCourtCapturePanel() {
                 id="next_direction"
                 placeholder="e.g. Posted for 15 Jan... (optional)"
                 value={formData.next_direction}
-                onChange={(e) => setFormData(prev => ({ ...prev, next_direction: e.target.value }))}
+                onChange={(e) => {
+                  setFormData(prev => ({ ...prev, next_direction: e.target.value }));
+                  if (e.target.value) setDirty(); // SAFE PWA AUTO-UPDATE: Mark dirty on input
+                }}
                 className="mt-1 min-h-[40px] resize-none bg-muted/30 border-border/30"
               />
             </div>
@@ -157,7 +182,10 @@ export function PostCourtCapturePanel() {
                 id="note_for_next"
                 placeholder="Reminder for future... (optional)"
                 value={formData.note_for_next}
-                onChange={(e) => setFormData(prev => ({ ...prev, note_for_next: e.target.value }))}
+                onChange={(e) => {
+                  setFormData(prev => ({ ...prev, note_for_next: e.target.value }));
+                  if (e.target.value) setDirty(); // SAFE PWA AUTO-UPDATE: Mark dirty on input
+                }}
                 className="mt-1 min-h-[40px] resize-none bg-muted/30 border-border/30"
               />
             </div>
