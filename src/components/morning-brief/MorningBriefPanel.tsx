@@ -78,9 +78,14 @@ export function MorningBriefPanel({ brief, isLoading, onRefresh }: MorningBriefP
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-muted-foreground text-center py-12 text-lg">
-            No cases found in last sync
-          </p>
+          <div className="text-center py-12">
+            <p className="text-muted-foreground text-lg">
+              No cases found in last sync
+            </p>
+            <p className="text-sm text-muted-foreground mt-2">
+              Pull down to refresh or check your alias settings
+            </p>
+          </div>
         </CardContent>
       </Card>
     );
@@ -197,9 +202,9 @@ export function MorningBriefPanel({ brief, isLoading, onRefresh }: MorningBriefP
               {caseItem.suggestion === 'delegate' && <Users className="h-4 w-4" />}
               {caseItem.suggestion === 'monitor' && <Eye className="h-4 w-4" />}
               <span className="font-medium">
-                Suggested: <span className="capitalize">{caseItem.suggestion}</span>
+                AI suggests: <span className="capitalize">{caseItem.suggestion}</span>
               </span>
-              <span className="text-xs opacity-80">— {caseItem.suggestionReason}</span>
+              <span className="text-xs opacity-80">— {caseItem.suggestionReason} (verify)</span>
             </div>
           </div>
 

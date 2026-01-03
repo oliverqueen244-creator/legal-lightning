@@ -35,9 +35,10 @@ function getSecondsSince(date: Date | string | null | undefined): number | null 
 function getFreshnessStatus(seconds: number | null, isOnline: boolean): FreshnessStatus {
   if (!isOnline) return 'offline';
   if (seconds === null) return 'unknown';
-  if (seconds < 60) return 'live';
-  if (seconds < 300) return 'recent';
-  if (seconds < 600) return 'stale';
+  // P1-4: Standardized thresholds - Live ≤30s, Recent ≤5min, Stale >5min
+  if (seconds <= 30) return 'live';
+  if (seconds <= 300) return 'recent';
+  if (seconds <= 600) return 'stale';
   return 'very-stale';
 }
 
@@ -86,7 +87,7 @@ export function FreshnessIndicator({
       color: 'text-green-500',
       bgColor: 'bg-green-500/10',
       dotColor: 'bg-green-500',
-      label: 'Live',
+      label: 'Connected',  // P1-1: "Live" → "Connected" to avoid implying real-time guarantee
     },
     recent: {
       icon: Clock,

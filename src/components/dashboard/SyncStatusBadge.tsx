@@ -98,15 +98,16 @@ export function SyncTimestamp({ lastUpdated, className }: SyncTimestampProps) {
   const updated = new Date(lastUpdated).getTime();
   const seconds = Math.round((now - updated) / 1000);
 
+  // P1-4: Consistent timestamp phrasing "Updated Xm ago"
   const formatTime = (seconds: number) => {
-    if (seconds < 60) return `${seconds} seconds ago`;
-    if (seconds < 3600) return `${Math.floor(seconds / 60)} minutes ago`;
-    return `${Math.floor(seconds / 3600)} hours ago`;
+    if (seconds < 60) return `Updated ${seconds}s ago`;
+    if (seconds < 3600) return `Updated ${Math.floor(seconds / 60)}m ago`;
+    return `Updated ${Math.floor(seconds / 3600)}h ago`;
   };
 
   return (
     <span className={cn('text-xs text-muted-foreground', className)}>
-      Last synced: {formatTime(seconds)}
+      {formatTime(seconds)}
     </span>
   );
 }

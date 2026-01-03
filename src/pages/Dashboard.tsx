@@ -266,7 +266,7 @@ export default function Dashboard() {
                         <div className="text-center py-12 text-muted-foreground glass-card rounded-lg">
                           <CheckCircle className="h-12 w-12 mx-auto mb-4 opacity-50" />
                           <p>No assigned tasks found in last sync</p>
-                          <p className="text-xs mt-2">Check with your senior for new assignments</p>
+                          <p className="text-xs mt-2">Pull down to refresh or check with your senior for new assignments</p>
                         </div>
                       ) : (
                         dailyItems.map((item) => (
@@ -335,7 +335,7 @@ export default function Dashboard() {
                     <div className="text-center py-12 text-muted-foreground glass-card rounded-lg">
                       <Scale className="h-12 w-12 mx-auto mb-4 opacity-50" />
                       <p>No cases found on daily list in last sync</p>
-                      <p className="text-xs mt-2">Check the Supplementary tab for urgent additions</p>
+                      <p className="text-xs mt-2">Pull down to refresh or check the Supplementary tab</p>
                     </div>
                   ) : (
                     <div className="space-y-3">
@@ -377,8 +377,8 @@ export default function Dashboard() {
                   ) : supplementaryItems.length === 0 ? (
                     <div className="text-center py-12 text-muted-foreground glass-card rounded-lg">
                       <Scale className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                      <p>No supplementary cases today</p>
-                      <p className="text-xs mt-2">Supplementary lists are published around 9:30 AM</p>
+                      <p>No supplementary cases in last sync</p>
+                      <p className="text-xs mt-2">Pull down to refresh — supplementary lists are published around 9:30 AM</p>
                     </div>
                   ) : (
                     <div className="space-y-3">
@@ -418,8 +418,8 @@ export default function Dashboard() {
                   ) : filteredUpcoming.length === 0 ? (
                     <div className="text-center py-12 text-muted-foreground glass-card rounded-lg">
                       <Calendar className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                      <p>No upcoming cases found</p>
-                      <p className="text-xs mt-2">Cases will appear here when causelists for future dates are published</p>
+                      <p>No upcoming cases found in last sync</p>
+                      <p className="text-xs mt-2">Pull down to refresh — cases appear when future causelists are published</p>
                     </div>
                   ) : (
                     <div className="space-y-3">
