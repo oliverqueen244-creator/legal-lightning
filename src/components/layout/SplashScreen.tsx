@@ -4,17 +4,27 @@ import { cn } from '@/lib/utils';
 
 const SPLASH_SHOWN_KEY = 'nyayhub_splash_shown_session';
 
+// Routes where splash should NOT show (documentation/dossier pages)
+const SKIP_SPLASH_ROUTES = ['/dossier', '/technical-dossier', '/docs', '/install'];
+
 /**
  * Branded Splash Screen
  * 
  * Shows the Nyay-Hub logo during initial app load.
  * Only shows once per session to avoid annoyance.
+ * Does not show on documentation/dossier pages.
  */
 export function SplashScreen() {
   const [isVisible, setIsVisible] = useState(false);
   const [isFadingOut, setIsFadingOut] = useState(false);
 
   useEffect(() => {
+    // Skip splash on documentation/dossier routes
+    const currentPath = window.location.pathname;
+    if (SKIP_SPLASH_ROUTES.some(route => currentPath.startsWith(route))) {
+      return;
+    }
+
     // Only show splash once per session
     const hasShown = sessionStorage.getItem(SPLASH_SHOWN_KEY);
     if (hasShown) {

@@ -12,7 +12,7 @@ const TechnicalDossier = () => {
   };
 
   return (
-    <div className="min-h-screen bg-white text-black print:bg-white">
+    <div className="min-h-screen bg-white text-black print:bg-white print:text-black">
       {/* Header - hidden in print */}
       <header className="sticky top-0 z-50 bg-white border-b border-gray-300 print:hidden">
         <div className="container mx-auto px-4 py-3 flex items-center justify-between">
