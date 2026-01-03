@@ -140,6 +140,15 @@ function AddObservationForm({
   const { mutate: addObservation, isPending } = useAddObservation();
 
   const handleSubmit = () => {
+    // P0 FIX: Block observation recording when offline - lawyer memory is critical
+    if (!navigator.onLine) {
+      toast.error('Connection required', {
+        description: 'Recording observations requires an internet connection.',
+        duration: 4000,
+      });
+      return;
+    }
+    
     if (!text.trim()) return;
 
     addObservation({

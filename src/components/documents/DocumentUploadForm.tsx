@@ -9,9 +9,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Upload, FileText, CheckCircle, AlertCircle } from 'lucide-react';
+import { Upload, FileText, CheckCircle, AlertCircle, WifiOff } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import {
   DocumentType,
   DocumentLanguage,
@@ -40,6 +41,9 @@ export function DocumentUploadForm({ docketId, onUpload, uploading }: DocumentUp
     format: 'TYPED',
     legibility: 'CLEAR',
   });
+  
+  // P0 FIX: Offline guard for document uploads
+  const { isOnline } = useNetworkStatus();
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -77,6 +81,15 @@ export function DocumentUploadForm({ docketId, onUpload, uploading }: DocumentUp
   };
 
   const handleSubmit = async () => {
+    // P0 FIX: Block upload when offline
+    if (!navigator.onLine) {
+      toast.error('Connection required', {
+        description: 'Uploading documents is unavailable while offline.',
+        duration: 4000,
+      });
+      return;
+    }
+    
     if (!selectedFile) {
       toast.error('Please select a file first');
       return;
@@ -89,8 +102,15 @@ export function DocumentUploadForm({ docketId, onUpload, uploading }: DocumentUp
         fileInputRef.current.value = '';
       }
       toast.success('Document uploaded - pending Senior review');
-    } catch (error) {
-      toast.error('Upload failed');
+    } catch (error: any) {
+      // P0 FIX: Handle offline-blocked errors specifically
+      if (error?.message === 'OFFLINE_BLOCKED') {
+        toast.error('Connection required', {
+          description: 'Uploading documents is unavailable while offline.',
+        });
+      } else {
+        toast.error('Upload failed');
+      }
     }
   };
 
@@ -264,18 +284,23 @@ export function DocumentUploadForm({ docketId, onUpload, uploading }: DocumentUp
           </div>
         )}
 
-        {/* Submit Button */}
+        {/* Submit Button - P0 FIX: Show offline state */}
         {selectedFile && (
           <Button
             variant="gold"
             className="w-full min-h-touch"
             onClick={handleSubmit}
-            disabled={uploading}
+            disabled={uploading || !isOnline}
           >
             {uploading ? (
               <>
                 <CheckCircle className="h-4 w-4 mr-2 animate-pulse" />
                 Uploading...
+              </>
+            ) : !isOnline ? (
+              <>
+                <WifiOff className="h-4 w-4 mr-2" />
+                Upload (offline)
               </>
             ) : (
               <>

@@ -64,14 +64,28 @@ export default function Auth() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    
+    // P0 FIX: Block auth when offline - network-aware error handling
+    if (!navigator.onLine) {
+      toast.error('Connection required to sign in', {
+        description: 'Check your network connection and try again.',
+        duration: 4000,
+      });
+      return;
+    }
+    
     setSubmitting(true);
 
     try {
       if (isLogin) {
         const { error } = await signIn(email, password);
         if (error) {
-          if (error.message.includes('Invalid login credentials')) {
+          // P0 FIX: Network-aware error mapping
+          const errorMsg = error.message.toLowerCase();
+          if (errorMsg.includes('invalid login credentials')) {
             setError('Invalid email or password');
+          } else if (errorMsg.includes('fetch') || errorMsg.includes('network') || errorMsg.includes('timeout')) {
+            setError('Network issue detected. Please retry when connected.');
           } else {
             setError(error.message);
           }
@@ -88,8 +102,12 @@ export default function Auth() {
         
         const { error } = await signUp(email, password, fullName, role);
         if (error) {
-          if (error.message.includes('already registered')) {
+          // P0 FIX: Network-aware error mapping
+          const errorMsg = error.message.toLowerCase();
+          if (errorMsg.includes('already registered')) {
             setError('This email is already registered. Please sign in.');
+          } else if (errorMsg.includes('fetch') || errorMsg.includes('network') || errorMsg.includes('timeout')) {
+            setError('Network issue detected. Please retry when connected.');
           } else {
             setError(error.message);
           }
@@ -99,7 +117,8 @@ export default function Auth() {
         }
       }
     } catch (err) {
-      setError('An unexpected error occurred');
+      // P0 FIX: Catch network failures at the catch level too
+      setError('Unable to connect. Check your network and try again.');
     } finally {
       setSubmitting(false);
     }
