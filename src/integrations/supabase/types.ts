@@ -1493,6 +1493,72 @@ export type Database = {
           },
         ]
       }
+      parser_confidence_runs: {
+        Row: {
+          batch_id: string | null
+          bench_code: string
+          confidence_level: Database["public"]["Enums"]["confidence_level"]
+          confidence_reasons: Json
+          confidence_score: number
+          created_at: string
+          historical_consistency_score: number | null
+          id: string
+          ingestion_error_count: number
+          ingestion_integrity_score: number | null
+          matching_error_count: number
+          matching_reliability_score: number | null
+          parsing_error_count: number
+          parsing_stability_score: number | null
+          run_date: string
+          total_cases_detected: number
+          total_cases_matched: number
+          total_cases_parsed: number
+          warning_issued: boolean
+        }
+        Insert: {
+          batch_id?: string | null
+          bench_code: string
+          confidence_level?: Database["public"]["Enums"]["confidence_level"]
+          confidence_reasons?: Json
+          confidence_score?: number
+          created_at?: string
+          historical_consistency_score?: number | null
+          id?: string
+          ingestion_error_count?: number
+          ingestion_integrity_score?: number | null
+          matching_error_count?: number
+          matching_reliability_score?: number | null
+          parsing_error_count?: number
+          parsing_stability_score?: number | null
+          run_date?: string
+          total_cases_detected?: number
+          total_cases_matched?: number
+          total_cases_parsed?: number
+          warning_issued?: boolean
+        }
+        Update: {
+          batch_id?: string | null
+          bench_code?: string
+          confidence_level?: Database["public"]["Enums"]["confidence_level"]
+          confidence_reasons?: Json
+          confidence_score?: number
+          created_at?: string
+          historical_consistency_score?: number | null
+          id?: string
+          ingestion_error_count?: number
+          ingestion_integrity_score?: number | null
+          matching_error_count?: number
+          matching_reliability_score?: number | null
+          parsing_error_count?: number
+          parsing_stability_score?: number | null
+          run_date?: string
+          total_cases_detected?: number
+          total_cases_matched?: number
+          total_cases_parsed?: number
+          warning_issued?: boolean
+        }
+        Relationships: []
+      }
       post_court_notes: {
         Row: {
           author_id: string
@@ -1956,6 +2022,14 @@ export type Database = {
         }
         Returns: string
       }
+      get_active_confidence_warnings: {
+        Args: never
+        Returns: {
+          bench_code: string
+          confidence_level: Database["public"]["Enums"]["confidence_level"]
+          run_date: string
+        }[]
+      }
       get_user_role: {
         Args: { _user_id: string }
         Returns: Database["public"]["Enums"]["app_role"]
@@ -2002,6 +2076,7 @@ export type Database = {
       audit_status: "pass" | "conditional" | "fail"
       board_status: "hearing" | "passover" | "lunch" | "adjourned"
       chamber_role: "senior" | "junior" | "clerk"
+      confidence_level: "excellent" | "good" | "degraded" | "risky" | "unsafe"
       document_format: "TYPED" | "SCANNED" | "HANDWRITTEN"
       document_language: "EN" | "HI" | "MIXED" | "UNKNOWN"
       document_legibility: "CLEAR" | "AVERAGE" | "POOR"
@@ -2171,6 +2246,7 @@ export const Constants = {
       audit_status: ["pass", "conditional", "fail"],
       board_status: ["hearing", "passover", "lunch", "adjourned"],
       chamber_role: ["senior", "junior", "clerk"],
+      confidence_level: ["excellent", "good", "degraded", "risky", "unsafe"],
       document_format: ["TYPED", "SCANNED", "HANDWRITTEN"],
       document_language: ["EN", "HI", "MIXED", "UNKNOWN"],
       document_legibility: ["CLEAR", "AVERAGE", "POOR"],
