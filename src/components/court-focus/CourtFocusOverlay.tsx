@@ -33,8 +33,9 @@ interface CourtFocusOverlayProps {
 }
 
 function StatusBadge({ status, distance }: { status: FocusModeCase['status']; distance: number }) {
+  // P1-1: Language softening - "RUNNING NOW" → "Marked running" to avoid false certainty
   const statusConfig = {
-    running: { label: 'RUNNING NOW', className: 'bg-destructive text-destructive-foreground animate-pulse text-lg px-4 py-2' },
+    running: { label: 'MARKED RUNNING', className: 'bg-destructive text-destructive-foreground animate-pulse text-lg px-4 py-2' },
     next: { label: `NEXT (${distance} away)`, className: 'bg-warning text-warning-foreground text-lg px-4 py-2' },
     approaching: { label: `${distance} ITEMS AWAY`, className: 'bg-muted text-muted-foreground text-base px-3 py-1' },
     waiting: { label: 'WAITING', className: 'bg-muted text-muted-foreground text-base px-3 py-1' },
@@ -120,17 +121,18 @@ function CaseCard({ focusCase }: { focusCase: FocusModeCase }) {
 }
 
 function NoCaseCard() {
+  // P1-2: Empty state with reason + recovery path
   return (
     <Card className="flex-1 flex flex-col items-center justify-center p-6 md:p-8 border-2 border-border/50 bg-card/95 backdrop-blur">
       <AlertTriangle className="h-12 w-12 text-muted-foreground mb-4" />
       <h2 className="text-xl font-bold text-foreground mb-2">
-        Waiting for live update
+        No active case in focus
       </h2>
       <p className="text-muted-foreground text-center max-w-sm">
-        Data may be stale. Pull to refresh or tap the refresh button below.
+        No matched case found in current court data.
       </p>
       <p className="text-sm text-muted-foreground/70 mt-2">
-        No matched case currently active
+        Tap Refresh below or check your docket settings
       </p>
     </Card>
   );
