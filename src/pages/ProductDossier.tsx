@@ -50,7 +50,7 @@ const ProductDossier = () => {
               Confidential — For Archival & Reference Only
             </p>
             <p className="text-xs text-gray-400 mt-1">
-              Document Version: 2.0 • Includes Trust Fixes & Chamber System
+              Document Version: 3.0 • Complete Feature Coverage
             </p>
           </div>
 
@@ -282,6 +282,46 @@ const ProductDossier = () => {
                 <p className="text-sm text-gray-600"><strong>Thresholds:</strong> Warning (6-10 items away), Critical (≤5 items away)</p>
                 <p className="text-sm text-gray-600"><strong>Trust Feature:</strong> Offline threshold memory creates reconnection alerts for missed thresholds</p>
                 <p className="text-sm text-gray-600"><strong>Escalation:</strong> WhatsApp escalation available for unacknowledged critical alerts</p>
+              </div>
+
+              <div className="border-l-4 border-black pl-4">
+                <h3 className="font-bold text-black mb-2">Court Focus Mode</h3>
+                <p className="text-sm text-gray-600"><strong>What:</strong> Full-screen overlay for critical court moments requiring undivided attention</p>
+                <p className="text-sm text-gray-600"><strong>Trigger:</strong> Activated when case is imminent (≤3 items away) during court hours</p>
+                <p className="text-sm text-gray-600"><strong>Features:</strong> Eliminates distractions, large countdown display, panic alert button</p>
+                <p className="text-sm text-gray-600"><strong>Exit:</strong> User dismisses when safe, or auto-dismisses after case is called</p>
+              </div>
+
+              <div className="border-l-4 border-black pl-4">
+                <h3 className="font-bold text-black mb-2">Indian Kanoon Integration</h3>
+                <p className="text-sm text-gray-600"><strong>What:</strong> Search and reference judgments from Indian Kanoon legal database</p>
+                <p className="text-sm text-gray-600"><strong>Use Case:</strong> Find relevant precedents while preparing arguments in War Room</p>
+                <p className="text-sm text-gray-600"><strong>Features:</strong> Keyword search, attach judgments to arguments, ranking by relevance</p>
+                <p className="text-sm text-gray-600"><strong>Output:</strong> judgment_attachments linked to cases and arguments</p>
+              </div>
+
+              <div className="border-l-4 border-black pl-4">
+                <h3 className="font-bold text-black mb-2">Network Status Monitoring</h3>
+                <p className="text-sm text-gray-600"><strong>What:</strong> Real-time network connectivity monitoring with visual indicators</p>
+                <p className="text-sm text-gray-600"><strong>Display:</strong> Global offline banner, status pills on critical components</p>
+                <p className="text-sm text-gray-600"><strong>Behavior:</strong> Graceful degradation to cached data when offline</p>
+                <p className="text-sm text-gray-600"><strong>Recovery:</strong> Auto-sync and threshold replay on reconnection</p>
+              </div>
+
+              <div className="border-l-4 border-black pl-4">
+                <h3 className="font-bold text-black mb-2">Sync Conflict Resolution</h3>
+                <p className="text-sm text-gray-600"><strong>What:</strong> Handles data conflicts when offline edits sync with server changes</p>
+                <p className="text-sm text-gray-600"><strong>Detection:</strong> Compares timestamps and version markers on sync</p>
+                <p className="text-sm text-gray-600"><strong>Resolution:</strong> User-facing dialog to choose between local and server versions</p>
+                <p className="text-sm text-gray-600"><strong>Safety:</strong> Blocks unsafe operations (like PWA update) during conflict resolution</p>
+              </div>
+
+              <div className="border-l-4 border-black pl-4">
+                <h3 className="font-bold text-black mb-2">PWA Safe Update System</h3>
+                <p className="text-sm text-gray-600"><strong>What:</strong> Progressive Web App updates that never interrupt critical work</p>
+                <p className="text-sm text-gray-600"><strong>Safety Checks:</strong> Pending sync, form edits, court mode, network status, visibility</p>
+                <p className="text-sm text-gray-600"><strong>Behavior:</strong> Silent updates when app is hidden and safe; deferred otherwise</p>
+                <p className="text-sm text-gray-600"><strong>User Trust:</strong> Never loses data, never interrupts hearings</p>
               </div>
             </div>
           </section>
@@ -806,7 +846,7 @@ const ProductDossier = () => {
 
             <div className="mt-8 text-center text-sm text-gray-500">
               <p>— End of Document —</p>
-              <p className="mt-2">Nyay-Hub Product System Dossier v2.0</p>
+              <p className="mt-2">Nyay-Hub Product System Dossier v3.0</p>
               <p>Built by Izafa Labs • {new Date().getFullYear()}</p>
             </div>
           </section>

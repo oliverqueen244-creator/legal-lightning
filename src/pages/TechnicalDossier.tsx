@@ -82,6 +82,10 @@ const TechnicalDossier = () => {
                   <li>Chamber Management</li>
                   <li>Offline-First Architecture</li>
                   <li>PWA Update Strategy</li>
+                  <li>Court Focus Mode</li>
+                  <li>Indian Kanoon Integration</li>
+                  <li>Sync Conflict Resolution</li>
+                  <li>Network Status Monitoring</li>
                 </ol>
               </div>
             </div>
@@ -1471,11 +1475,339 @@ queryClient.setQueryData(['notifications'], (old) => [...old, newNotif]);`}</pre
 
           <Separator className="my-8" />
 
+          {/* Section 16: Court Focus Mode */}
+          <section className="mb-10 print:page-break-inside-avoid">
+            <h2 className="text-2xl font-bold text-black mb-4 flex items-center gap-2">
+              <Zap className="h-6 w-6" />
+              16. Court Focus Mode
+            </h2>
+
+            <div className="space-y-4">
+              <p className="text-sm text-gray-600">
+                Full-screen overlay that activates during critical court moments, eliminating distractions when a case is imminent.
+              </p>
+
+              <div className="bg-gray-100 p-4 rounded-lg border border-gray-300 font-mono text-xs overflow-x-auto">
+                <pre className="text-gray-700 whitespace-pre">
+{`┌────────────────────────────────────────────────────────────────────────────┐
+│                          COURT FOCUS MODE                                   │
+└────────────────────────────────────────────────────────────────────────────┘
+
+  TRIGGER CONDITIONS                    OVERLAY FEATURES
+  ──────────────────                    ────────────────
+
+  ┌─────────────────────────┐           ┌─────────────────────────────────────┐
+  │ useCourtFocusMode hook  │           │ CourtFocusOverlay Component         │
+  │                         │           │                                     │
+  │ Activates when ALL:     │           │ • Full-screen dark overlay          │
+  │ • Case ≤3 items away    │ ────────► │ • Large countdown display           │
+  │ • Court is in session   │           │ • Current item vs. your item        │
+  │ • User hasn't dismissed │           │ • Panic alert button                │
+  │ • Live board is fresh   │           │ • Case details summary              │
+  └─────────────────────────┘           │ • Dismiss button (top-right)        │
+                                        └─────────────────────────────────────┘
+
+  LIFECYCLE
+  ─────────
+
+  ┌──────────────────┐    ┌──────────────────┐    ┌──────────────────┐
+  │ IDLE             │    │ FOCUS ACTIVE     │    │ DISMISSED        │
+  │                  │    │                  │    │                  │
+  │ Normal app view  │───►│ Overlay visible  │───►│ Returns to       │
+  │                  │    │ All distractions │    │ normal view      │
+  │                  │    │ blocked          │    │                  │
+  └──────────────────┘    └──────────────────┘    └──────────────────┘
+         │                        │                        │
+         │   threshold crossed    │   user dismisses OR    │
+         └────────────────────────┘   case called          │
+                                                           │
+                                      ┌────────────────────┘
+                                      ▼
+                             ┌──────────────────┐
+                             │ Cooldown period  │
+                             │ before re-trigger│
+                             └──────────────────┘`}
+                </pre>
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-4 mt-4">
+                <div className="border border-gray-300 rounded-lg p-4">
+                  <h4 className="font-medium text-black mb-2">Trigger Logic</h4>
+                  <ul className="list-disc list-inside text-sm text-gray-600 space-y-1">
+                    <li>Monitors live board current item position</li>
+                    <li>Calculates distance to user's case item number</li>
+                    <li>Activates when distance ≤ 3 items</li>
+                    <li>Respects court hours and session status</li>
+                  </ul>
+                </div>
+                <div className="border border-gray-300 rounded-lg p-4">
+                  <h4 className="font-medium text-black mb-2">UX Considerations</h4>
+                  <ul className="list-disc list-inside text-sm text-gray-600 space-y-1">
+                    <li>Cannot be accidentally dismissed</li>
+                    <li>Prominent dismiss button for intentional exit</li>
+                    <li>Sound/vibration alerts optional</li>
+                    <li>Works even when app is in background (via notifications)</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <Separator className="my-8" />
+
+          {/* Section 17: Indian Kanoon Integration */}
+          <section className="mb-10 print:page-break-inside-avoid">
+            <h2 className="text-2xl font-bold text-black mb-4 flex items-center gap-2">
+              <FileText className="h-6 w-6" />
+              17. Indian Kanoon Integration
+            </h2>
+
+            <div className="space-y-4">
+              <p className="text-sm text-gray-600">
+                Integrates with Indian Kanoon legal database for judgment search, reference, and attachment to case arguments.
+              </p>
+
+              <div className="bg-gray-100 p-4 rounded-lg border border-gray-300 font-mono text-xs overflow-x-auto">
+                <pre className="text-gray-700 whitespace-pre">
+{`┌────────────────────────────────────────────────────────────────────────────┐
+│                     INDIAN KANOON INTEGRATION                               │
+└────────────────────────────────────────────────────────────────────────────┘
+
+  USER FLOW                                BACKEND PROCESSING
+  ─────────                                ──────────────────
+
+  ┌─────────────────────┐
+  │ War Room            │
+  │ Judgment References │
+  │ Panel               │
+  └──────────┬──────────┘
+             │
+             ▼
+  ┌─────────────────────┐         ┌──────────────────────────────────┐
+  │ User enters search  │         │ search-indian-kanoon             │
+  │ query:              │ ───────►│ Edge Function                    │
+  │ "specific relief"   │         │                                  │
+  └─────────────────────┘         │ • Calls Indian Kanoon API        │
+                                  │ • Parses results                 │
+                                  │ • Extracts: title, date, court   │
+                                  │ • Returns ranked list            │
+                                  └────────────────┬─────────────────┘
+                                                   │
+                                                   ▼
+  ┌─────────────────────┐         ┌──────────────────────────────────┐
+  │ Results displayed   │◄────────│ Ranking Algorithm                │
+  │ with relevance      │         │                                  │
+  │ scores              │         │ • Judge name match bonus         │
+  │                     │         │ • Case type similarity           │
+  │ User clicks         │         │ • Recency factor                 │
+  │ "Attach to Case"    │         │ • Court hierarchy weight         │
+  └──────────┬──────────┘         └──────────────────────────────────┘
+             │
+             ▼
+  ┌─────────────────────────────────────────────────────────────────┐
+  │ INSERT INTO judgment_attachments                                │
+  │                                                                 │
+  │ • judgment_url       (Indian Kanoon link)                       │
+  │ • judgment_title     (Case name)                                │
+  │ • judgment_date      (Decision date)                            │
+  │ • judgment_court     (Supreme Court, High Court, etc.)          │
+  │ • docket_id          (Link to user's case)                      │
+  │ • argument_id        (Optional: specific argument)              │
+  │ • ranking_score      (Computed relevance)                       │
+  │ • attached_by        (User ID)                                  │
+  └─────────────────────────────────────────────────────────────────┘`}
+                </pre>
+              </div>
+            </div>
+          </section>
+
+          <Separator className="my-8" />
+
+          {/* Section 18: Sync Conflict Resolution */}
+          <section className="mb-10 print:page-break-inside-avoid">
+            <h2 className="text-2xl font-bold text-black mb-4 flex items-center gap-2">
+              <AlertTriangle className="h-6 w-6" />
+              18. Sync Conflict Resolution
+            </h2>
+
+            <div className="space-y-4">
+              <p className="text-sm text-gray-600">
+                Handles data conflicts when offline edits sync with server changes, ensuring no data loss and user control.
+              </p>
+
+              <div className="bg-gray-100 p-4 rounded-lg border border-gray-300 font-mono text-xs overflow-x-auto">
+                <pre className="text-gray-700 whitespace-pre">
+{`┌────────────────────────────────────────────────────────────────────────────┐
+│                       SYNC CONFLICT RESOLUTION                              │
+└────────────────────────────────────────────────────────────────────────────┘
+
+  CONFLICT DETECTION                       RESOLUTION FLOW
+  ──────────────────                       ───────────────
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │ SyncConflictContext Provider                                            │
+  │                                                                         │
+  │ Tracks:                                                                 │
+  │ • pendingLocalChanges[]   - Edits made while offline                    │
+  │ • serverVersions[]        - Latest server state                         │
+  │ • conflictQueue[]         - Detected conflicts awaiting resolution      │
+  └──────────────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │ ON RECONNECTION                                                         │
+  │                                                                         │
+  │ For each pendingLocalChange:                                            │
+  │                                                                         │
+  │   1. Fetch server version with same ID                                  │
+  │   2. Compare updated_at timestamps                                      │
+  │                                                                         │
+  │   ┌─────────────────────┐       ┌─────────────────────┐                 │
+  │   │ Server unchanged    │       │ Server changed      │                 │
+  │   │ (local > server)    │       │ (server > local)    │                 │
+  │   └──────────┬──────────┘       └──────────┬──────────┘                 │
+  │              │                             │                            │
+  │              ▼                             ▼                            │
+  │   ┌─────────────────────┐       ┌─────────────────────┐                 │
+  │   │ Auto-sync           │       │ Add to              │                 │
+  │   │ local → server      │       │ conflictQueue       │                 │
+  │   └─────────────────────┘       └──────────┬──────────┘                 │
+  │                                            │                            │
+  └────────────────────────────────────────────┼────────────────────────────┘
+                                               │
+                                               ▼
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │ ConflictResolutionDialog                                                │
+  │                                                                         │
+  │ Shows:                                                                  │
+  │ • Side-by-side comparison of local vs server versions                   │
+  │ • Field-level differences highlighted                                   │
+  │ • Timestamps for both versions                                          │
+  │                                                                         │
+  │ Options:                                                                │
+  │ ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐          │
+  │ │ Keep Local      │  │ Keep Server     │  │ Keep Both       │          │
+  │ │ (Overwrite      │  │ (Discard local  │  │ (Merge/Create   │          │
+  │ │  server)        │  │  changes)       │  │  copy)          │          │
+  │ └─────────────────┘  └─────────────────┘  └─────────────────┘          │
+  └─────────────────────────────────────────────────────────────────────────┘
+
+  SAFETY INTEGRATION
+  ──────────────────
+
+  • usePWAUpdateSafety checks hasSyncConflict before allowing reload
+  • FormDirtyContext blocks navigation during active conflict
+  • Conflict resolution MUST complete before critical operations`}
+                </pre>
+              </div>
+            </div>
+          </section>
+
+          <Separator className="my-8" />
+
+          {/* Section 19: Network Status Monitoring */}
+          <section className="mb-10 print:page-break-inside-avoid">
+            <h2 className="text-2xl font-bold text-black mb-4 flex items-center gap-2">
+              <Globe className="h-6 w-6" />
+              19. Network Status Monitoring
+            </h2>
+
+            <div className="space-y-4">
+              <p className="text-sm text-gray-600">
+                Comprehensive network monitoring with visual indicators and graceful degradation for offline-first experience.
+              </p>
+
+              <div className="bg-gray-100 p-4 rounded-lg border border-gray-300 font-mono text-xs overflow-x-auto">
+                <pre className="text-gray-700 whitespace-pre">
+{`┌────────────────────────────────────────────────────────────────────────────┐
+│                      NETWORK STATUS MONITORING                              │
+└────────────────────────────────────────────────────────────────────────────┘
+
+  DETECTION LAYER                          UI INDICATORS
+  ───────────────                          ─────────────
+
+  ┌─────────────────────────┐
+  │ useNetworkStatus hook   │
+  │                         │
+  │ Sources:                │
+  │ • navigator.onLine      │
+  │ • online/offline events │
+  │ • Periodic health check │
+  │   to Supabase           │
+  └──────────┬──────────────┘
+             │
+             ├────────────────────────────────────────────────────────┐
+             │                                                        │
+             ▼                                                        ▼
+  ┌─────────────────────────┐                          ┌─────────────────────────┐
+  │ GlobalOfflineBanner     │                          │ NetworkStatusPill       │
+  │                         │                          │                         │
+  │ Full-width amber banner │                          │ Small indicator on      │
+  │ at top of app when      │                          │ critical components     │
+  │ offline                 │                          │                         │
+  │                         │                          │ • Green: Connected      │
+  │ "You're offline.        │                          │ • Yellow: Degraded      │
+  │  Some features may be   │                          │ • Red: Offline          │
+  │  limited."              │                          │                         │
+  └─────────────────────────┘                          └─────────────────────────┘
+
+  GRACEFUL DEGRADATION
+  ────────────────────
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │ ONLINE                    │ OFFLINE                                     │
+  ├───────────────────────────┼─────────────────────────────────────────────┤
+  │ Real-time live board      │ Cached live board with staleness warning    │
+  │ Full docket fetch         │ IndexedDB cached docket                     │
+  │ AI features available     │ AI features disabled with message           │
+  │ Document upload enabled   │ Upload queued for sync                      │
+  │ Whisper send immediate    │ Whisper queued with pending indicator       │
+  │ PWA updates may apply     │ Updates blocked until online                │
+  └───────────────────────────┴─────────────────────────────────────────────┘
+
+  RECONNECTION FLOW
+  ─────────────────
+
+  ┌──────────────────┐    ┌──────────────────┐    ┌──────────────────┐
+  │ Network restored │───►│ Sync pending     │───►│ Threshold replay │
+  │                  │    │ changes          │    │ check            │
+  │ Hide offline     │    │                  │    │                  │
+  │ banner           │    │ Process queue    │    │ Generate missed  │
+  │                  │    │                  │    │ alerts           │
+  └──────────────────┘    └──────────────────┘    └──────────────────┘`}
+                </pre>
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-4 mt-4">
+                <div className="border border-gray-300 rounded-lg p-4">
+                  <h4 className="font-medium text-black mb-2">Components</h4>
+                  <ul className="list-disc list-inside text-sm text-gray-600 space-y-1">
+                    <li><code className="bg-gray-200 px-1">GlobalOfflineBanner</code> - App-wide offline indicator</li>
+                    <li><code className="bg-gray-200 px-1">NetworkStatusPill</code> - Compact status badge</li>
+                    <li><code className="bg-gray-200 px-1">useNetworkStatus</code> - Core detection hook</li>
+                    <li><code className="bg-gray-200 px-1">usePendingSync</code> - Queue management</li>
+                  </ul>
+                </div>
+                <div className="border border-gray-300 rounded-lg p-4">
+                  <h4 className="font-medium text-black mb-2">Integration Points</h4>
+                  <ul className="list-disc list-inside text-sm text-gray-600 space-y-1">
+                    <li>PWA update safety checks</li>
+                    <li>Form submission guards</li>
+                    <li>Real-time subscription management</li>
+                    <li>Cache invalidation triggers</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <Separator className="my-8" />
+
           {/* Footer */}
           <footer className="text-center text-sm text-gray-500 py-8 border-t border-gray-300">
             <p className="font-semibold">Nyay-Hub Technical Dossier</p>
             <p>Built by Izafa Labs</p>
-            <p className="mt-2">Document Version: 1.0</p>
+            <p className="mt-2">Document Version: 2.0</p>
             <p>Generated: {new Date().toISOString()}</p>
           </footer>
 
