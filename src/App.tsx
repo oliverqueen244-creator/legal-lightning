@@ -45,9 +45,9 @@ const App = () => (
           <PostInstallConfirmation />
           {/* SAFE PWA AUTO-UPDATE: Manages update lifecycle with safety checks */}
           <PWAUpdateManager />
-          {/* Court Focus Mode - Full screen overlay for critical court moments */}
-          <CourtFocusOverlay />
           <BrowserRouter>
+            {/* Court Focus Mode - Full screen overlay for critical court moments */}
+            <CourtFocusOverlay />
             <Routes>
               <Route path="/" element={<Dashboard />} />
               <Route path="/auth" element={<Auth />} />
