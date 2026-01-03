@@ -1059,6 +1059,27 @@ export type Database = {
         }
         Relationships: []
       }
+      fallback_disabled_benches: {
+        Row: {
+          bench_code: string
+          disabled_at: string
+          disabled_by: string | null
+          reason: string | null
+        }
+        Insert: {
+          bench_code: string
+          disabled_at?: string
+          disabled_by?: string | null
+          reason?: string | null
+        }
+        Update: {
+          bench_code?: string
+          disabled_at?: string
+          disabled_by?: string | null
+          reason?: string | null
+        }
+        Relationships: []
+      }
       judge_judgment_references: {
         Row: {
           added_at: string
@@ -1507,6 +1528,7 @@ export type Database = {
           ingestion_integrity_score: number | null
           matching_error_count: number
           matching_reliability_score: number | null
+          parse_mode: string | null
           parsing_error_count: number
           parsing_stability_score: number | null
           run_date: string
@@ -1528,6 +1550,7 @@ export type Database = {
           ingestion_integrity_score?: number | null
           matching_error_count?: number
           matching_reliability_score?: number | null
+          parse_mode?: string | null
           parsing_error_count?: number
           parsing_stability_score?: number | null
           run_date?: string
@@ -1549,6 +1572,7 @@ export type Database = {
           ingestion_integrity_score?: number | null
           matching_error_count?: number
           matching_reliability_score?: number | null
+          parse_mode?: string | null
           parsing_error_count?: number
           parsing_stability_score?: number | null
           run_date?: string
@@ -1556,6 +1580,51 @@ export type Database = {
           total_cases_matched?: number
           total_cases_parsed?: number
           warning_issued?: boolean
+        }
+        Relationships: []
+      }
+      parser_fallback_log: {
+        Row: {
+          applied_at: string
+          batch_id: string
+          bench_code: string
+          cases_after: number
+          cases_before: number
+          confidence_after: number
+          confidence_before: number
+          created_at: string
+          fallback_level: Database["public"]["Enums"]["fallback_level"]
+          id: string
+          parse_duration_ms: number | null
+          triggered_reason: string
+        }
+        Insert: {
+          applied_at?: string
+          batch_id: string
+          bench_code: string
+          cases_after?: number
+          cases_before?: number
+          confidence_after?: number
+          confidence_before?: number
+          created_at?: string
+          fallback_level: Database["public"]["Enums"]["fallback_level"]
+          id?: string
+          parse_duration_ms?: number | null
+          triggered_reason: string
+        }
+        Update: {
+          applied_at?: string
+          batch_id?: string
+          bench_code?: string
+          cases_after?: number
+          cases_before?: number
+          confidence_after?: number
+          confidence_before?: number
+          created_at?: string
+          fallback_level?: Database["public"]["Enums"]["fallback_level"]
+          id?: string
+          parse_duration_ms?: number | null
+          triggered_reason?: string
         }
         Relationships: []
       }
@@ -1930,6 +1999,19 @@ export type Database = {
       }
     }
     Views: {
+      fallback_summary_view: {
+        Row: {
+          attempt_count: number | null
+          avg_confidence_delta: number | null
+          bench_code: string | null
+          fallback_date: string | null
+          fallback_level: Database["public"]["Enums"]["fallback_level"] | null
+          improvement_count: number | null
+          last_attempt: string | null
+          total_cases_recovered: number | null
+        }
+        Relationships: []
+      }
       parsing_health_summary: {
         Row: {
           affected_batches: number | null
@@ -2042,6 +2124,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_fallback_disabled: { Args: { p_bench_code: string }; Returns: boolean }
       log_error_event: {
         Args: {
           p_app_version?: string
@@ -2059,6 +2142,20 @@ export type Database = {
           p_route?: string
           p_severity: Database["public"]["Enums"]["error_severity"]
           p_user_id?: string
+        }
+        Returns: string
+      }
+      log_fallback_attempt: {
+        Args: {
+          p_batch_id: string
+          p_bench_code: string
+          p_cases_after: number
+          p_cases_before: number
+          p_confidence_after: number
+          p_confidence_before: number
+          p_fallback_level: string
+          p_parse_duration_ms?: number
+          p_triggered_reason: string
         }
         Returns: string
       }
@@ -2102,6 +2199,11 @@ export type Database = {
         | "UNKNOWN"
       error_environment: "web" | "pwa" | "ios" | "backend"
       error_severity: "P0" | "P1" | "P2"
+      fallback_level:
+        | "primary"
+        | "fallback_1_lenient"
+        | "fallback_2_section"
+        | "fallback_3_historical"
       finding_severity: "low" | "medium" | "high" | "critical"
       finding_status: "open" | "acknowledged" | "fixed"
       go_decision: "go" | "conditional_go" | "no_go"
@@ -2274,6 +2376,12 @@ export const Constants = {
       ],
       error_environment: ["web", "pwa", "ios", "backend"],
       error_severity: ["P0", "P1", "P2"],
+      fallback_level: [
+        "primary",
+        "fallback_1_lenient",
+        "fallback_2_section",
+        "fallback_3_historical",
+      ],
       finding_severity: ["low", "medium", "high", "critical"],
       finding_status: ["open", "acknowledged", "fixed"],
       go_decision: ["go", "conditional_go", "no_go"],
