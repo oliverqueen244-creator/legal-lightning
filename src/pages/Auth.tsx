@@ -11,6 +11,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 import HiddenAdminPortal from '@/components/admin/HiddenAdminPortal';
 import logoImage from '@/assets/logo.png';
+import { reportOfflineBlock, reportAuthError, ERROR_CODES } from '@/lib/errorReporting';
 
 export default function Auth() {
   const navigate = useNavigate();
@@ -71,6 +72,7 @@ export default function Auth() {
         description: 'Check your network connection and try again.',
         duration: 4000,
       });
+      reportOfflineBlock('auth_login');
       return;
     }
     
@@ -86,8 +88,10 @@ export default function Auth() {
             setError('Invalid email or password');
           } else if (errorMsg.includes('fetch') || errorMsg.includes('network') || errorMsg.includes('timeout')) {
             setError('Network issue detected. Please retry when connected.');
+            reportAuthError(ERROR_CODES.AUTH_NETWORK_FAIL, 'Login network failure');
           } else {
             setError(error.message);
+            reportAuthError(ERROR_CODES.AUTH_LOGIN_FAIL, 'Login failed');
           }
         } else {
           toast.success('Welcome back!');

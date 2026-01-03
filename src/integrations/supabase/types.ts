@@ -14,6 +14,72 @@ export type Database = {
   }
   public: {
     Tables: {
+      admin_error_events: {
+        Row: {
+          admin_note: string | null
+          app_version: string | null
+          batch_id: string | null
+          bench_code: string | null
+          browser: string | null
+          created_at: string
+          device: string | null
+          domain: Database["public"]["Enums"]["error_domain"]
+          environment: Database["public"]["Enums"]["error_environment"]
+          error_code: string
+          id: string
+          is_online: boolean | null
+          message: string
+          os: string | null
+          resolved: boolean
+          role: string | null
+          route: string | null
+          severity: Database["public"]["Enums"]["error_severity"]
+          user_id: string | null
+        }
+        Insert: {
+          admin_note?: string | null
+          app_version?: string | null
+          batch_id?: string | null
+          bench_code?: string | null
+          browser?: string | null
+          created_at?: string
+          device?: string | null
+          domain?: Database["public"]["Enums"]["error_domain"]
+          environment?: Database["public"]["Enums"]["error_environment"]
+          error_code: string
+          id?: string
+          is_online?: boolean | null
+          message: string
+          os?: string | null
+          resolved?: boolean
+          role?: string | null
+          route?: string | null
+          severity?: Database["public"]["Enums"]["error_severity"]
+          user_id?: string | null
+        }
+        Update: {
+          admin_note?: string | null
+          app_version?: string | null
+          batch_id?: string | null
+          bench_code?: string | null
+          browser?: string | null
+          created_at?: string
+          device?: string | null
+          domain?: Database["public"]["Enums"]["error_domain"]
+          environment?: Database["public"]["Enums"]["error_environment"]
+          error_code?: string
+          id?: string
+          is_online?: boolean | null
+          message?: string
+          os?: string | null
+          resolved?: boolean
+          role?: string | null
+          route?: string | null
+          severity?: Database["public"]["Enums"]["error_severity"]
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       ai_jobs: {
         Row: {
           completed_at: string | null
@@ -1798,6 +1864,20 @@ export type Database = {
       }
     }
     Views: {
+      parsing_health_summary: {
+        Row: {
+          affected_batches: number | null
+          affected_benches: number | null
+          domain: Database["public"]["Enums"]["error_domain"] | null
+          error_code: string | null
+          error_count: number | null
+          last_seen: string | null
+          report_date: string | null
+          resolved_count: number | null
+          severity: Database["public"]["Enums"]["error_severity"] | null
+        }
+        Relationships: []
+      }
       user_docket_view: {
         Row: {
           case_number: string | null
@@ -1888,6 +1968,26 @@ export type Database = {
         }
         Returns: boolean
       }
+      log_error_event: {
+        Args: {
+          p_app_version?: string
+          p_batch_id?: string
+          p_bench_code?: string
+          p_browser?: string
+          p_device?: string
+          p_domain: Database["public"]["Enums"]["error_domain"]
+          p_environment?: Database["public"]["Enums"]["error_environment"]
+          p_error_code: string
+          p_is_online?: boolean
+          p_message: string
+          p_os?: string
+          p_role?: string
+          p_route?: string
+          p_severity: Database["public"]["Enums"]["error_severity"]
+          p_user_id?: string
+        }
+        Returns: string
+      }
     }
     Enums: {
       app_role: "SENIOR" | "JUNIOR" | "CLERK" | "ADMIN"
@@ -1913,6 +2013,20 @@ export type Database = {
         | "ORDER"
         | "ANNEXURES"
         | "NOTES"
+      error_domain:
+        | "AUTH"
+        | "NETWORK"
+        | "OFFLINE_BLOCK"
+        | "SYNC"
+        | "UPLOAD"
+        | "PWA"
+        | "REALTIME"
+        | "CAUSELIST_PARSING"
+        | "CASE_MATCHING"
+        | "INGESTION"
+        | "UNKNOWN"
+      error_environment: "web" | "pwa" | "ios" | "backend"
+      error_severity: "P0" | "P1" | "P2"
       finding_severity: "low" | "medium" | "high" | "critical"
       finding_status: "open" | "acknowledged" | "fixed"
       go_decision: "go" | "conditional_go" | "no_go"
@@ -2069,6 +2183,21 @@ export const Constants = {
         "ANNEXURES",
         "NOTES",
       ],
+      error_domain: [
+        "AUTH",
+        "NETWORK",
+        "OFFLINE_BLOCK",
+        "SYNC",
+        "UPLOAD",
+        "PWA",
+        "REALTIME",
+        "CAUSELIST_PARSING",
+        "CASE_MATCHING",
+        "INGESTION",
+        "UNKNOWN",
+      ],
+      error_environment: ["web", "pwa", "ios", "backend"],
+      error_severity: ["P0", "P1", "P2"],
       finding_severity: ["low", "medium", "high", "critical"],
       finding_status: ["open", "acknowledged", "fixed"],
       go_decision: ["go", "conditional_go", "no_go"],

@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { reportBackendError, abstractBenchCode, ERROR_CODES } from "../_shared/errorReporting.ts";
 
 /**
  * AI WORKER - Processes AI jobs slowly and reliably
@@ -209,6 +210,21 @@ serve(async (req) => {
                            isPaymentRequired ? '💳 PAYMENT_REQUIRED' : '❌ ERROR';
       
       console.error(`[AI-WORKER] Job ${job.id} ${errorCategory}:`, errorMessage);
+
+      // REPORT TO ADMIN ERROR CONSOLE (non-blocking)
+      const benchCode = abstractBenchCode(job.payload.bench, job.payload.court_no);
+      const errorCode = isAllProvidersFailed ? ERROR_CODES.AI_WORKER_ALL_FAILED :
+                       isRateLimit ? ERROR_CODES.AI_WORKER_RATE_LIMITED :
+                       ERROR_CODES.AI_WORKER_JOB_FAILED;
+      
+      reportBackendError({
+        severity: isAllProvidersFailed || isPaymentRequired ? 'P0' : 'P1',
+        domain: 'CAUSELIST_PARSING',
+        errorCode,
+        message: `Job ${job.job_type} failed: ${errorMessage.slice(0, 200)}`,
+        batchId: job.payload.causelist_id,
+        benchCode,
+      });
 
       // Handle retry logic
       const newRetries = job.retries + 1;

@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { reportBackendError, abstractBenchCode, ERROR_CODES } from "../_shared/errorReporting.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -465,6 +466,15 @@ serve(async (req) => {
 
   } catch (error) {
     console.error('[SCAN-LAWYER-NAMES] Error:', error);
+    
+    // Report to admin error console
+    reportBackendError({
+      severity: 'P1',
+      domain: 'INGESTION',
+      errorCode: 'SCAN_LAWYER_NAMES_FAIL',
+      message: `Scan failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+    });
+    
     return new Response(JSON.stringify({
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error'
