@@ -86,6 +86,11 @@ const TechnicalDossier = () => {
                   <li>Indian Kanoon Integration</li>
                   <li>Sync Conflict Resolution</li>
                   <li>Network Status Monitoring</li>
+                  <li>Hearing Likelihood Derivation</li>
+                  <li>Confidence Scoring Engine</li>
+                  <li>Parser Fallback System</li>
+                  <li>Error Reporting System</li>
+                  <li>HTML Cause List Parsing</li>
                 </ol>
               </div>
             </div>
@@ -299,6 +304,30 @@ const TechnicalDossier = () => {
                         <td className="border border-gray-300 p-2">job_type, status, payload, result</td>
                         <td className="border border-gray-300 p-2">⚙️ Service role</td>
                       </tr>
+                      <tr>
+                        <td className="border border-gray-300 p-2 font-mono">parser_confidence_runs</td>
+                        <td className="border border-gray-300 p-2">Confidence scores per parse</td>
+                        <td className="border border-gray-300 p-2">bench_code, confidence_score, confidence_level</td>
+                        <td className="border border-gray-300 p-2">⚙️ Service role</td>
+                      </tr>
+                      <tr>
+                        <td className="border border-gray-300 p-2 font-mono">parser_fallback_log</td>
+                        <td className="border border-gray-300 p-2">Fallback sequence tracking</td>
+                        <td className="border border-gray-300 p-2">fallback_level, confidence_before, confidence_after</td>
+                        <td className="border border-gray-300 p-2">⚙️ Service role</td>
+                      </tr>
+                      <tr>
+                        <td className="border border-gray-300 p-2 font-mono">admin_error_events</td>
+                        <td className="border border-gray-300 p-2">Centralized error logging</td>
+                        <td className="border border-gray-300 p-2">error_code, domain, severity, message</td>
+                        <td className="border border-gray-300 p-2">⚙️ Admin only</td>
+                      </tr>
+                      <tr>
+                        <td className="border border-gray-300 p-2 font-mono">daily_execution_policies</td>
+                        <td className="border border-gray-300 p-2">Extracted hearing policies</td>
+                        <td className="border border-gray-300 p-2">policy_text, priority_rule, time_condition</td>
+                        <td className="border border-gray-300 p-2">🌐 Public read</td>
+                      </tr>
                     </tbody>
                   </table>
                 </div>
@@ -322,6 +351,26 @@ const TechnicalDossier = () => {
                   <div className="border border-gray-300 rounded-lg p-3">
                     <h4 className="font-medium text-black mb-1 text-sm">board_status</h4>
                     <p className="text-xs text-gray-600 font-mono">hearing | passover | lunch | adjourned</p>
+                  </div>
+                  <div className="border border-gray-300 rounded-lg p-3">
+                    <h4 className="font-medium text-black mb-1 text-sm">hearing_likelihood</h4>
+                    <p className="text-xs text-gray-600 font-mono">LIKELY | CONDITIONAL | LOW_PROBABILITY | UNKNOWN</p>
+                  </div>
+                  <div className="border border-gray-300 rounded-lg p-3">
+                    <h4 className="font-medium text-black mb-1 text-sm">confidence_level</h4>
+                    <p className="text-xs text-gray-600 font-mono">excellent | good | degraded | risky | unsafe</p>
+                  </div>
+                  <div className="border border-gray-300 rounded-lg p-3">
+                    <h4 className="font-medium text-black mb-1 text-sm">fallback_level</h4>
+                    <p className="text-xs text-gray-600 font-mono">primary | fallback_1_lenient | fallback_2_section | fallback_3_historical</p>
+                  </div>
+                  <div className="border border-gray-300 rounded-lg p-3">
+                    <h4 className="font-medium text-black mb-1 text-sm">error_severity</h4>
+                    <p className="text-xs text-gray-600 font-mono">P0 | P1 | P2</p>
+                  </div>
+                  <div className="border border-gray-300 rounded-lg p-3">
+                    <h4 className="font-medium text-black mb-1 text-sm">error_domain</h4>
+                    <p className="text-xs text-gray-600 font-mono">ingestion | parsing | matching | auth | offline | storage | notification</p>
                   </div>
                 </div>
               </div>
@@ -1803,11 +1852,475 @@ queryClient.setQueryData(['notifications'], (old) => [...old, newNotif]);`}</pre
 
           <Separator className="my-8" />
 
+          {/* Section 20: Hearing Likelihood Derivation */}
+          <section className="mb-10 print:page-break-inside-avoid">
+            <h2 className="text-2xl font-bold text-black mb-4 flex items-center gap-2">
+              <Clock className="h-6 w-6" />
+              20. Hearing Likelihood Derivation
+            </h2>
+
+            <div className="space-y-4">
+              <p className="text-sm text-gray-600">
+                AI-derived system for predicting whether a case will actually be heard based on execution policies extracted from cause list notes.
+              </p>
+
+              <div className="bg-gray-100 p-4 rounded-lg border border-gray-300 font-mono text-xs overflow-x-auto">
+                <pre className="text-gray-700 whitespace-pre">
+{`┌────────────────────────────────────────────────────────────────────────────┐
+│                    HEARING LIKELIHOOD DERIVATION                            │
+└────────────────────────────────────────────────────────────────────────────┘
+
+  EXTRACTION                         DERIVATION                    OUTPUT
+  ──────────                         ──────────                    ──────
+
+  ┌─────────────────────────┐
+  │ extract-causelist-notes │
+  │ Edge Function           │
+  │                         │
+  │ Extracts policies like: │
+  │ "Items 1-50 will be     │
+  │  taken up for hearing"  │
+  │ "After Item 30, motion  │
+  │  matters only"          │
+  └──────────┬──────────────┘
+             │
+             ▼
+  ┌─────────────────────────────────────────────────────────────────┐
+  │ daily_execution_policies                                        │
+  │                                                                 │
+  │ • policy_text: "Items 1-50 will be taken up for hearing"       │
+  │ • priority_rule: hearing | motion | mentioned_only             │
+  │ • time_condition: first_half | second_half | after_lunch       │
+  │ • policy_scope: court_specific | bench_wide | item_range       │
+  │ • confidence: 0.0-1.0                                          │
+  └───────────────────────────┬─────────────────────────────────────┘
+                              │
+                              ▼
+  ┌─────────────────────────────────────────────────────────────────┐
+  │ derive-hearing-likelihood Edge Function                         │
+  │                                                                 │
+  │ FOR EACH case in docket:                                        │
+  │   1. Find applicable policies for court/bench/item_no          │
+  │   2. Check if item_no falls within policy range                 │
+  │   3. Evaluate priority_rule match                               │
+  │   4. Calculate likelihood:                                      │
+  │                                                                 │
+  │   ┌─────────────────────────────────────────────────────────┐   │
+  │   │ LIKELY         - Item in hearing range, high priority   │   │
+  │   │ CONDITIONAL    - Depends on court progress or time      │   │
+  │   │ LOW_PROBABILITY - Item likely to be passed over         │   │
+  │   │ UNKNOWN        - No applicable policy found             │   │
+  │   └─────────────────────────────────────────────────────────┘   │
+  │                                                                 │
+  │ 5. Generate likelihood_reason explaining the derivation         │
+  └───────────────────────────┬─────────────────────────────────────┘
+                              │
+                              ▼
+  ┌─────────────────────────────────────────────────────────────────┐
+  │ UPDATE daily_court_docket SET                                   │
+  │   hearing_likelihood = 'LIKELY',                                │
+  │   likelihood_reason = 'Scheduled in priority hearing range',    │
+  │   likelihood_derived_at = now()                                 │
+  └─────────────────────────────────────────────────────────────────┘`}
+                </pre>
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-4 mt-4">
+                <div className="border border-gray-300 rounded-lg p-4">
+                  <h4 className="font-medium text-black mb-2">Trust Design (NON-PROMISSORY)</h4>
+                  <ul className="list-disc list-inside text-sm text-gray-600 space-y-1">
+                    <li>Badge shows "Scheduled for hearing per causelist"</li>
+                    <li>Never says "Will be heard" — only "May be heard"</li>
+                    <li>Tooltips explain source of derivation</li>
+                    <li>Users advised to verify with official records</li>
+                  </ul>
+                </div>
+                <div className="border border-gray-300 rounded-lg p-4">
+                  <h4 className="font-medium text-black mb-2">Visual Indicators</h4>
+                  <ul className="list-disc list-inside text-sm text-gray-600 space-y-1">
+                    <li><span className="text-green-600">●</span> LIKELY - Green badge</li>
+                    <li><span className="text-amber-600">●</span> CONDITIONAL - Amber badge</li>
+                    <li><span className="text-gray-400">●</span> LOW_PROBABILITY - Gray badge</li>
+                    <li>UNKNOWN - No badge shown</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <Separator className="my-8" />
+
+          {/* Section 21: Confidence Scoring Engine */}
+          <section className="mb-10 print:page-break-inside-avoid">
+            <h2 className="text-2xl font-bold text-black mb-4 flex items-center gap-2">
+              <CheckCircle className="h-6 w-6" />
+              21. Confidence Scoring Engine
+            </h2>
+
+            <div className="space-y-4">
+              <p className="text-sm text-gray-600">
+                Deterministic, rule-based engine that evaluates parsing reliability for each cause list ingestion run.
+              </p>
+
+              <div className="bg-gray-100 p-4 rounded-lg border border-gray-300 font-mono text-xs overflow-x-auto">
+                <pre className="text-gray-700 whitespace-pre">
+{`┌────────────────────────────────────────────────────────────────────────────┐
+│                      CONFIDENCE SCORING ENGINE                              │
+└────────────────────────────────────────────────────────────────────────────┘
+
+  INPUTS (from parsing run)              COMPONENT SCORES
+  ─────────────────────────              ────────────────
+
+  ingestion_error_count  ────────────►  ┌─────────────────────────────┐
+  total_cases_detected   ────────────►  │ INGESTION INTEGRITY (0-40)  │
+                                        │                             │
+                                        │ Base: 40                    │
+                                        │ -5 per ingestion error      │
+                                        │ -10 if 0 cases detected     │
+                                        └─────────────────────────────┘
+
+  parsing_error_count    ────────────►  ┌─────────────────────────────┐
+  total_cases_parsed     ────────────►  │ PARSING STABILITY (0-30)    │
+  total_cases_detected   ────────────►  │                             │
+                                        │ Base: 30                    │
+                                        │ -3 per parsing error        │
+                                        │ -10 if parse_rate < 0.8     │
+                                        └─────────────────────────────┘
+
+  matching_error_count   ────────────►  ┌─────────────────────────────┐
+  total_cases_matched    ────────────►  │ MATCHING RELIABILITY (0-20) │
+  total_cases_parsed     ────────────►  │                             │
+                                        │ Base: 20                    │
+                                        │ -2 per matching error       │
+                                        │ Based on match success rate │
+                                        └─────────────────────────────┘
+
+  historical_avg_cases   ────────────►  ┌─────────────────────────────┐
+  current_cases          ────────────►  │ HISTORICAL CONSISTENCY (0-10)│
+                                        │                             │
+                                        │ Compares to 7-day average   │
+                                        │ Flags anomalies >30% delta  │
+                                        └─────────────────────────────┘
+                                                    │
+                         ┌──────────────────────────┴─────────────────────┐
+                         │                                                │
+                         ▼                                                │
+  ┌────────────────────────────────────────────────────────────────┐      │
+  │ TOTAL SCORE = SUM(component_scores)                            │      │
+  │                                                                │      │
+  │ ┌────────────────────────────────────────────────────────────┐ │      │
+  │ │ ≥90  ──► EXCELLENT  (Green)  - Full confidence            │ │      │
+  │ │ 75-89 ─► GOOD       (Green)  - Minor issues               │ │      │
+  │ │ 50-74 ─► DEGRADED   (Amber)  - Review recommended         │ │      │
+  │ │ 25-49 ─► RISKY      (Orange) - Manual verification needed │ │      │
+  │ │ <25   ─► UNSAFE     (Red)    - Data may be unreliable     │ │      │
+  │ └────────────────────────────────────────────────────────────┘ │      │
+  └───────────────────────────────────┬────────────────────────────┘      │
+                                      │                                   │
+                                      ▼                                   │
+  ┌────────────────────────────────────────────────────────────────┐      │
+  │ INSERT INTO parser_confidence_runs                             │◄─────┘
+  │   bench_code, confidence_score, confidence_level,              │
+  │   ingestion_integrity_score, parsing_stability_score,          │
+  │   matching_reliability_score, historical_consistency_score,    │
+  │   confidence_reasons (JSON array of explanations)              │
+  └────────────────────────────────────────────────────────────────┘`}
+                </pre>
+              </div>
+
+              <div className="border border-gray-300 rounded-lg p-4 mt-4">
+                <h4 className="font-medium text-black mb-2">Client-Side Integration</h4>
+                <ul className="list-disc list-inside text-sm text-gray-600 space-y-1">
+                  <li><code className="bg-gray-200 px-1">DataConfidenceWarning</code> - Shows banner when confidence is degraded/risky/unsafe</li>
+                  <li><code className="bg-gray-200 px-1">useParserConfidence</code> - Fetches latest confidence run for current bench/date</li>
+                  <li>Dashboard displays confidence level with tooltip explaining component scores</li>
+                </ul>
+              </div>
+            </div>
+          </section>
+
+          <Separator className="my-8" />
+
+          {/* Section 22: Parser Fallback System */}
+          <section className="mb-10 print:page-break-inside-avoid">
+            <h2 className="text-2xl font-bold text-black mb-4 flex items-center gap-2">
+              <AlertTriangle className="h-6 w-6" />
+              22. Parser Fallback System
+            </h2>
+
+            <div className="space-y-4">
+              <p className="text-sm text-gray-600">
+                Multi-level fallback mechanism that improves parsing success without altering document meaning.
+              </p>
+
+              <div className="bg-gray-100 p-4 rounded-lg border border-gray-300 font-mono text-xs overflow-x-auto">
+                <pre className="text-gray-700 whitespace-pre">
+{`┌────────────────────────────────────────────────────────────────────────────┐
+│                        PARSER FALLBACK SYSTEM                               │
+└────────────────────────────────────────────────────────────────────────────┘
+
+  TRIGGER CONDITIONS                    FALLBACK SEQUENCE
+  ──────────────────                    ─────────────────
+
+  shouldTriggerFallback():
+  • confidence_score < 50
+  • ingestion_errors > 5
+  • zero_cases && is_weekday
+
+             │
+             ▼
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │ LEVEL 1: PRIMARY PARSE                                                  │
+  │                                                                         │
+  │ Standard AI parsing with original text                                  │
+  │ If confidence >= 50: STOP, use result                                   │
+  │ If confidence < 50: Continue to fallback                                │
+  └──────────────────────────────────┬──────────────────────────────────────┘
+                                     │
+                                     ▼
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │ LEVEL 2: LENIENT MODE (fallback_1_lenient)                              │
+  │                                                                         │
+  │ applyLenientMode(text):                                                 │
+  │ • Normalize whitespace (collapse multiple spaces)                       │
+  │ • Normalize newlines (consistent line breaks)                           │
+  │ • Fix common OCR artifacts (l→1, O→0, etc.)                            │
+  │ • Remove non-printable characters                                       │
+  │                                                                         │
+  │ Re-parse with normalized text                                           │
+  └──────────────────────────────────┬──────────────────────────────────────┘
+                                     │
+                                     ▼
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │ LEVEL 3: SECTION-BASED PARSE (fallback_2_section)                       │
+  │                                                                         │
+  │ applySectionBasedParse(text):                                           │
+  │ • Detect known anchors: "COURT NO", "ITEM NO", "BEFORE"                 │
+  │ • Insert delimiters between sections                                    │
+  │ • Parse each section independently                                       │
+  │ • Merge results                                                          │
+  └──────────────────────────────────┬──────────────────────────────────────┘
+                                     │
+                                     ▼
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │ LEVEL 4: HISTORICAL ADAPTER (fallback_3_historical)                     │
+  │                                                                         │
+  │ applyHistoricalAdapter(text, benchCode, historicalConfig):              │
+  │ • Load successful parse patterns from same bench                        │
+  │ • Apply known delimiter patterns                                         │
+  │ • Use structure similarity matching                                      │
+  │                                                                         │
+  │ Uses calculateStructureSimilarity() to compare with past successes      │
+  └──────────────────────────────────┬──────────────────────────────────────┘
+                                     │
+                                     ▼
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │ LOGGING                                                                  │
+  │                                                                         │
+  │ INSERT INTO parser_fallback_log:                                         │
+  │ • fallback_level applied                                                 │
+  │ • confidence_before, confidence_after                                    │
+  │ • cases_before, cases_after                                              │
+  │ • triggered_reason                                                       │
+  │ • parse_duration_ms                                                      │
+  └─────────────────────────────────────────────────────────────────────────┘`}
+                </pre>
+              </div>
+            </div>
+          </section>
+
+          <Separator className="my-8" />
+
+          {/* Section 23: Error Reporting System */}
+          <section className="mb-10 print:page-break-inside-avoid">
+            <h2 className="text-2xl font-bold text-black mb-4 flex items-center gap-2">
+              <AlertTriangle className="h-6 w-6" />
+              23. Error Reporting System
+            </h2>
+
+            <div className="space-y-4">
+              <p className="text-sm text-gray-600">
+                Centralized error logging designed for court-critical applications with strict privacy and no blocking behavior.
+              </p>
+
+              <div className="bg-gray-100 p-4 rounded-lg border border-gray-300 font-mono text-xs overflow-x-auto">
+                <pre className="text-gray-700 whitespace-pre">
+{`┌────────────────────────────────────────────────────────────────────────────┐
+│                        ERROR REPORTING SYSTEM                               │
+└────────────────────────────────────────────────────────────────────────────┘
+
+  ERROR SOURCES                          PROCESSING
+  ─────────────                          ──────────
+
+  ┌──────────────────┐
+  │ Client Error     │ ─────┐
+  │ (React/TypeScript)│      │
+  └──────────────────┘      │
+                            │
+  ┌──────────────────┐      │     ┌──────────────────────────────────────┐
+  │ Edge Function    │ ─────┼────►│ reportError() / reportCriticalError() │
+  │ Error            │      │     │                                       │
+  └──────────────────┘      │     │ 1. Detect environment (browser, OS)   │
+                            │     │ 2. Get app version                    │
+  ┌──────────────────┐      │     │ 3. Sanitize message (remove PII)      │
+  │ Parsing Error    │ ─────┘     │ 4. Abstract bench code                │
+  └──────────────────┘            │ 5. Build error payload                │
+                                  └──────────────────┬───────────────────┘
+                                                     │
+                                                     ▼
+                                  ┌──────────────────────────────────────┐
+                                  │ sanitizeMessage(message)              │
+                                  │                                       │
+                                  │ Removes:                              │
+                                  │ • Case numbers (CRL.A/123/2024)       │
+                                  │ • Person names                        │
+                                  │ • URLs and file paths                 │
+                                  │ • Phone numbers                       │
+                                  │ • Email addresses                     │
+                                  │                                       │
+                                  │ Truncates to 500 chars                │
+                                  └──────────────────┬───────────────────┘
+                                                     │
+                                                     ▼
+                                  ┌──────────────────────────────────────┐
+                                  │ Supabase RPC: log_error_event        │
+                                  │                                       │
+                                  │ INSERT INTO admin_error_events:       │
+                                  │ • error_code (e.g., INGESTION_STUCK) │
+                                  │ • domain (ingestion|parsing|auth|...)│
+                                  │ • severity (P0|P1|P2)                 │
+                                  │ • message (sanitized)                 │
+                                  │ • bench_code (abstracted)             │
+                                  │ • browser, os, device, is_online      │
+                                  └──────────────────────────────────────┘
+
+  SEVERITY LEVELS
+  ───────────────
+
+  P0 (Critical):  System down, data loss risk, requires immediate action
+  P1 (High):      Feature broken, significant impact, urgent
+  P2 (Warning):   Degraded experience, monitoring needed
+
+  ERROR DOMAINS
+  ─────────────
+
+  ingestion    - Cause list download/import failures
+  parsing      - AI parsing errors, malformed data
+  matching     - Alias matching failures
+  auth         - Authentication/authorization issues
+  offline      - Offline mode failures
+  storage      - File upload/download errors
+  notification - Alert delivery failures`}
+                </pre>
+              </div>
+
+              <div className="border border-gray-300 rounded-lg p-4 mt-4">
+                <h4 className="font-medium text-black mb-2">Privacy-First Design</h4>
+                <ul className="list-disc list-inside text-sm text-gray-600 space-y-1">
+                  <li>All error messages sanitized before storage</li>
+                  <li>Bench codes abstracted (not human-readable)</li>
+                  <li>No case numbers or party names in logs</li>
+                  <li>User IDs stored for audit, not exposed in admin UI</li>
+                  <li>Errors never block user workflow — fire-and-forget logging</li>
+                </ul>
+              </div>
+            </div>
+          </section>
+
+          <Separator className="my-8" />
+
+          {/* Section 24: HTML Cause List Parsing */}
+          <section className="mb-10 print:page-break-inside-avoid">
+            <h2 className="text-2xl font-bold text-black mb-4 flex items-center gap-2">
+              <Code className="h-6 w-6" />
+              24. HTML Cause List Parsing
+            </h2>
+
+            <div className="space-y-4">
+              <p className="text-sm text-gray-600">
+                Direct HTML parsing for cause lists that are available in HTML format, providing faster and more accurate extraction than PDF OCR.
+              </p>
+
+              <div className="bg-gray-100 p-4 rounded-lg border border-gray-300 font-mono text-xs overflow-x-auto">
+                <pre className="text-gray-700 whitespace-pre">
+{`┌────────────────────────────────────────────────────────────────────────────┐
+│                      HTML CAUSE LIST PARSING                                │
+└────────────────────────────────────────────────────────────────────────────┘
+
+  html-causelist-parse Edge Function
+  ──────────────────────────────────
+
+  INPUT: HTML file from court website or Telegram
+         │
+         ▼
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │ PHASE 1: EXTRACTION                                                      │
+  │                                                                         │
+  │ extractCasesFromHtml(htmlContent):                                       │
+  │ • Parse table structures for case data                                   │
+  │ • Extract: case_number, item_no, parties, lawyers                       │
+  │ • Detect court/bench headers                                             │
+  │ • Extract judge names from bench composition sections                    │
+  └──────────────────────────────────┬──────────────────────────────────────┘
+                                     │
+                                     ▼
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │ PHASE 2: NOTE EXTRACTION                                                 │
+  │                                                                         │
+  │ extractNotesFromHtml(htmlContent):                                       │
+  │ • Find special announcements and instructions                            │
+  │ • Extract execution policies ("Items 1-50 for hearing")                  │
+  │ • Identify time-based conditions                                         │
+  │                                                                         │
+  │ OUTPUT: cause_list_notes records                                          │
+  └──────────────────────────────────┬──────────────────────────────────────┘
+                                     │
+                                     ▼
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │ PHASE 3: JUDGE NAME RESOLUTION                                           │
+  │                                                                         │
+  │ For each case:                                                           │
+  │ 1. Check if judge_names extracted from HTML                              │
+  │ 2. If not, call extractJudgesFromHtml(htmlContent, courtNo)             │
+  │ 3. If still not, lookup from court_metadata table                        │
+  │                                                                         │
+  │ judgesByCourtNo = Map<court_no, sitting_judges>                          │
+  └──────────────────────────────────┬──────────────────────────────────────┘
+                                     │
+                                     ▼
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │ PHASE 4: DATABASE UPSERT                                                 │
+  │                                                                         │
+  │ INSERT INTO daily_court_docket:                                          │
+  │ • case_number, item_no, court_room_no                                    │
+  │ • petitioner, petitioner_lawyer                                          │
+  │ • respondent, respondent_lawyer                                          │
+  │ • judge_names (resolved from above)                                      │
+  │ • list_type, origin='html_parse'                                         │
+  │                                                                         │
+  │ ON CONFLICT: Update with newer data                                       │
+  └─────────────────────────────────────────────────────────────────────────┘
+
+  ADVANTAGES OVER PDF PARSING
+  ───────────────────────────
+
+  • Structured data extraction (no OCR errors)
+  • Faster processing (no image conversion)
+  • Higher confidence scores
+  • Better column alignment
+  • Native Unicode support`}
+                </pre>
+              </div>
+            </div>
+          </section>
+
+          <Separator className="my-8" />
+
           {/* Footer */}
           <footer className="text-center text-sm text-gray-500 py-8 border-t border-gray-300">
             <p className="font-semibold">Nyay-Hub Technical Dossier</p>
             <p>Built by Izafa Labs</p>
-            <p className="mt-2">Document Version: 2.0</p>
+            <p className="mt-2">Document Version: 3.0</p>
             <p>Generated: {new Date().toISOString()}</p>
           </footer>
 
