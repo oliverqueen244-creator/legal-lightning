@@ -156,10 +156,94 @@ function splitByCourtBlocks(text: string): CourtBlock[] {
   return blocks;
 }
 
-// Filter court blocks that contain a lawyer's alias
+// Filter court blocks that contain a lawyer's alias (context-aware)
 function filterCourtBlocksForAlias(blocks: CourtBlock[], alias: string): CourtBlock[] {
+  return blocks.filter(block => isLawyerNameMatch(block.court_text, alias));
+}
+
+// Context-aware alias matching - only match within lawyer name contexts
+// Returns true if alias appears in a lawyer name context (not just anywhere in text)
+function isLawyerNameMatch(text: string, alias: string): boolean {
   const aliasLower = alias.toLowerCase().trim();
-  return blocks.filter(block => block.court_text.toLowerCase().includes(aliasLower));
+  const textLower = text.toLowerCase();
+  
+  // Skip very short aliases (likely to cause false positives)
+  if (aliasLower.length < 4) {
+    console.log(`[MATCH] Skipping short alias: "${alias}" (${aliasLower.length} chars)`);
+    return false;
+  }
+  
+  // Skip common false-positive words
+  const blacklist = ['admin', 'state', 'union', 'india', 'court', 'judge', 'order', 'petition', 'appeal', 'case'];
+  if (blacklist.includes(aliasLower)) {
+    console.log(`[MATCH] Skipping blacklisted alias: "${alias}"`);
+    return false;
+  }
+  
+  // Pattern 1: "Adv. {name}" or "Advocate {name}"
+  const advPattern = new RegExp(`\\badv\\.?\\s*${escapeRegex(aliasLower)}\\b`, 'i');
+  if (advPattern.test(text)) {
+    console.log(`[MATCH] Found "Adv." pattern for "${alias}"`);
+    return true;
+  }
+  
+  // Pattern 2: "{name}-P" or "{name}-R" (petitioner/respondent lawyer notation)
+  const lawyerSuffixPattern = new RegExp(`\\b${escapeRegex(aliasLower)}\\s*-\\s*[PR]\\b`, 'i');
+  if (lawyerSuffixPattern.test(text)) {
+    console.log(`[MATCH] Found lawyer suffix (-P/-R) pattern for "${alias}"`);
+    return true;
+  }
+  
+  // Pattern 3: Within "Name of Advocate" column sections
+  // Look for the alias appearing after "Name of Advocate" header within reasonable distance
+  const advocateColumnPattern = /name\s+of\s+advocate/gi;
+  let match;
+  while ((match = advocateColumnPattern.exec(textLower)) !== null) {
+    // Check next 5000 chars after "Name of Advocate" header for the alias
+    const searchWindow = textLower.substring(match.index, match.index + 5000);
+    if (searchWindow.includes(aliasLower)) {
+      console.log(`[MATCH] Found in "Name of Advocate" column for "${alias}"`);
+      return true;
+    }
+  }
+  
+  // Pattern 4: Look for name appearing between pipe characters (table format)
+  // e.g., "| RAMESH CHANDRA PUROHIT-P |"
+  const tablePattern = new RegExp(`\\|[^|]*${escapeRegex(aliasLower)}[^|]*\\|`, 'gi');
+  const tableMatches = text.match(tablePattern);
+  if (tableMatches) {
+    // Verify it's in a lawyer context (has -P, -R, or appears after case details)
+    for (const tableMatch of tableMatches) {
+      const matchLower = tableMatch.toLowerCase();
+      // Check if this table cell looks like a lawyer name (has suffix or "adv")
+      if (/-[pr]\b/i.test(tableMatch) || /\badv\.?\s/i.test(tableMatch)) {
+        console.log(`[MATCH] Found in table cell with lawyer markers for "${alias}"`);
+        return true;
+      }
+    }
+  }
+  
+  // Pattern 5: Appears near common lawyer patterns in same line/paragraph
+  // Split into lines and check each line
+  const lines = text.split(/[\n\r]+/);
+  for (const line of lines) {
+    const lineLower = line.toLowerCase();
+    if (lineLower.includes(aliasLower)) {
+      // Check if this line has lawyer indicators
+      if (/-[pr]\b/i.test(line) || /\badv\.?\s/i.test(line) || /advocate/i.test(line) || /counsel/i.test(line)) {
+        console.log(`[MATCH] Found in line with lawyer indicators for "${alias}"`);
+        return true;
+      }
+    }
+  }
+  
+  // No contextual match found
+  return false;
+}
+
+// Escape special regex characters
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 // Timing obfuscation helper
@@ -338,8 +422,6 @@ serve(async (req) => {
         console.log(`[SCAN-LAWYER-NAMES] DAILY causelist split into ${courtBlocks.length} court blocks`);
       }
 
-      const textLower = textContent.toLowerCase();
-
       // Scan for each profile's aliases
       for (const profile of profiles) {
         // Check if already scanned
@@ -367,11 +449,10 @@ serve(async (req) => {
 
         totalScans++;
 
-        // Simple case-insensitive string matching
+        // Context-aware alias matching - only match within lawyer name contexts
         const matchedAliases: string[] = [];
         for (const { alias_name } of aliases) {
-          const aliasLower = alias_name.toLowerCase().trim();
-          if (textLower.includes(aliasLower)) {
+          if (isLawyerNameMatch(textContent, alias_name)) {
             matchedAliases.push(alias_name);
           }
         }
