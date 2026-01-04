@@ -29,9 +29,18 @@ function normalizeName(name: string): string {
     .trim();
 }
 
-// Check if alias matches within lawyer text (fuzzy but conservative)
-function isAliasMatch(lawyerText: string, alias: string): { matched: boolean; confidence: number } {
-  const normalizedLawyer = normalizeName(lawyerText);
+// Split lawyer field by common delimiters to get individual lawyer names
+function splitLawyerNames(lawyerText: string): string[] {
+  // Split by comma, semicolon, or " AND " / " & "
+  return lawyerText
+    .split(/[,;]|\s+AND\s+|\s+&\s+/i)
+    .map(name => name.trim())
+    .filter(name => name.length > 2);
+}
+
+// Check if a single lawyer name matches the alias
+function matchSingleLawyer(lawyerName: string, alias: string): { matched: boolean; confidence: number } {
+  const normalizedLawyer = normalizeName(lawyerName);
   const normalizedAlias = normalizeName(alias);
   
   // Skip very short aliases
@@ -44,29 +53,66 @@ function isAliasMatch(lawyerText: string, alias: string): { matched: boolean; co
     return { matched: true, confidence: 0.95 };
   }
   
-  // Contains full alias (as a complete word/phrase)
   const aliasWords = normalizedAlias.split(' ');
   const lawyerWords = normalizedLawyer.split(' ');
   
-  // Check if all alias words appear in order
-  let matchIndex = 0;
-  for (const word of lawyerWords) {
-    if (matchIndex < aliasWords.length && word === aliasWords[matchIndex]) {
-      matchIndex++;
+  // CRITICAL: First name must match exactly
+  // This prevents "BRAJESH PUROHIT" from matching alias "Ramesh Purohit"
+  const aliasFirstName = aliasWords[0];
+  const hasFirstNameMatch = lawyerWords.some(word => word === aliasFirstName);
+  
+  if (!hasFirstNameMatch) {
+    return { matched: false, confidence: 0 };
+  }
+  
+  // Check if all alias words appear consecutively in the lawyer name
+  // This is stricter than "in order anywhere"
+  for (let startIdx = 0; startIdx <= lawyerWords.length - aliasWords.length; startIdx++) {
+    let consecutiveMatch = true;
+    for (let i = 0; i < aliasWords.length; i++) {
+      if (lawyerWords[startIdx + i] !== aliasWords[i]) {
+        consecutiveMatch = false;
+        break;
+      }
+    }
+    if (consecutiveMatch) {
+      return { matched: true, confidence: 0.95 };
     }
   }
   
-  if (matchIndex === aliasWords.length) {
-    // All alias words found in order
+  // Fallback: All alias words found (not necessarily consecutive)
+  // but first name MUST match (already verified above)
+  const allWordsFound = aliasWords.every(aliasWord => 
+    lawyerWords.some(lawyerWord => lawyerWord === aliasWord)
+  );
+  
+  if (allWordsFound) {
     return { matched: true, confidence: 0.85 };
   }
   
-  // Check if lawyer text contains alias as substring
+  // Check if lawyer name contains alias as substring (e.g., "Adv. Ramesh Purohit")
   if (normalizedLawyer.includes(normalizedAlias)) {
-    return { matched: true, confidence: 0.75 };
+    return { matched: true, confidence: 0.80 };
   }
   
   return { matched: false, confidence: 0 };
+}
+
+// Check if alias matches within lawyer text (splits by comma first)
+function isAliasMatch(lawyerText: string, alias: string): { matched: boolean; confidence: number } {
+  // Split the lawyer field into individual names
+  const individualLawyers = splitLawyerNames(lawyerText);
+  
+  let bestMatch = { matched: false, confidence: 0 };
+  
+  for (const lawyerName of individualLawyers) {
+    const result = matchSingleLawyer(lawyerName, alias);
+    if (result.matched && result.confidence > bestMatch.confidence) {
+      bestMatch = result;
+    }
+  }
+  
+  return bestMatch;
 }
 
 Deno.serve(async (req) => {
