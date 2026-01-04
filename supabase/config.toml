@@ -59,3 +59,9 @@ verify_jwt = true
 
 [functions.search-indian-kanoon]
 verify_jwt = false
+
+[functions.upload-causelist]
+verify_jwt = true
+
+[functions.html-extract]
+verify_jwt = false
