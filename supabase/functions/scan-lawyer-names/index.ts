@@ -47,11 +47,28 @@ interface ExtractionProgress {
 const STALE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 
 // PDF Classification - determines routing for AI usage
-function classifyPdf(text: string, pageCount?: number): PdfType {
+// IMPORTANT: Trust metadata first, only fall back to content classification
+function classifyPdf(text: string, pageCount?: number, metadataListType?: string): PdfType {
+  // PRIORITY 1: Trust metadata from upload/source if available
+  if (metadataListType) {
+    const upperType = metadataListType.toUpperCase();
+    if (upperType === 'DAILY') return 'DAILY';
+    if (upperType === 'SUPPLEMENTARY') return 'SUPPLEMENTARY';
+    if (upperType === 'NOTICE') return 'NOTICE';
+    if (upperType === 'SEARCH') return 'SEARCH';
+  }
+  
+  // PRIORITY 2: Content-based classification (fallback only)
+  // Use specific patterns to avoid false positives from procedural text
   const upperText = text.toUpperCase();
   
-  if (upperText.includes('DAILY CAUSE LIST')) return 'DAILY';
-  if (upperText.includes('SUPPLEMENTARY CAUSE LIST')) return 'SUPPLEMENTARY';
+  // Check for document title patterns (more specific)
+  if (/DAILY\s+CAUSE\s*LIST/i.test(text)) return 'DAILY';
+  
+  // Only classify as SUPPLEMENTARY if it's in the document title, not just mentioned
+  // Check for patterns like "SUPPLEMENTARY CAUSE LIST FOR" or "SUPPLEMENTARY LIST"
+  if (/^.*?SUPPLEMENTARY\s+CAUSE\s*LIST\s*(FOR|DATED)/im.test(text.substring(0, 2000))) return 'SUPPLEMENTARY';
+  
   if (upperText.includes('NOTICE')) return 'NOTICE';
   if (upperText.includes('SEARCH CAUSELIST')) return 'SEARCH';
   
@@ -288,10 +305,11 @@ serve(async (req) => {
       console.log(`[SCAN-LAWYER-NAMES] Text ready: ${textContent.length} chars`);
 
       // STEP 2: CLASSIFY PDF TYPE (CRITICAL ROUTING LOGIC)
-      const pdfType = classifyPdf(textContent, causelist.page_count);
+      // Trust metadata list_type first, fall back to content classification
+      const pdfType = classifyPdf(textContent, causelist.page_count, causelist.list_type);
       const useAi = shouldUseAiParsing(pdfType);
       
-      console.log(`[SCAN-LAWYER-NAMES] PDF Classification: ${pdfType} | AI Parsing: ${useAi ? '✅ YES' : '❌ NO'}`);
+      console.log(`[SCAN-LAWYER-NAMES] PDF Classification: ${pdfType} (metadata: ${causelist.list_type}) | AI Parsing: ${useAi ? '✅ YES' : '❌ NO'}`);
 
       // Handle NOTICE type - skip entirely
       if (pdfType === 'NOTICE') {
