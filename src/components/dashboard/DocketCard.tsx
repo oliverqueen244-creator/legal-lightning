@@ -5,7 +5,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { Scale, Clock, AlertTriangle, ChevronRight, SkipForward, Coffee, Ban, Zap, Play, Calendar, FileText, Upload, Database } from 'lucide-react';
+import { Scale, Clock, AlertTriangle, ChevronRight, SkipForward, Coffee, Ban, Zap, Play, Calendar, FileText, Upload, Database, User } from 'lucide-react';
 import type { DocketItem, LiveBoardCache, BoardStatus, HearingLikelihood } from '@/types/database';
 import { cn } from '@/lib/utils';
 import type { AppRole } from '@/hooks/useAuth';
@@ -20,6 +20,7 @@ interface DocketCardProps {
     created_at?: string;
     hearing_likelihood?: HearingLikelihood | null;
     likelihood_reason?: string | null;
+    judge_names?: string | null;
   };
   liveBoard?: LiveBoardCache;
   userRole?: AppRole | null;
@@ -217,7 +218,7 @@ export function DocketCard({ item, liveBoard, userRole, onForceActive, showDate,
               {item.case_number}
             </h3>
             
-            <div className="flex items-center gap-4 text-sm text-muted-foreground">
+            <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
               <span className="flex items-center gap-1">
                 <Scale className="h-4 w-4" aria-hidden="true" />
                 Court {item.court_room_no}
@@ -226,6 +227,13 @@ export function DocketCard({ item, liveBoard, userRole, onForceActive, showDate,
                 <StatusIcon className="h-4 w-4" aria-hidden="true" />
                 {getStatusText()}
               </span>
+              {/* Judge Name Display */}
+              {item.judge_names && (
+                <span className="flex items-center gap-1 text-primary/80">
+                  <User className="h-4 w-4" aria-hidden="true" />
+                  {item.judge_names}
+                </span>
+              )}
               {/* Time Estimator */}
               {!isRunning && !isDone && !isPassover && liveBoard && (
                 <CaseTimeEstimatorCompact docketItem={item} liveBoard={liveBoard} />
