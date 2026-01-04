@@ -177,30 +177,7 @@ Deno.serve(async (req) => {
 
     console.log(`Created causelist record: ${causelist.id} (input_format: ${isPdf ? 'PDF' : 'HTML'})`);
 
-    // Route based on input format
-    if (isHtml) {
-      // HTML causelists go directly to html-causelist-parse (no alias gating)
-      // Parses ALL cases unconditionally - lawyer matching happens post-processing
-      console.log('Triggering html-causelist-parse for HTML causelist...');
-      const { error: parseError } = await supabase.functions.invoke('html-causelist-parse', {
-        body: { causelist_id: causelist.id },
-      });
-      
-      if (parseError) {
-        console.error('html-causelist-parse trigger error:', parseError);
-      }
-    } else {
-      // For PDF, call pdf-extract-chunk function (then scan-lawyer-names for alias-gated AI parsing)
-      console.log('Triggering PDF extraction...');
-      const { error: extractError } = await supabase.functions.invoke('pdf-extract-chunk', {
-        body: { causelist_id: causelist.id },
-      });
-      
-      if (extractError) {
-        console.error('PDF extraction trigger error:', extractError);
-      }
-    }
-
+    // Build result immediately - don't wait for parsing
     const result: UploadResult = {
       causelist_id: causelist.id,
       storage_path: storagePath,
@@ -209,6 +186,46 @@ Deno.serve(async (req) => {
     };
 
     console.log(`Upload complete: ${JSON.stringify(result)}`);
+
+    // Fire-and-forget: Trigger parsing in background using EdgeRuntime.waitUntil
+    // This prevents timeout issues on the upload response
+    const triggerParsing = async () => {
+      try {
+        if (isHtml) {
+          console.log('[BACKGROUND] Triggering html-causelist-parse...');
+          const { error: parseError } = await supabase.functions.invoke('html-causelist-parse', {
+            body: { causelist_id: causelist.id },
+          });
+          if (parseError) {
+            console.error('[BACKGROUND] html-causelist-parse error:', parseError);
+          } else {
+            console.log('[BACKGROUND] html-causelist-parse completed');
+          }
+        } else {
+          console.log('[BACKGROUND] Triggering pdf-extract-chunk...');
+          const { error: extractError } = await supabase.functions.invoke('pdf-extract-chunk', {
+            body: { causelist_id: causelist.id },
+          });
+          if (extractError) {
+            console.error('[BACKGROUND] pdf-extract-chunk error:', extractError);
+          } else {
+            console.log('[BACKGROUND] pdf-extract-chunk completed');
+          }
+        }
+      } catch (err) {
+        console.error('[BACKGROUND] Parsing trigger failed:', err);
+      }
+    };
+
+    // Use EdgeRuntime.waitUntil to run parsing in background
+    // @ts-ignore - EdgeRuntime is available in Supabase Edge Functions
+    if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime.waitUntil) {
+      // @ts-ignore
+      EdgeRuntime.waitUntil(triggerParsing());
+    } else {
+      // Fallback: just trigger without waiting
+      triggerParsing();
+    }
 
     return new Response(
       JSON.stringify(result),
