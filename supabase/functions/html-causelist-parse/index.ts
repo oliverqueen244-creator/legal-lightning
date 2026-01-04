@@ -184,6 +184,7 @@ const CASE_NUMBER_PATTERNS = [
   /\bCW\.?\s*\w*\.?\s*\d+\/\d{4}/i,
   /\b\w+\.\w*\.?\s*\d+\/\d{4}/i,
   /\bIN\s+CR[A-Z]*\.?\s*\d+\/\d{4}/i,
+  /\b(?:WP|CP|SA|FA|CA|MA|RA|TA|BA|CRA|SB|DB)\s*\(?\s*\w*\s*\)?\s*\d+\/\d{4}/i,
 ];
 
 interface PartialCase {
@@ -192,16 +193,44 @@ interface PartialCase {
   raw_rows: string[][];
 }
 
-// Extract item number from first cell if present
+/**
+ * Extract item number from ANY cell in the row, not just index 0.
+ * This handles tables where item numbers may appear in different positions.
+ * Returns null if no item number found.
+ */
 function extractItemNumber(cells: string[]): number | null {
-  if (cells.length === 0) return null;
-  const firstCell = cells[0].trim();
-  // Match pure numeric first cell OR cell ending with a period like "1." or "175."
-  const match = firstCell.match(/^(\d+)\.?$/);
-  return match ? parseInt(match[1], 10) : null;
+  for (const cell of cells) {
+    const trimmed = cell.trim();
+    // Match pure numeric OR cell with period like "1." or "175."
+    const match = trimmed.match(/^(\d+)\.?$/);
+    if (match) {
+      const num = parseInt(match[1], 10);
+      // Sanity check: item numbers should be reasonable (1-9999)
+      if (num >= 1 && num <= 9999) {
+        return num;
+      }
+    }
+  }
+  return null;
 }
 
-// Check if row text contains a case number (indicating new case start)
+/**
+ * Check if row text contains a case number (indicating start of new case).
+ * Scans the combined text of all cells.
+ */
+function rowHasCaseNumber(cells: string[]): boolean {
+  const combinedText = cells.join(' ');
+  for (const pattern of CASE_NUMBER_PATTERNS) {
+    if (pattern.test(combinedText)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Extract the case number from row cells.
+ */
 function extractCaseNumber(cells: string[]): string | null {
   const combinedText = cells.join(' ');
   for (const pattern of CASE_NUMBER_PATTERNS) {
@@ -213,21 +242,26 @@ function extractCaseNumber(cells: string[]): string | null {
   return null;
 }
 
-// Check if row is a header row that should be skipped
+/**
+ * Check if row is a header row that should be skipped.
+ */
 function isHeaderRow(cells: string[]): boolean {
   const rowText = cells.join(' ').toLowerCase();
   return (
     rowText.includes('sr. no') ||
     rowText.includes('serial') ||
-    rowText.includes('case number') ||
-    rowText.includes('name of advocate') ||
+    rowText.includes('s. no') ||
+    rowText.includes('sno.') ||
+    (rowText.includes('case number') && rowText.includes('advocate')) ||
     (rowText.includes('petitioner') && rowText.includes('respondent') && rowText.includes('advocate'))
   );
 }
 
-// Finalize a partial case into a full ParsedCase
+/**
+ * Finalize a partial case into a full ParsedCase by extracting
+ * parties, lawyers, and other details from combined row data.
+ */
 function finalizeParsedCase(partial: PartialCase, courtNo: string): ParsedCase {
-  // Combine all row texts for extraction
   const allCells = partial.raw_rows.flat();
   const combinedText = allCells.join(' ');
   
@@ -244,11 +278,11 @@ function finalizeParsedCase(partial: PartialCase, courtNo: string): ParsedCase {
     next_date: null,
   };
   
-  // Extract parties from combined text
+  // Extract parties from combined text (vs/v/s/versus patterns)
   for (const cell of allCells) {
     if (cell.toLowerCase().includes(' vs ') || cell.toLowerCase().includes(' v/s ') || 
-        cell.toLowerCase().includes(' versus ') || cell.includes(' Vs. ')) {
-      const parts = cell.split(/\s+(?:vs\.?|v\/s|versus)\s+/i);
+        cell.toLowerCase().includes(' versus ') || cell.includes(' Vs. ') || cell.includes(' VS ')) {
+      const parts = cell.split(/\s+(?:vs\.?|v\/s|versus|VS)\s+/i);
       if (parts.length >= 2) {
         parsedCase.petitioner = parts[0].trim().substring(0, 500) || null;
         parsedCase.respondent = parts[1].trim().substring(0, 500) || null;
@@ -257,19 +291,21 @@ function finalizeParsedCase(partial: PartialCase, courtNo: string): ParsedCase {
     }
   }
   
-  // Extract lawyers from combined rows
+  // Extract lawyers from combined rows (patterns like "Name -P" or "Name -R")
   const petLawyers: string[] = [];
   const respLawyers: string[] = [];
   
   for (const cell of allCells) {
-    const petLawyerMatches = cell.match(/([A-Z][A-Za-z\s\.]+)\s*-\s*P(?:\b|$)/gi);
+    // Petitioner lawyer patterns
+    const petLawyerMatches = cell.match(/([A-Z][A-Za-z\s\.]+)\s*[-–]\s*P(?:\b|$)/gi);
     if (petLawyerMatches) {
-      petLawyers.push(...petLawyerMatches.map(m => m.replace(/-\s*P$/i, '').trim()));
+      petLawyers.push(...petLawyerMatches.map(m => m.replace(/[-–]\s*P$/i, '').trim()));
     }
     
-    const respLawyerMatches = cell.match(/([A-Z][A-Za-z\s\.]+)\s*-\s*R(?:\b|$)/gi);
+    // Respondent lawyer patterns  
+    const respLawyerMatches = cell.match(/([A-Z][A-Za-z\s\.]+)\s*[-–]\s*R(?:\b|$)/gi);
     if (respLawyerMatches) {
-      respLawyers.push(...respLawyerMatches.map(m => m.replace(/-\s*R$/i, '').trim()));
+      respLawyers.push(...respLawyerMatches.map(m => m.replace(/[-–]\s*R$/i, '').trim()));
     }
   }
   
@@ -280,8 +316,8 @@ function finalizeParsedCase(partial: PartialCase, courtNo: string): ParsedCase {
     parsedCase.respondent_lawyer = [...new Set(respLawyers)].join(', ');
   }
   
-  // Extract stage
-  const stageKeywords = ['fresh', 'hearing', 'admission', 'final', 'arguments', 'orders', 'misc', 'motion'];
+  // Extract stage from keywords
+  const stageKeywords = ['fresh', 'hearing', 'admission', 'final', 'arguments', 'orders', 'misc', 'motion', 'regular'];
   for (const cell of allCells) {
     const cellLower = cell.toLowerCase();
     for (const stage of stageKeywords) {
@@ -307,11 +343,16 @@ function finalizeParsedCase(partial: PartialCase, courtNo: string): ParsedCase {
 }
 
 /**
- * STATEFUL PARSER: Handles row continuation patterns where item numbers
- * appear once per logical item and subsequent rows belong to the same case.
+ * STATEFUL PARSER: Core fix for continuation row handling.
  * 
  * Key insight: Item number is CONTEXT that persists across rows.
  * A case may span multiple <tr> elements.
+ * 
+ * This parser:
+ * 1. Treats item number as state, not a row property
+ * 2. Attaches continuation rows to the current case
+ * 3. Only starts a new case when a case number is found
+ * 4. Never skips rows due to missing item numbers
  */
 function extractCasesFromSection(html: string, courtNo: string): ParsedCase[] {
   const cases: ParsedCase[] = [];
@@ -319,7 +360,10 @@ function extractCasesFromSection(html: string, courtNo: string): ParsedCase[] {
   const rowPattern = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
   const cellPattern = /<td[^>]*>([\s\S]*?)<\/td>/gi;
   
-  // STATE VARIABLES - crucial for continuation row handling
+  // =============================================
+  // CRITICAL STATE VARIABLES
+  // These persist across rows - this is the fix!
+  // =============================================
   let currentItemNumber: number | null = null;
   let currentCase: PartialCase | null = null;
   
@@ -340,6 +384,7 @@ function extractCasesFromSection(html: string, courtNo: string): ParsedCase[] {
         .replace(/&lt;/g, '<')
         .replace(/&gt;/g, '>')
         .replace(/&quot;/g, '"')
+        .replace(/&#\d+;/g, ' ')
         .replace(/\s+/g, ' ')
         .trim();
       cells.push(cellText);
@@ -351,63 +396,84 @@ function extractCasesFromSection(html: string, courtNo: string): ParsedCase[] {
     }
   }
   
-  // Process rows sequentially with state
+  console.log(`[PARSER] Court ${courtNo}: Processing ${rows.length} rows`);
+  
+  // =============================================
+  // SEQUENTIAL STATEFUL PROCESSING
+  // =============================================
   for (const cells of rows) {
-    // Skip rows with too few cells (likely structural)
+    // Skip rows with too few cells (likely structural/layout)
     if (cells.length < 2) continue;
     
-    // Skip header rows
+    // Skip obvious header rows
     if (isHeaderRow(cells)) continue;
     
-    // 1. Detect item number if present (updates context state)
+    // -----------------------------------------
+    // STEP 1: Detect item number if present
+    // This updates our context state
+    // -----------------------------------------
     const maybeItemNo = extractItemNumber(cells);
     if (maybeItemNo !== null) {
       currentItemNumber = maybeItemNo;
     }
     
-    // 2. If no item context yet, skip (header/note rows before first item)
+    // -----------------------------------------
+    // STEP 2: Skip if no item context yet
+    // (These are header/note rows before first item)
+    // -----------------------------------------
     if (currentItemNumber === null) {
       continue;
     }
     
-    // 3. Check if row has a case number (starts new case)
-    const caseNumber = extractCaseNumber(cells);
+    // -----------------------------------------
+    // STEP 3: Check if row starts a new case
+    // -----------------------------------------
+    const hasCaseNumber = rowHasCaseNumber(cells);
     
-    if (caseNumber) {
+    if (hasCaseNumber) {
       // Flush previous case if exists
       if (currentCase !== null) {
         cases.push(finalizeParsedCase(currentCase, courtNo));
       }
       
       // Start new case with current item context
+      const caseNumber = extractCaseNumber(cells);
       currentCase = {
         item_no: currentItemNumber,
-        case_number: caseNumber,
+        case_number: caseNumber || 'UNKNOWN',
         raw_rows: [cells],
       };
     } else {
-      // 4. Continuation row - attach to current case
+      // -----------------------------------------
+      // STEP 4: Continuation row
+      // Attach to current case (this is the key fix!)
+      // -----------------------------------------
       if (currentCase !== null) {
         currentCase.raw_rows.push(cells);
       }
-      // If no current case, this is likely a note/header row - skip
+      // If no current case, this is likely a note/header - skip
     }
   }
   
-  // Flush last case
+  // Flush the last case
   if (currentCase !== null) {
     cases.push(finalizeParsedCase(currentCase, courtNo));
   }
   
-  // PARSER INVARIANT: Log warning if significant gaps detected
+  // =============================================
+  // PARSER INVARIANT: Detect significant gaps
+  // =============================================
   if (cases.length > 0) {
     const itemNumbers = cases.map(c => c.item_no).filter((n): n is number => n !== null);
     const maxItem = Math.max(...itemNumbers, 0);
     const uniqueItems = new Set(itemNumbers).size;
+    const coverage = maxItem > 0 ? (uniqueItems / maxItem) * 100 : 100;
     
-    // If we have less than 80% of expected items, log a warning
+    console.log(`[PARSER] Court ${courtNo}: ${cases.length} cases, ${uniqueItems}/${maxItem} items (${coverage.toFixed(1)}% coverage)`);
+    
+    // Warn if coverage is below 80%
     if (maxItem > 10 && uniqueItems < maxItem * 0.8) {
-      console.warn(`[PARSER-INTEGRITY] Court ${courtNo}: Expected ~${maxItem} items, got ${uniqueItems} unique (${((uniqueItems / maxItem) * 100).toFixed(1)}%)`);
+      console.warn(`[PARSER-INTEGRITY-WARNING] Court ${courtNo}: GAPS DETECTED! Expected ~${maxItem} items, got ${uniqueItems} unique (${coverage.toFixed(1)}%). Review HTML structure.`);
     }
   }
   
