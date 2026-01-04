@@ -323,6 +323,69 @@ const ProductDossier = () => {
                 <p className="text-sm text-gray-600"><strong>Behavior:</strong> Silent updates when app is hidden and safe; deferred otherwise</p>
                 <p className="text-sm text-gray-600"><strong>User Trust:</strong> Never loses data, never interrupts hearings</p>
               </div>
+
+              <div className="border-l-4 border-black pl-4">
+                <h3 className="font-bold text-black mb-2">Hearing Likelihood System</h3>
+                <p className="text-sm text-gray-600"><strong>What:</strong> AI-derived prediction of whether a case will actually be heard on a given day</p>
+                <p className="text-sm text-gray-600"><strong>Categories:</strong> LIKELY (high priority items), CONDITIONAL (depends on court progress), LOW_PROBABILITY (may be passed over), UNKNOWN</p>
+                <p className="text-sm text-gray-600"><strong>Source:</strong> Derived from execution policies extracted from cause list notes (e.g., "Items 1-50 will be taken up for hearing")</p>
+                <p className="text-sm text-gray-600"><strong>Trust Design:</strong> Uses NON-PROMISSORY language — "Scheduled for hearing per causelist" not "Will be heard"</p>
+                <p className="text-sm text-gray-600"><strong>Display:</strong> Color-coded badges (green=LIKELY, amber=CONDITIONAL, gray=LOW) with tooltip explaining reason</p>
+              </div>
+
+              <div className="border-l-4 border-black pl-4">
+                <h3 className="font-bold text-black mb-2">Judge Name Display</h3>
+                <p className="text-sm text-gray-600"><strong>What:</strong> Shows presiding judge names on each case card in the docket</p>
+                <p className="text-sm text-gray-600"><strong>Source:</strong> Extracted from HTML causelists, with fallback to court_metadata lookup</p>
+                <p className="text-sm text-gray-600"><strong>Use Case:</strong> Helps lawyers immediately identify which judge is hearing their case</p>
+              </div>
+
+              <div className="border-l-4 border-black pl-4">
+                <h3 className="font-bold text-black mb-2">Data Confidence Scoring</h3>
+                <p className="text-sm text-gray-600"><strong>What:</strong> Deterministic scoring engine that evaluates parsing reliability for each cause list</p>
+                <p className="text-sm text-gray-600"><strong>Components:</strong> Ingestion integrity (0-40), Parsing stability (0-30), Matching reliability (0-20), Historical consistency (0-10)</p>
+                <p className="text-sm text-gray-600"><strong>Levels:</strong> Excellent (≥90), Good (75-89), Degraded (50-74), Risky (25-49), Unsafe (&lt;25)</p>
+                <p className="text-sm text-gray-600"><strong>User Warning:</strong> Low confidence triggers visible warning banner on dashboard</p>
+              </div>
+
+              <div className="border-l-4 border-black pl-4">
+                <h3 className="font-bold text-black mb-2">Parser Fallback System</h3>
+                <p className="text-sm text-gray-600"><strong>What:</strong> Multi-level fallback mechanism when primary parsing fails or produces low confidence</p>
+                <p className="text-sm text-gray-600"><strong>Levels:</strong> Primary → Lenient mode (normalize whitespace/OCR) → Section-based parsing → Historical adapter</p>
+                <p className="text-sm text-gray-600"><strong>Trigger:</strong> Low confidence score, high ingestion errors, or zero cases on weekday</p>
+                <p className="text-sm text-gray-600"><strong>Logging:</strong> All fallback applications logged to parser_fallback_log for admin review</p>
+              </div>
+
+              <div className="border-l-4 border-black pl-4">
+                <h3 className="font-bold text-black mb-2">HTML Cause List Parsing</h3>
+                <p className="text-sm text-gray-600"><strong>What:</strong> Parses HTML cause lists in addition to PDFs for faster, more accurate extraction</p>
+                <p className="text-sm text-gray-600"><strong>Advantage:</strong> Structured HTML provides cleaner data than OCR-based PDF extraction</p>
+                <p className="text-sm text-gray-600"><strong>Features:</strong> Extracts execution policies, cause list notes, judge assignments, and structured case data</p>
+                <p className="text-sm text-gray-600"><strong>Fallback:</strong> If HTML parsing fails, falls back to PDF text extraction</p>
+              </div>
+
+              <div className="border-l-4 border-black pl-4">
+                <h3 className="font-bold text-black mb-2">Error Reporting System</h3>
+                <p className="text-sm text-gray-600"><strong>What:</strong> Centralized error logging for admin diagnostics without exposing user data</p>
+                <p className="text-sm text-gray-600"><strong>Domains:</strong> Ingestion, Parsing, Matching, Auth, Offline, Storage, Notification</p>
+                <p className="text-sm text-gray-600"><strong>Severity Levels:</strong> P0 (Critical), P1 (High), P2 (Warning)</p>
+                <p className="text-sm text-gray-600"><strong>Privacy:</strong> Messages sanitized to remove case numbers, names, and PII before logging</p>
+              </div>
+
+              <div className="border-l-4 border-black pl-4">
+                <h3 className="font-bold text-black mb-2">Case Type Resolution</h3>
+                <p className="text-sm text-gray-600"><strong>What:</strong> Deterministic mapping of case type abbreviations to full names and categories</p>
+                <p className="text-sm text-gray-600"><strong>Examples:</strong> CRL.A → Criminal Appeal, CWP → Civil Writ Petition, MACT → Motor Accident Claims Tribunal</p>
+                <p className="text-sm text-gray-600"><strong>Categories:</strong> Criminal, Civil, Tax, Motor Accident, Election, Matrimonial, Miscellaneous</p>
+                <p className="text-sm text-gray-600"><strong>Use Case:</strong> Enhanced search filtering and Indian Kanoon integration</p>
+              </div>
+
+              <div className="border-l-4 border-black pl-4">
+                <h3 className="font-bold text-black mb-2">Judgment Ranking Engine</h3>
+                <p className="text-sm text-gray-600"><strong>What:</strong> Scores and ranks judgment search results based on contextual relevance</p>
+                <p className="text-sm text-gray-600"><strong>Signals:</strong> Same judge (+15), Recent judgment (+10), Higher court (+12), Same case type (+8), Matching advocate (+8)</p>
+                <p className="text-sm text-gray-600"><strong>Output:</strong> Sorted results with signal badges showing why each judgment is relevant</p>
+              </div>
             </div>
           </section>
 
@@ -788,6 +851,8 @@ const ProductDossier = () => {
                   <li>Voice memos not transcribed automatically</li>
                   <li>No integration with e-filing systems</li>
                   <li>Chamber features limited to observation sharing (no case delegation yet)</li>
+                  <li>Hearing likelihood is advisory only — always verify with official cause list</li>
+                  <li>Parser confidence scoring is deterministic, not ML-based</li>
                 </ul>
               </div>
 
