@@ -273,7 +273,7 @@ serve(async (req) => {
     // Get causelists to scan
     let causelistQuery = supabase
       .from('raw_causelists')
-      .select('id, storage_path, text_content, extraction_progress, bench, list_type, list_date, page_count')
+      .select('id, storage_path, text_content, extraction_progress, bench, list_type, list_date, page_count, source_type, query_lawyer_name')
       .in('status', ['downloaded', 'notes_extracted', 'scanning', 'text_extracted', 'extracting'])
       .order('created_at', { ascending: true })
       .limit(1);
@@ -281,7 +281,7 @@ serve(async (req) => {
     if (body.causelist_id) {
       causelistQuery = supabase
         .from('raw_causelists')
-        .select('id, storage_path, text_content, extraction_progress, bench, list_type, list_date, page_count')
+        .select('id, storage_path, text_content, extraction_progress, bench, list_type, list_date, page_count, source_type, query_lawyer_name')
         .eq('id', body.causelist_id);
     }
 
@@ -331,6 +331,38 @@ serve(async (req) => {
 
     for (const causelist of causelists) {
       console.log(`[SCAN-LAWYER-NAMES] Processing causelist: ${causelist.id} (${causelist.bench} ${causelist.list_type})`);
+
+      // EARLY EXIT: Route HTML_SEARCH to deterministic parser (bypass all scanning logic)
+      if (causelist.source_type === 'HTML_SEARCH') {
+        console.log(`[SCAN-LAWYER-NAMES] HTML_SEARCH detected - routing to search-html-parse (bypassing alias scan)`);
+        
+        try {
+          const response = await fetch(`${supabaseUrl}/functions/v1/search-html-parse`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${supabaseServiceKey}`
+            },
+            body: JSON.stringify({
+              causelist_id: causelist.id,
+              profile_id: body.profile_id
+            })
+          });
+          
+          const result = await response.json();
+          console.log(`[SCAN-LAWYER-NAMES] search-html-parse result:`, result);
+          
+          if (result.success) {
+            console.log(`[SCAN-LAWYER-NAMES] HTML_SEARCH parsed directly: ${result.cases_inserted} cases inserted`);
+          } else {
+            console.error(`[SCAN-LAWYER-NAMES] HTML_SEARCH parse failed:`, result.error);
+          }
+        } catch (err) {
+          console.error(`[SCAN-LAWYER-NAMES] Failed to call search-html-parse:`, err);
+        }
+        
+        continue; // Skip all other processing for HTML_SEARCH
+      }
 
       const progress = causelist.extraction_progress as ExtractionProgress | null;
       let textContent = causelist.text_content;

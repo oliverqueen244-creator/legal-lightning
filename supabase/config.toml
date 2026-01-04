@@ -65,3 +65,6 @@ verify_jwt = true
 
 [functions.html-extract]
 verify_jwt = false
+
+[functions.search-html-parse]
+verify_jwt = false
