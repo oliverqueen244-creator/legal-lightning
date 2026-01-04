@@ -1771,10 +1771,12 @@ export type Database = {
           list_date: string
           list_type: string
           page_count: number | null
+          source: string | null
           status: string | null
           storage_path: string
           telegram_message_id: number | null
           text_content: string | null
+          uploaded_by: string | null
         }
         Insert: {
           bench: string
@@ -1786,10 +1788,12 @@ export type Database = {
           list_date: string
           list_type: string
           page_count?: number | null
+          source?: string | null
           status?: string | null
           storage_path: string
           telegram_message_id?: number | null
           text_content?: string | null
+          uploaded_by?: string | null
         }
         Update: {
           bench?: string
@@ -1801,10 +1805,12 @@ export type Database = {
           list_date?: string
           list_type?: string
           page_count?: number | null
+          source?: string | null
           status?: string | null
           storage_path?: string
           telegram_message_id?: number | null
           text_content?: string | null
+          uploaded_by?: string | null
         }
         Relationships: []
       }

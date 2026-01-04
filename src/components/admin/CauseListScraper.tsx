@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatDistanceToNow } from 'date-fns';
+import { CauseListUploader } from './CauseListUploader';
 
 interface ScraperLog {
   id: string;
@@ -131,6 +132,9 @@ export function CauseListScraper() {
 
   return (
     <div className="space-y-6">
+      {/* Direct Upload */}
+      <CauseListUploader />
+
       {/* Webhook Status Card */}
       <Card className="glass-card">
         <CardHeader>
