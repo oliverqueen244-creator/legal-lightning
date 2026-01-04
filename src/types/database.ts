@@ -18,6 +18,8 @@ export interface LawyerAlias {
   created_at: string;
 }
 
+export type HearingLikelihood = 'LIKELY' | 'CONDITIONAL' | 'LOW_PROBABILITY' | 'UNKNOWN';
+
 export interface DocketItem {
   id: string;
   date: string;
@@ -35,6 +37,26 @@ export interface DocketItem {
   force_active: boolean;
   judge_names: string | null;
   source_url: string | null;
+  created_at: string;
+  // Execution Policy / Hearing Likelihood fields
+  hearing_likelihood: HearingLikelihood | null;
+  likelihood_reason: string | null;
+  likelihood_derived_at: string | null;
+}
+
+export interface ExecutionPolicy {
+  id: string;
+  raw_causelist_id: string;
+  policy_text: string;
+  policy_scope: 'GLOBAL' | 'COURT' | 'BENCH' | 'UNKNOWN';
+  priority_rule: 'SUPPLEMENTARY_FIRST' | 'MAIN_ONLY' | 'TIME_BOUND' | 'UNSPECIFIED';
+  time_condition: 'IF_TIME_PERMITS' | 'FIXED_ORDER' | 'UNKNOWN';
+  authority_level: string;
+  confidence: number;
+  court_no: string | null;
+  bench: string | null;
+  source_page_number: number | null;
+  derived_at: string;
   created_at: string;
 }
 

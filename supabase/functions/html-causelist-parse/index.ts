@@ -18,8 +18,108 @@ interface ParsedCase {
   next_date: string | null;
 }
 
+interface ExtractedNote {
+  note_type: string;
+  note_text: string;
+  court_no?: string;
+}
+
+interface PolicyClassification {
+  policy_scope: 'GLOBAL' | 'COURT' | 'BENCH' | 'UNKNOWN';
+  priority_rule: 'SUPPLEMENTARY_FIRST' | 'MAIN_ONLY' | 'TIME_BOUND' | 'UNSPECIFIED';
+  time_condition: 'IF_TIME_PERMITS' | 'FIXED_ORDER' | 'UNKNOWN';
+  confidence: number;
+  court_no: string | null;
+}
+
 interface ParseRequest {
   causelist_id: string;
+}
+
+// NOTE patterns for HTML extraction
+const NOTE_PATTERNS = [
+  { pattern: /NOTE\s*[:\-]\s*([^\n<]+(?:\n(?![A-Z]{2,})[^\n<]+)*)/gi, type: 'NOTE' },
+  { pattern: /IMPORTANT\s*[:\-]\s*([^\n<]+(?:\n(?![A-Z]{2,})[^\n<]+)*)/gi, type: 'IMPORTANT' },
+  { pattern: /DIRECTION\s*[:\-]\s*([^\n<]+(?:\n(?![A-Z]{2,})[^\n<]+)*)/gi, type: 'DIRECTION' },
+  { pattern: /N\.B\.\s*[:\-]?\s*([^\n<]+(?:\n(?![A-Z]{2,})[^\n<]+)*)/gi, type: 'NOTE' },
+  { pattern: /SUPPLEMENTARY\s+(?:LIST|CAUSE\s*LIST)[:\-]?\s*([^\n<]+)/gi, type: 'SUPPLEMENTARY_NOTE' },
+];
+
+// Extract notes from HTML content
+function extractNotesFromHtml(html: string): ExtractedNote[] {
+  const notes: ExtractedNote[] = [];
+  const textContent = html.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ');
+  
+  for (const { pattern, type } of NOTE_PATTERNS) {
+    const matches = textContent.matchAll(pattern);
+    for (const match of matches) {
+      const noteText = match[1]?.trim();
+      if (noteText && noteText.length > 10 && noteText.length < 2000) {
+        // Try to detect court number in note
+        const courtMatch = noteText.match(/court\s*(?:no\.?|number)?\s*:?\s*(\d+)/i);
+        notes.push({
+          note_type: type,
+          note_text: noteText,
+          court_no: courtMatch?.[1] || undefined,
+        });
+      }
+    }
+  }
+  
+  return notes;
+}
+
+// Classify note into execution policy attributes
+function classifyPolicy(noteText: string, noteType: string): PolicyClassification {
+  const textLower = noteText.toLowerCase();
+  
+  let policy_scope: PolicyClassification['policy_scope'] = 'UNKNOWN';
+  let priority_rule: PolicyClassification['priority_rule'] = 'UNSPECIFIED';
+  let time_condition: PolicyClassification['time_condition'] = 'UNKNOWN';
+  let confidence = 0.8;
+  let court_no: string | null = null;
+  
+  // Detect scope
+  const courtMatch = noteText.match(/court\s*(?:no\.?|number)?\s*:?\s*(\d+)/i);
+  if (courtMatch) {
+    policy_scope = 'COURT';
+    court_no = courtMatch[1];
+    confidence = 0.9;
+  } else if (textLower.includes('all courts') || textLower.includes('all benches')) {
+    policy_scope = 'GLOBAL';
+    confidence = 0.95;
+  } else if (textLower.includes('bench') || textLower.includes('hon\'ble') || textLower.includes('justice')) {
+    policy_scope = 'BENCH';
+    confidence = 0.85;
+  }
+  
+  // Detect priority rule
+  if (textLower.includes('supplementary') && (textLower.includes('first') || textLower.includes('priority') || textLower.includes('before'))) {
+    priority_rule = 'SUPPLEMENTARY_FIRST';
+    confidence = Math.max(confidence, 0.9);
+  } else if (textLower.includes('main list only') || textLower.includes('daily list only')) {
+    priority_rule = 'MAIN_ONLY';
+    confidence = Math.max(confidence, 0.9);
+  } else if (textLower.includes('time bound') || textLower.includes('fixed time') || noteText.match(/\d{1,2}[:\.\s]?\d{2}\s*(?:am|pm|AM|PM)/)) {
+    priority_rule = 'TIME_BOUND';
+    confidence = Math.max(confidence, 0.85);
+  }
+  
+  // Detect time condition
+  if (textLower.includes('if time permits') || textLower.includes('time permitting') || textLower.includes('subject to time')) {
+    time_condition = 'IF_TIME_PERMITS';
+    confidence = Math.max(confidence, 0.95);
+  } else if (textLower.includes('fixed order') || textLower.includes('serial order') || textLower.includes('strict order')) {
+    time_condition = 'FIXED_ORDER';
+    confidence = Math.max(confidence, 0.9);
+  }
+  
+  // High confidence for IMPORTANT or DIRECTION types
+  if (noteType === 'IMPORTANT' || noteType === 'DIRECTION') {
+    confidence = Math.min(confidence + 0.05, 0.99);
+  }
+  
+  return { policy_scope, priority_rule, time_condition, confidence, court_no };
 }
 
 // Court name normalization map - built dynamically
@@ -441,6 +541,57 @@ Deno.serve(async (req) => {
       })
       .eq('id', causelist_id);
 
+    // STEP 2: Extract NOTEs and create execution policies
+    console.log('[HTML-CAUSELIST-PARSE] Extracting notes and creating execution policies...');
+    const extractedNotes = extractNotesFromHtml(htmlContent);
+    let policiesCreated = 0;
+    
+    if (extractedNotes.length > 0) {
+      // Insert notes into cause_list_notes
+      const notesToInsert = extractedNotes.map(note => ({
+        raw_causelist_id: causelist_id,
+        note_type: note.note_type,
+        note_text: note.note_text
+      }));
+
+      const { error: notesError } = await supabase
+        .from('cause_list_notes')
+        .insert(notesToInsert);
+
+      if (notesError) {
+        console.error('[HTML-CAUSELIST-PARSE] Failed to insert notes:', notesError);
+      } else {
+        console.log(`[HTML-CAUSELIST-PARSE] Inserted ${notesToInsert.length} notes`);
+      }
+
+      // Create execution policies from notes
+      const policiesToInsert = extractedNotes.map(note => {
+        const classification = classifyPolicy(note.note_text, note.note_type);
+        return {
+          raw_causelist_id: causelist_id,
+          policy_text: note.note_text,
+          policy_scope: classification.policy_scope,
+          priority_rule: classification.priority_rule,
+          time_condition: classification.time_condition,
+          confidence: classification.confidence,
+          court_no: classification.court_no || note.court_no || null,
+          bench: bench,
+          authority_level: 'JUDICIAL_NOTE',
+        };
+      });
+
+      const { error: policyError } = await supabase
+        .from('daily_execution_policies')
+        .insert(policiesToInsert);
+
+      if (policyError) {
+        console.error('[HTML-CAUSELIST-PARSE] Failed to insert execution policies:', policyError);
+      } else {
+        policiesCreated = policiesToInsert.length;
+        console.log(`[HTML-CAUSELIST-PARSE] Created ${policiesCreated} execution policies`);
+      }
+    }
+
     // Trigger post-processing lawyer matching
     try {
       console.log('[HTML-CAUSELIST-PARSE] Triggering post-processing alias matching...');
@@ -451,7 +602,17 @@ Deno.serve(async (req) => {
       console.log('[HTML-CAUSELIST-PARSE] Post-processing match deferred');
     }
 
-    console.log(`[HTML-CAUSELIST-PARSE] Complete: ${insertedCount} inserted, ${updatedCount} updated, ${skippedCount} skipped`);
+    // Trigger hearing likelihood derivation
+    try {
+      console.log('[HTML-CAUSELIST-PARSE] Triggering hearing likelihood derivation...');
+      await supabase.functions.invoke('derive-hearing-likelihood', {
+        body: { causelist_id }
+      });
+    } catch {
+      console.log('[HTML-CAUSELIST-PARSE] Hearing likelihood derivation deferred');
+    }
+
+    console.log(`[HTML-CAUSELIST-PARSE] Complete: ${insertedCount} inserted, ${updatedCount} updated, ${skippedCount} skipped, ${policiesCreated} policies`);
 
     return new Response(
       JSON.stringify({
@@ -461,6 +622,8 @@ Deno.serve(async (req) => {
         cases_updated: updatedCount,
         cases_skipped: skippedCount,
         courts_processed: courts.length,
+        notes_extracted: extractedNotes.length,
+        policies_created: policiesCreated,
         errors: errors.length > 0 ? errors : undefined,
         bench,
         list_date: listDate,
