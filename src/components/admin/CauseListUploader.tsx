@@ -27,6 +27,7 @@ export function CauseListUploader() {
   const [listType, setListType] = useState<string>('');
   const [listDate, setListDate] = useState<Date | undefined>(new Date());
   const [courtNo, setCourtNo] = useState<string>('');
+  const [queryLawyerName, setQueryLawyerName] = useState<string>('');
   const [uploadState, setUploadState] = useState<UploadState>({ status: 'idle' });
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
@@ -77,6 +78,9 @@ export function CauseListUploader() {
       if (courtNo) {
         formData.append('court_no', courtNo);
       }
+      if (queryLawyerName && listType === 'SEARCH') {
+        formData.append('query_lawyer_name', queryLawyerName);
+      }
 
       // Get auth token
       const { data: { session } } = await supabase.auth.getSession();
@@ -113,6 +117,7 @@ export function CauseListUploader() {
       setBench('');
       setListType('');
       setCourtNo('');
+      setQueryLawyerName('');
       
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Upload failed';
@@ -121,7 +126,7 @@ export function CauseListUploader() {
     }
   };
 
-  const isFormValid = file && bench && listType && listDate;
+  const isFormValid = file && bench && listType && listDate && (listType !== 'SEARCH' || queryLawyerName.trim());
 
   return (
     <Card>
@@ -203,6 +208,7 @@ export function CauseListUploader() {
               <SelectContent>
                 <SelectItem value="DAILY">Daily</SelectItem>
                 <SelectItem value="SUPPLEMENTARY">Supplementary</SelectItem>
+                <SelectItem value="SEARCH">Search Causelist (Lawyer-filtered)</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -242,6 +248,21 @@ export function CauseListUploader() {
             />
           </div>
         </div>
+
+        {/* Search Causelist - Lawyer Name Field */}
+        {listType === 'SEARCH' && (
+          <div className="space-y-2 p-4 bg-muted/50 rounded-lg border">
+            <Label>Lawyer Name for Search *</Label>
+            <Input
+              placeholder="e.g., RAMESH CHANDRA PUROHIT"
+              value={queryLawyerName}
+              onChange={(e) => setQueryLawyerName(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Enter the lawyer name used to filter this search causelist. Cases will be matched directly to their profile.
+            </p>
+          </div>
+        )}
 
         {/* Status Message */}
         {uploadState.status !== 'idle' && (

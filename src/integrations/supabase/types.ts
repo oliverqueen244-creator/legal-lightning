@@ -1771,7 +1771,11 @@ export type Database = {
           list_date: string
           list_type: string
           page_count: number | null
+          query_lawyer_name: string | null
           source: string | null
+          source_type:
+            | Database["public"]["Enums"]["causelist_source_type"]
+            | null
           status: string | null
           storage_path: string
           telegram_message_id: number | null
@@ -1788,7 +1792,11 @@ export type Database = {
           list_date: string
           list_type: string
           page_count?: number | null
+          query_lawyer_name?: string | null
           source?: string | null
+          source_type?:
+            | Database["public"]["Enums"]["causelist_source_type"]
+            | null
           status?: string | null
           storage_path: string
           telegram_message_id?: number | null
@@ -1805,7 +1813,11 @@ export type Database = {
           list_date?: string
           list_type?: string
           page_count?: number | null
+          query_lawyer_name?: string | null
           source?: string | null
+          source_type?:
+            | Database["public"]["Enums"]["causelist_source_type"]
+            | null
           status?: string | null
           storage_path?: string
           telegram_message_id?: number | null
@@ -2178,6 +2190,7 @@ export type Database = {
       audit_scope: "release" | "feature" | "full-system"
       audit_status: "pass" | "conditional" | "fail"
       board_status: "hearing" | "passover" | "lunch" | "adjourned"
+      causelist_source_type: "PDF" | "HTML_COMPLETE" | "HTML_SEARCH"
       chamber_role: "senior" | "junior" | "clerk"
       confidence_level: "excellent" | "good" | "degraded" | "risky" | "unsafe"
       document_format: "TYPED" | "SCANNED" | "HANDWRITTEN"
@@ -2353,6 +2366,7 @@ export const Constants = {
       audit_scope: ["release", "feature", "full-system"],
       audit_status: ["pass", "conditional", "fail"],
       board_status: ["hearing", "passover", "lunch", "adjourned"],
+      causelist_source_type: ["PDF", "HTML_COMPLETE", "HTML_SEARCH"],
       chamber_role: ["senior", "junior", "clerk"],
       confidence_level: ["excellent", "good", "degraded", "risky", "unsafe"],
       document_format: ["TYPED", "SCANNED", "HANDWRITTEN"],
