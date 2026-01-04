@@ -879,10 +879,28 @@ Deno.serve(async (req) => {
     
     const derivedPolicies = derivePoliciesInMemory(extractedNotes, causelist_id, bench);
     
+    // Fetch court metadata for judge name lookups
+    const { data: courtMetadata } = await supabase
+      .from('court_metadata')
+      .select('court_no, sitting_judges')
+      .eq('bench', bench);
+    
+    const judgesByCourtNo = new Map<string, string>();
+    if (courtMetadata) {
+      for (const cm of courtMetadata) {
+        judgesByCourtNo.set(cm.court_no, cm.sitting_judges);
+      }
+    }
+    console.log(`[PHASE-2] Loaded ${judgesByCourtNo.size} court->judge mappings from metadata`);
+    
     // Prepare docket records
     const docketRecords: DocketRecord[] = cases.map(caseData => {
       const courtNo = normalizeCourtNo(caseData.court_no);
-      const judgeNames = caseData.judge_names || extractJudgesFromHtml(htmlContent, courtNo);
+      // Try: parsed judge_names -> extract from HTML -> court_metadata lookup
+      const judgeNames = caseData.judge_names 
+        || extractJudgesFromHtml(htmlContent, courtNo)
+        || judgesByCourtNo.get(courtNo)
+        || null;
       
       return {
         court_location: bench,
