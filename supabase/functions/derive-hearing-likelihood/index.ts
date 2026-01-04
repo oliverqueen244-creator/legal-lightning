@@ -220,29 +220,44 @@ Deno.serve(async (req) => {
 
     console.log(`[DERIVE-LIKELIHOOD] Found ${policies?.length || 0} execution policies`);
 
-    // Get docket items to update
-    let docketQuery = supabase
-      .from('daily_court_docket')
-      .select('id, court_room_no, list_type, item_no, raw_causelist_id');
+    // Get docket items to update - paginate to handle >1000 items
+    const allDocketItems: DocketItem[] = [];
+    let offset = 0;
+    const PAGE_SIZE = 1000;
     
-    if (causelist_id) {
-      docketQuery = docketQuery.eq('raw_causelist_id', causelist_id);
-    } else if (date) {
-      docketQuery = docketQuery.eq('date', date);
-      if (bench) {
-        docketQuery = docketQuery.eq('court_location', bench);
+    while (true) {
+      let docketQuery = supabase
+        .from('daily_court_docket')
+        .select('id, court_room_no, list_type, item_no, raw_causelist_id')
+        .range(offset, offset + PAGE_SIZE - 1);
+      
+      if (causelist_id) {
+        docketQuery = docketQuery.eq('raw_causelist_id', causelist_id);
+      } else if (date) {
+        docketQuery = docketQuery.eq('date', date);
+        if (bench) {
+          docketQuery = docketQuery.eq('court_location', bench);
+        }
       }
+
+      const { data: docketItems, error: docketError } = await docketQuery;
+
+      if (docketError) {
+        throw new Error(`Failed to fetch docket items: ${docketError.message}`);
+      }
+
+      if (!docketItems || docketItems.length === 0) break;
+      
+      allDocketItems.push(...docketItems);
+      console.log(`[DERIVE-LIKELIHOOD] Fetched ${docketItems.length} items (total: ${allDocketItems.length})`);
+      
+      if (docketItems.length < PAGE_SIZE) break;
+      offset += PAGE_SIZE;
     }
 
-    const { data: docketItems, error: docketError } = await docketQuery;
+    console.log(`[DERIVE-LIKELIHOOD] Processing ${allDocketItems.length} docket items`);
 
-    if (docketError) {
-      throw new Error(`Failed to fetch docket items: ${docketError.message}`);
-    }
-
-    console.log(`[DERIVE-LIKELIHOOD] Processing ${docketItems?.length || 0} docket items`);
-
-    if (!docketItems || docketItems.length === 0) {
+    if (allDocketItems.length === 0) {
       return new Response(JSON.stringify({
         success: true,
         items_processed: 0,
@@ -254,7 +269,7 @@ Deno.serve(async (req) => {
 
     // Calculate total items per court for position-based logic
     const itemsPerCourt: Record<string, number> = {};
-    for (const item of docketItems) {
+    for (const item of allDocketItems) {
       const courtKey = item.court_room_no || 'UNKNOWN';
       itemsPerCourt[courtKey] = (itemsPerCourt[courtKey] || 0) + 1;
     }
@@ -265,10 +280,10 @@ Deno.serve(async (req) => {
 
     // Batch updates for efficiency
     const BATCH_SIZE = 50;
-    for (let i = 0; i < docketItems.length; i += BATCH_SIZE) {
-      const batch = docketItems.slice(i, i + BATCH_SIZE);
+    for (let i = 0; i < allDocketItems.length; i += BATCH_SIZE) {
+      const batch = allDocketItems.slice(i, i + BATCH_SIZE);
       
-      const updates = batch.map(item => {
+      const updates = batch.map((item: DocketItem) => {
         const totalInCourt = itemsPerCourt[item.court_room_no || 'UNKNOWN'] || 0;
         const result = deriveLikelihood(item, policies || [], totalInCourt);
         
@@ -281,7 +296,7 @@ Deno.serve(async (req) => {
       });
 
       // Update in parallel within batch
-      const updatePromises = updates.map(update =>
+      const updatePromises = updates.map((update: { id: string; hearing_likelihood: string; likelihood_reason: string; likelihood_derived_at: string }) =>
         supabase
           .from('daily_court_docket')
           .update({
@@ -309,7 +324,7 @@ Deno.serve(async (req) => {
 
     return new Response(JSON.stringify({
       success: true,
-      items_processed: docketItems.length,
+      items_processed: allDocketItems.length,
       items_updated: updatedCount,
       policies_applied: policies?.length || 0,
       errors: errors.length > 0 ? errors.slice(0, 10) : undefined
