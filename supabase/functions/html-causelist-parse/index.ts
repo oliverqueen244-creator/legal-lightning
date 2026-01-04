@@ -5,7 +5,15 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const BATCH_SIZE = 100;
+// Dynamic batch sizing: aim for ~20 batches, min 25, max 200 per batch
+function calculateBatchSize(totalRecords: number): number {
+  if (totalRecords <= 50) return totalRecords; // Single batch for small lists
+  if (totalRecords <= 200) return 50;
+  if (totalRecords <= 500) return 75;
+  if (totalRecords <= 1000) return 100;
+  if (totalRecords <= 2000) return 125;
+  return 150; // Large lists: 150 per batch
+}
 
 interface ParsedCase {
   court_no: string;
@@ -445,11 +453,13 @@ async function batchUpsertCases(
   let updated = 0;
   const errors: string[] = [];
   
-  const totalBatches = Math.ceil(records.length / BATCH_SIZE);
+  const batchSize = calculateBatchSize(records.length);
+  const totalBatches = Math.ceil(records.length / batchSize);
+  console.log(`[PHASE-3] Dynamic batch size: ${batchSize} (${totalBatches} batches for ${records.length} cases)`);
   
   for (let batchNum = 0; batchNum < totalBatches; batchNum++) {
-    const start = batchNum * BATCH_SIZE;
-    const end = Math.min(start + BATCH_SIZE, records.length);
+    const start = batchNum * batchSize;
+    const end = Math.min(start + batchSize, records.length);
     const batch = records.slice(start, end);
     
     console.log(`[PHASE-3] Processing batch ${batchNum + 1}/${totalBatches} (${batch.length} cases)`);
@@ -538,11 +548,12 @@ async function batchInsertPolicies(
   
   if (policies.length === 0) return { inserted, errors };
   
-  const totalBatches = Math.ceil(policies.length / BATCH_SIZE);
+  const batchSize = calculateBatchSize(policies.length);
+  const totalBatches = Math.ceil(policies.length / batchSize);
   
   for (let batchNum = 0; batchNum < totalBatches; batchNum++) {
-    const start = batchNum * BATCH_SIZE;
-    const end = Math.min(start + BATCH_SIZE, policies.length);
+    const start = batchNum * batchSize;
+    const end = Math.min(start + batchSize, policies.length);
     const batch = policies.slice(start, end);
     
     console.log(`[PHASE-3] Inserting policy batch ${batchNum + 1}/${totalBatches} (${batch.length} policies)`);
