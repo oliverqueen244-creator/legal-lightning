@@ -6,23 +6,24 @@ import { CheckCircle2, Loader2, Clock } from 'lucide-react';
 
 interface CaselistStatusWidgetProps {
   bench?: string;
+  selectedDate?: string;
 }
 
 /**
  * User-facing abstracted status widget
- * Shows outcome-only information - no internal mechanics exposed
+ * Shows outcome-only information based on selected date
  */
-export function CaselistStatusWidget({ bench }: CaselistStatusWidgetProps) {
-  // Fetch today's causelist processing status (abstracted)
+export function CaselistStatusWidget({ bench, selectedDate }: CaselistStatusWidgetProps) {
   const { data: status } = useQuery({
-    queryKey: ['causelist-status', bench],
+    queryKey: ['causelist-status', bench, selectedDate],
     queryFn: async () => {
-      const today = new Date().toISOString().split('T')[0];
+      // Use selected date or today
+      const targetDate = selectedDate || new Date().toISOString().split('T')[0];
       
       let query = supabase
         .from('raw_causelists')
         .select('status')
-        .eq('list_date', today);
+        .eq('list_date', targetDate);
 
       if (bench) {
         const benches = bench.split(',').map(b => b.trim().toUpperCase());
@@ -40,14 +41,18 @@ export function CaselistStatusWidget({ bench }: CaselistStatusWidgetProps) {
         return 'waiting';
       }
       
-      const allDone = data.every(cl => cl.status === 'parsed' || cl.status === 'done');
-      const anyProcessing = data.some(cl => cl.status === 'processing' || cl.status === 'extracting');
+      const allDone = data.every(cl => 
+        cl.status === 'parsed' || cl.status === 'parsed_complete' || cl.status === 'done'
+      );
+      const anyProcessing = data.some(cl => 
+        cl.status === 'processing' || cl.status === 'extracting' || cl.status === 'pending'
+      );
       
       if (allDone) return 'ready';
       if (anyProcessing) return 'updating';
       return 'waiting';
     },
-    refetchInterval: 30000, // Refresh every 30 seconds
+    refetchInterval: 30000,
   });
 
   const getStatusDisplay = () => {
@@ -57,21 +62,21 @@ export function CaselistStatusWidget({ bench }: CaselistStatusWidgetProps) {
           icon: CheckCircle2,
           text: 'Cases up to date',
           badge: <Badge className="bg-court-success/20 text-court-success border-court-success/30 text-xs">Ready</Badge>,
-          description: "Today's cases are available"
+          description: "Cases are available"
         };
       case 'updating':
         return {
           icon: Loader2,
           text: 'Updating cases',
-          badge: <Badge className="bg-primary/20 text-primary border-primary/30 text-xs animate-pulse">Updating</Badge>,
-          description: 'Your cases are being refreshed'
+          badge: <Badge className="bg-primary/20 text-primary border-primary/30 text-xs animate-pulse">Processing</Badge>,
+          description: 'Cases are being processed'
         };
       default:
         return {
           icon: Clock,
-          text: 'Waiting for data',
-          badge: <Badge variant="secondary" className="text-xs">Waiting</Badge>,
-          description: 'Causelist not yet available'
+          text: 'No data',
+          badge: <Badge variant="secondary" className="text-xs">No Data</Badge>,
+          description: 'No causelist for this date'
         };
     }
   };
