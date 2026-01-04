@@ -65,7 +65,7 @@ export function CauseListUploader() {
       return;
     }
 
-    setUploadState({ status: 'uploading', message: 'Uploading file...' });
+    setUploadState({ status: 'uploading', message: 'Uploading file to storage...' });
 
     try {
       // Create form data
@@ -84,35 +84,62 @@ export function CauseListUploader() {
         throw new Error('Not authenticated');
       }
 
-      // Call edge function
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/upload-causelist`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${session.access_token}`,
-          },
-          body: formData,
+      setUploadState({ status: 'uploading', message: 'Processing upload (this may take 30-60 seconds)...' });
+
+      // Create AbortController with 2 minute timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 minutes
+
+      try {
+        // Call edge function with extended timeout
+        const response = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/upload-causelist`,
+          {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${session.access_token}`,
+            },
+            body: formData,
+            signal: controller.signal,
+          }
+        );
+
+        clearTimeout(timeoutId);
+
+        const result = await response.json();
+
+        if (!response.ok) {
+          throw new Error(result.error || 'Upload failed');
         }
-      );
 
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Upload failed');
+        setUploadState({ 
+          status: 'success', 
+          message: `Uploaded! ID: ${result.causelist_id} | Format: ${result.input_format} | Status: ${result.status}` 
+        });
+        toast.success(`Causelist uploaded (${result.input_format}). Parsing will continue in background.`);
+        
+        // Reset form
+        setFile(null);
+        setBench('');
+        setListType('');
+        setCourtNo('');
+      } catch (fetchError) {
+        clearTimeout(timeoutId);
+        if (fetchError instanceof Error && fetchError.name === 'AbortError') {
+          // Timeout - but upload might still be processing
+          setUploadState({ 
+            status: 'success', 
+            message: 'Upload sent! Processing continues in background. Check raw_causelists table for status.' 
+          });
+          toast.info('Upload sent. Large files may take time to process in background.');
+          setFile(null);
+          setBench('');
+          setListType('');
+          setCourtNo('');
+        } else {
+          throw fetchError;
+        }
       }
-
-      setUploadState({ 
-        status: 'success', 
-        message: `Causelist uploaded successfully. ID: ${result.causelist_id}` 
-      });
-      toast.success('Causelist uploaded and queued for processing');
-      
-      // Reset form
-      setFile(null);
-      setBench('');
-      setListType('');
-      setCourtNo('');
       
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Upload failed';
