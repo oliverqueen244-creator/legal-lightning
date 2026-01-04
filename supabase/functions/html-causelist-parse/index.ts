@@ -5,6 +5,8 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+const BATCH_SIZE = 100;
+
 interface ParsedCase {
   court_no: string;
   case_number: string;
@@ -32,6 +34,38 @@ interface PolicyClassification {
   court_no: string | null;
 }
 
+interface DerivedPolicy {
+  raw_causelist_id: string;
+  policy_text: string;
+  policy_scope: string;
+  priority_rule: string;
+  time_condition: string;
+  confidence: number;
+  court_no: string | null;
+  bench: string;
+  authority_level: string;
+}
+
+interface DocketRecord {
+  court_location: string;
+  court_room_no: string;
+  case_number: string;
+  date: string;
+  item_no: number | null;
+  petitioner: string | null;
+  respondent: string | null;
+  petitioner_lawyer: string | null;
+  respondent_lawyer: string | null;
+  judge_names: string | null;
+  list_type: string;
+  status: string;
+  origin: string;
+  confidence_source: string;
+  structure_confidence: number;
+  raw_causelist_id: string;
+  source_url: string;
+}
+
 interface ParseRequest {
   causelist_id: string;
 }
@@ -43,19 +77,24 @@ const NOTE_PATTERNS = [
   { pattern: /DIRECTION\s*[:\-]\s*([^\n<]+(?:\n(?![A-Z]{2,})[^\n<]+)*)/gi, type: 'DIRECTION' },
   { pattern: /N\.B\.\s*[:\-]?\s*([^\n<]+(?:\n(?![A-Z]{2,})[^\n<]+)*)/gi, type: 'NOTE' },
   { pattern: /SUPPLEMENTARY\s+(?:LIST|CAUSE\s*LIST)[:\-]?\s*([^\n<]+)/gi, type: 'SUPPLEMENTARY_NOTE' },
+  { pattern: /(?:subject\s+to|if\s+time\s+permits|time\s+permitting)[^\.]*\./gi, type: 'TIME_CONDITION' },
 ];
 
-// Extract notes from HTML content
+// =============================================================================
+// PHASE 1: PARSING FUNCTIONS (In-Memory Only)
+// =============================================================================
+
+// Extract notes from HTML content - PURE FUNCTION, NO DB
 function extractNotesFromHtml(html: string): ExtractedNote[] {
   const notes: ExtractedNote[] = [];
   const textContent = html.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ');
   
   for (const { pattern, type } of NOTE_PATTERNS) {
-    const matches = textContent.matchAll(pattern);
+    const regex = new RegExp(pattern.source, pattern.flags);
+    const matches = textContent.matchAll(regex);
     for (const match of matches) {
-      const noteText = match[1]?.trim();
+      const noteText = match[1]?.trim() || match[0]?.trim();
       if (noteText && noteText.length > 10 && noteText.length < 2000) {
-        // Try to detect court number in note
         const courtMatch = noteText.match(/court\s*(?:no\.?|number)?\s*:?\s*(\d+)/i);
         notes.push({
           note_type: type,
@@ -66,63 +105,17 @@ function extractNotesFromHtml(html: string): ExtractedNote[] {
     }
   }
   
-  return notes;
+  // Deduplicate notes by text
+  const seen = new Set<string>();
+  return notes.filter(note => {
+    const key = note.note_text.toLowerCase().trim();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
-// Classify note into execution policy attributes
-function classifyPolicy(noteText: string, noteType: string): PolicyClassification {
-  const textLower = noteText.toLowerCase();
-  
-  let policy_scope: PolicyClassification['policy_scope'] = 'UNKNOWN';
-  let priority_rule: PolicyClassification['priority_rule'] = 'UNSPECIFIED';
-  let time_condition: PolicyClassification['time_condition'] = 'UNKNOWN';
-  let confidence = 0.8;
-  let court_no: string | null = null;
-  
-  // Detect scope
-  const courtMatch = noteText.match(/court\s*(?:no\.?|number)?\s*:?\s*(\d+)/i);
-  if (courtMatch) {
-    policy_scope = 'COURT';
-    court_no = courtMatch[1];
-    confidence = 0.9;
-  } else if (textLower.includes('all courts') || textLower.includes('all benches')) {
-    policy_scope = 'GLOBAL';
-    confidence = 0.95;
-  } else if (textLower.includes('bench') || textLower.includes('hon\'ble') || textLower.includes('justice')) {
-    policy_scope = 'BENCH';
-    confidence = 0.85;
-  }
-  
-  // Detect priority rule
-  if (textLower.includes('supplementary') && (textLower.includes('first') || textLower.includes('priority') || textLower.includes('before'))) {
-    priority_rule = 'SUPPLEMENTARY_FIRST';
-    confidence = Math.max(confidence, 0.9);
-  } else if (textLower.includes('main list only') || textLower.includes('daily list only')) {
-    priority_rule = 'MAIN_ONLY';
-    confidence = Math.max(confidence, 0.9);
-  } else if (textLower.includes('time bound') || textLower.includes('fixed time') || noteText.match(/\d{1,2}[:\.\s]?\d{2}\s*(?:am|pm|AM|PM)/)) {
-    priority_rule = 'TIME_BOUND';
-    confidence = Math.max(confidence, 0.85);
-  }
-  
-  // Detect time condition
-  if (textLower.includes('if time permits') || textLower.includes('time permitting') || textLower.includes('subject to time')) {
-    time_condition = 'IF_TIME_PERMITS';
-    confidence = Math.max(confidence, 0.95);
-  } else if (textLower.includes('fixed order') || textLower.includes('serial order') || textLower.includes('strict order')) {
-    time_condition = 'FIXED_ORDER';
-    confidence = Math.max(confidence, 0.9);
-  }
-  
-  // High confidence for IMPORTANT or DIRECTION types
-  if (noteType === 'IMPORTANT' || noteType === 'DIRECTION') {
-    confidence = Math.min(confidence + 0.05, 0.99);
-  }
-  
-  return { policy_scope, priority_rule, time_condition, confidence, court_no };
-}
-
-// Court name normalization map - built dynamically
+// Court name normalization map
 const COURT_NORMALIZATION_MAP: Record<string, string> = {};
 for (let i = 1; i <= 30; i++) {
   COURT_NORMALIZATION_MAP[`court no. ${i}`] = String(i);
@@ -134,26 +127,18 @@ for (let i = 1; i <= 30; i++) {
 
 function normalizeCourtNo(courtText: string): string {
   const lower = courtText.toLowerCase().trim();
-  
   if (COURT_NORMALIZATION_MAP[lower]) {
     return COURT_NORMALIZATION_MAP[lower];
   }
-  
   const match = lower.match(/(\d+)/);
-  if (match) {
-    return match[1];
-  }
-  
-  console.log(`[COURT-NORM] Could not normalize court: "${courtText}"`);
-  return courtText;
+  return match ? match[1] : courtText;
 }
 
-// Extract all case rows from HTML - handles various table structures
+// Extract all case rows from HTML - PURE FUNCTION, NO DB
 function parseHtmlCauselist(html: string): { cases: ParsedCase[]; courts: string[] } {
   const cases: ParsedCase[] = [];
   const courtsFound = new Set<string>();
   
-  // Pattern to find court blocks
   const courtBlockPattern = /Court\s*No\.?\s*:?\s*(\d+)/gi;
   const courtMarkers: { index: number; courtNo: string }[] = [];
   
@@ -163,7 +148,7 @@ function parseHtmlCauselist(html: string): { cases: ParsedCase[]; courts: string
     courtsFound.add(match[1]);
   }
   
-  console.log(`[HTML-PARSE] Found ${courtMarkers.length} court markers: ${[...courtsFound].join(', ')}`);
+  console.log(`[PHASE-1] Found ${courtMarkers.length} court markers: ${[...courtsFound].join(', ')}`);
   
   if (courtMarkers.length === 0) {
     const singleCourtCases = extractCasesFromSection(html, '1');
@@ -177,8 +162,6 @@ function parseHtmlCauselist(html: string): { cases: ParsedCase[]; courts: string
       
       const sectionCases = extractCasesFromSection(courtSection, courtNo);
       cases.push(...sectionCases);
-      
-      console.log(`[HTML-PARSE] Court ${courtNo}: ${sectionCases.length} cases`);
     }
   }
   
@@ -283,7 +266,7 @@ function extractCasesFromSection(html: string, courtNo: string): ParsedCase[] {
       }
     }
     
-    // Extract lawyers as raw text (ALL mentioned lawyers)
+    // Extract lawyers
     for (const cell of cells) {
       const petLawyerMatches = cell.match(/([A-Z][A-Za-z\s\.]+)\s*-\s*P(?:\b|$)/gi);
       if (petLawyerMatches && petLawyerMatches.length > 0) {
@@ -372,10 +355,266 @@ function extractJudgesFromHtml(html: string, courtNo: string): string | null {
   return null;
 }
 
+// =============================================================================
+// PHASE 2: POLICY DERIVATION (In-Memory Only)
+// =============================================================================
+
+function classifyPolicy(noteText: string, noteType: string): PolicyClassification {
+  const textLower = noteText.toLowerCase();
+  
+  let policy_scope: PolicyClassification['policy_scope'] = 'UNKNOWN';
+  let priority_rule: PolicyClassification['priority_rule'] = 'UNSPECIFIED';
+  let time_condition: PolicyClassification['time_condition'] = 'UNKNOWN';
+  let confidence = 0.8;
+  let court_no: string | null = null;
+  
+  // Detect scope
+  const courtMatch = noteText.match(/court\s*(?:no\.?|number)?\s*:?\s*(\d+)/i);
+  if (courtMatch) {
+    policy_scope = 'COURT';
+    court_no = courtMatch[1];
+    confidence = 0.9;
+  } else if (textLower.includes('all courts') || textLower.includes('all benches')) {
+    policy_scope = 'GLOBAL';
+    confidence = 0.95;
+  } else if (textLower.includes('bench') || textLower.includes('hon\'ble') || textLower.includes('justice')) {
+    policy_scope = 'BENCH';
+    confidence = 0.85;
+  }
+  
+  // Detect priority rule
+  if (textLower.includes('supplementary') && (textLower.includes('first') || textLower.includes('priority') || textLower.includes('before'))) {
+    priority_rule = 'SUPPLEMENTARY_FIRST';
+    confidence = Math.max(confidence, 0.9);
+  } else if (textLower.includes('main list only') || textLower.includes('daily list only')) {
+    priority_rule = 'MAIN_ONLY';
+    confidence = Math.max(confidence, 0.9);
+  } else if (textLower.includes('time bound') || textLower.includes('fixed time') || noteText.match(/\d{1,2}[:\.\s]?\d{2}\s*(?:am|pm|AM|PM)/)) {
+    priority_rule = 'TIME_BOUND';
+    confidence = Math.max(confidence, 0.85);
+  }
+  
+  // Detect time condition
+  if (textLower.includes('if time permits') || textLower.includes('time permitting') || textLower.includes('subject to time') || textLower.includes('subject to availability')) {
+    time_condition = 'IF_TIME_PERMITS';
+    confidence = Math.max(confidence, 0.95);
+  } else if (textLower.includes('fixed order') || textLower.includes('serial order') || textLower.includes('strict order')) {
+    time_condition = 'FIXED_ORDER';
+    confidence = Math.max(confidence, 0.9);
+  }
+  
+  // High confidence for IMPORTANT or DIRECTION types
+  if (noteType === 'IMPORTANT' || noteType === 'DIRECTION') {
+    confidence = Math.min(confidence + 0.05, 0.99);
+  }
+  
+  return { policy_scope, priority_rule, time_condition, confidence, court_no };
+}
+
+function derivePoliciesInMemory(
+  notes: ExtractedNote[],
+  causelistId: string,
+  bench: string
+): DerivedPolicy[] {
+  return notes.map(note => {
+    const classification = classifyPolicy(note.note_text, note.note_type);
+    return {
+      raw_causelist_id: causelistId,
+      policy_text: note.note_text,
+      policy_scope: classification.policy_scope,
+      priority_rule: classification.priority_rule,
+      time_condition: classification.time_condition,
+      confidence: classification.confidence,
+      court_no: classification.court_no || note.court_no || null,
+      bench: bench,
+      authority_level: 'JUDICIAL_NOTE',
+    };
+  });
+}
+
+// =============================================================================
+// PHASE 3: BATCH PERSISTENCE
+// =============================================================================
+
+// deno-lint-ignore no-explicit-any
+async function batchUpsertCases(
+  supabase: any,
+  records: DocketRecord[]
+): Promise<{ inserted: number; updated: number; errors: string[] }> {
+  let inserted = 0;
+  let updated = 0;
+  const errors: string[] = [];
+  
+  const totalBatches = Math.ceil(records.length / BATCH_SIZE);
+  
+  for (let batchNum = 0; batchNum < totalBatches; batchNum++) {
+    const start = batchNum * BATCH_SIZE;
+    const end = Math.min(start + BATCH_SIZE, records.length);
+    const batch = records.slice(start, end);
+    
+    console.log(`[PHASE-3] Processing batch ${batchNum + 1}/${totalBatches} (${batch.length} cases)`);
+    
+    try {
+      // Use upsert with ON CONFLICT for efficiency
+      const { data, error } = await supabase
+        .from('daily_court_docket')
+        .upsert(batch, {
+          onConflict: 'court_location,court_room_no,case_number,date',
+          ignoreDuplicates: false,
+        })
+        .select('id');
+      
+      if (error) {
+        // Fallback: batch may fail due to missing unique constraint, try individual inserts
+        console.log(`[PHASE-3] Batch upsert failed, falling back to individual inserts: ${error.message}`);
+        
+        for (const record of batch) {
+          // Check for existing record
+          const { data: existing } = await supabase
+            .from('daily_court_docket')
+            .select('id, origin, structure_confidence')
+            .eq('court_location', record.court_location)
+            .eq('court_room_no', record.court_room_no)
+            .eq('case_number', record.case_number)
+            .eq('date', record.date)
+            .limit(1)
+            .maybeSingle();
+          
+          if (existing) {
+            // Update if HTML has higher priority
+            if (existing.origin === 'PDF' || (existing.structure_confidence || 0) < 0.9) {
+              const { error: updateError } = await supabase
+                .from('daily_court_docket')
+                .update({
+                  petitioner: record.petitioner,
+                  respondent: record.respondent,
+                  petitioner_lawyer: record.petitioner_lawyer,
+                  respondent_lawyer: record.respondent_lawyer,
+                  judge_names: record.judge_names,
+                  item_no: record.item_no,
+                  origin: record.origin,
+                  confidence_source: record.confidence_source,
+                  structure_confidence: record.structure_confidence,
+                  raw_causelist_id: record.raw_causelist_id,
+                })
+                .eq('id', existing.id);
+              
+              if (!updateError) updated++;
+              else errors.push(`Update ${record.case_number}: ${updateError.message}`);
+            }
+          } else {
+            // Insert new record
+            const { error: insertError } = await supabase
+              .from('daily_court_docket')
+              .insert(record);
+            
+            if (!insertError) inserted++;
+            else if (!insertError.message.includes('duplicate')) {
+              errors.push(`Insert ${record.case_number}: ${insertError.message}`);
+            }
+          }
+        }
+      } else {
+        inserted += data?.length || batch.length;
+        console.log(`[PHASE-3] Batch ${batchNum + 1} success: ${data?.length || batch.length} records`);
+      }
+    } catch (batchError) {
+      const errorMsg = batchError instanceof Error ? batchError.message : 'Unknown error';
+      console.error(`[PHASE-3] Batch ${batchNum + 1} error:`, errorMsg);
+      errors.push(`Batch ${batchNum + 1}: ${errorMsg}`);
+    }
+  }
+  
+  return { inserted, updated, errors };
+}
+
+// deno-lint-ignore no-explicit-any
+async function batchInsertPolicies(
+  supabase: any,
+  policies: DerivedPolicy[]
+): Promise<{ inserted: number; errors: string[] }> {
+  let inserted = 0;
+  const errors: string[] = [];
+  
+  if (policies.length === 0) return { inserted, errors };
+  
+  const totalBatches = Math.ceil(policies.length / BATCH_SIZE);
+  
+  for (let batchNum = 0; batchNum < totalBatches; batchNum++) {
+    const start = batchNum * BATCH_SIZE;
+    const end = Math.min(start + BATCH_SIZE, policies.length);
+    const batch = policies.slice(start, end);
+    
+    console.log(`[PHASE-3] Inserting policy batch ${batchNum + 1}/${totalBatches} (${batch.length} policies)`);
+    
+    try {
+      const { data, error } = await supabase
+        .from('daily_execution_policies')
+        .insert(batch)
+        .select('id');
+      
+      if (error) {
+        console.error(`[PHASE-3] Policy batch ${batchNum + 1} error:`, error.message);
+        errors.push(`Policy batch ${batchNum + 1}: ${error.message}`);
+      } else {
+        inserted += data?.length || batch.length;
+        console.log(`[PHASE-3] Policy batch ${batchNum + 1} success: ${data?.length || batch.length} policies`);
+      }
+    } catch (batchError) {
+      const errorMsg = batchError instanceof Error ? batchError.message : 'Unknown error';
+      errors.push(`Policy batch ${batchNum + 1}: ${errorMsg}`);
+    }
+  }
+  
+  return { inserted, errors };
+}
+
+// deno-lint-ignore no-explicit-any
+async function batchInsertNotes(
+  supabase: any,
+  notes: ExtractedNote[],
+  causelistId: string
+): Promise<{ inserted: number; errors: string[] }> {
+  let inserted = 0;
+  const errors: string[] = [];
+  
+  if (notes.length === 0) return { inserted, errors };
+  
+  const notesToInsert = notes.map(note => ({
+    raw_causelist_id: causelistId,
+    note_type: note.note_type,
+    note_text: note.note_text,
+  }));
+  
+  try {
+    const { data, error } = await supabase
+      .from('cause_list_notes')
+      .insert(notesToInsert)
+      .select('id');
+    
+    if (error) {
+      errors.push(`Notes insert: ${error.message}`);
+    } else {
+      inserted = data?.length || notesToInsert.length;
+    }
+  } catch (e) {
+    const errorMsg = e instanceof Error ? e.message : 'Unknown error';
+    errors.push(`Notes insert: ${errorMsg}`);
+  }
+  
+  return { inserted, errors };
+}
+
+// =============================================================================
+// MAIN HANDLER
+// =============================================================================
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
+
+  const startTime = Date.now();
 
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -391,8 +630,9 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log(`[HTML-CAUSELIST-PARSE] Processing causelist: ${causelist_id}`);
+    console.log(`[HTML-CAUSELIST-PARSE] Starting 4-phase processing for: ${causelist_id}`);
 
+    // Fetch causelist
     const { data: causelist, error: fetchError } = await supabase
       .from('raw_causelists')
       .select('*')
@@ -432,10 +672,19 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Parse ALL cases from HTML unconditionally
-    const { cases, courts } = parseHtmlCauselist(htmlContent);
+    const bench = causelist.bench || detectBenchFromHtml(htmlContent);
+    const listDate = causelist.list_date || extractDateFromHtml(htmlContent);
+
+    // =========================================================================
+    // PHASE 1: PARSE EVERYTHING IN MEMORY
+    // =========================================================================
+    console.log('[PHASE-1] Parsing HTML content in memory...');
+    const phase1Start = Date.now();
     
-    console.log(`[HTML-CAUSELIST-PARSE] Parsed ${cases.length} cases from ${courts.length} courts`);
+    const { cases, courts } = parseHtmlCauselist(htmlContent);
+    const extractedNotes = extractNotesFromHtml(htmlContent);
+    
+    console.log(`[PHASE-1] Complete: ${cases.length} cases, ${courts.length} courts, ${extractedNotes.length} notes (${Date.now() - phase1Start}ms)`);
 
     if (cases.length === 0) {
       await supabase
@@ -449,88 +698,61 @@ Deno.serve(async (req) => {
       );
     }
 
-    const bench = causelist.bench || detectBenchFromHtml(htmlContent);
-    const listDate = causelist.list_date || extractDateFromHtml(htmlContent);
-
-    // Insert ALL cases unconditionally - NO lawyer matching gate
-    let insertedCount = 0;
-    let updatedCount = 0;
-    let skippedCount = 0;
-    const errors: string[] = [];
-
-    for (const caseData of cases) {
+    // =========================================================================
+    // PHASE 2: DERIVE POLICIES IN MEMORY
+    // =========================================================================
+    console.log('[PHASE-2] Deriving execution policies in memory...');
+    const phase2Start = Date.now();
+    
+    const derivedPolicies = derivePoliciesInMemory(extractedNotes, causelist_id, bench);
+    
+    // Prepare docket records
+    const docketRecords: DocketRecord[] = cases.map(caseData => {
       const courtNo = normalizeCourtNo(caseData.court_no);
       const judgeNames = caseData.judge_names || extractJudgesFromHtml(htmlContent, courtNo);
       
-      // Deduplication check
-      const { data: existing } = await supabase
-        .from('daily_court_docket')
-        .select('id, origin, structure_confidence')
-        .eq('court_location', bench)
-        .eq('court_room_no', courtNo)
-        .eq('case_number', caseData.case_number)
-        .eq('date', listDate)
-        .limit(1)
-        .single();
+      return {
+        court_location: bench,
+        court_room_no: courtNo,
+        case_number: caseData.case_number,
+        date: listDate,
+        item_no: caseData.item_no,
+        petitioner: caseData.petitioner,
+        respondent: caseData.respondent,
+        petitioner_lawyer: caseData.petitioner_lawyer,
+        respondent_lawyer: caseData.respondent_lawyer,
+        judge_names: judgeNames,
+        list_type: 'DAILY',
+        status: 'pending',
+        origin: 'HTML_FULL_CAUSELIST',
+        confidence_source: 'court_structure',
+        structure_confidence: 0.9,
+        raw_causelist_id: causelist_id,
+        source_url: `html:${causelist_id}`,
+      };
+    });
+    
+    console.log(`[PHASE-2] Complete: ${derivedPolicies.length} policies derived (${Date.now() - phase2Start}ms)`);
 
-      if (existing) {
-        // HTML has priority over PDF - update if lower confidence
-        if (existing.origin === 'PDF' || (existing.structure_confidence || 0) < 0.9) {
-          const { error: updateError } = await supabase
-            .from('daily_court_docket')
-            .update({
-              petitioner: caseData.petitioner || undefined,
-              respondent: caseData.respondent || undefined,
-              petitioner_lawyer: caseData.petitioner_lawyer || undefined,
-              respondent_lawyer: caseData.respondent_lawyer || undefined,
-              judge_names: judgeNames || undefined,
-              item_no: caseData.item_no || undefined,
-              origin: 'HTML_FULL_CAUSELIST',
-              confidence_source: 'court_structure',
-              structure_confidence: 0.9,
-              raw_causelist_id: causelist_id,
-            })
-            .eq('id', existing.id);
-          
-          if (!updateError) updatedCount++;
-          else errors.push(`Update ${caseData.case_number}: ${updateError.message}`);
-        } else {
-          skippedCount++;
-        }
-        continue;
-      }
-
-      // Insert new case - NO matched_profile_id (matching happens post-processing)
-      const { error: insertError } = await supabase
-        .from('daily_court_docket')
-        .insert({
-          court_location: bench,
-          court_room_no: courtNo,
-          case_number: caseData.case_number,
-          date: listDate,
-          item_no: caseData.item_no,
-          petitioner: caseData.petitioner,
-          respondent: caseData.respondent,
-          petitioner_lawyer: caseData.petitioner_lawyer,
-          respondent_lawyer: caseData.respondent_lawyer,
-          judge_names: judgeNames,
-          list_type: 'DAILY',
-          status: 'pending',
-          origin: 'HTML_FULL_CAUSELIST',
-          confidence_source: 'court_structure',
-          structure_confidence: 0.9,
-          raw_causelist_id: causelist_id,
-          source_url: `html:${causelist_id}`,
-        });
-
-      if (insertError) {
-        errors.push(`${caseData.case_number}: ${insertError.message}`);
-      } else {
-        insertedCount++;
-      }
-    }
-
-    // Update causelist metadata
+    // =========================================================================
+    // PHASE 3: BATCH PERSISTENCE
+    // =========================================================================
+    console.log('[PHASE-3] Starting batch persistence...');
+    const phase3Start = Date.now();
+    
+    // Insert notes first (small batch)
+    const notesResult = await batchInsertNotes(supabase, extractedNotes, causelist_id);
+    console.log(`[PHASE-3] Notes: ${notesResult.inserted} inserted`);
+    
+    // Insert policies
+    const policiesResult = await batchInsertPolicies(supabase, derivedPolicies);
+    console.log(`[PHASE-3] Policies: ${policiesResult.inserted} inserted`);
+    
+    // Insert/upsert cases in batches
+    const casesResult = await batchUpsertCases(supabase, docketRecords);
+    console.log(`[PHASE-3] Cases: ${casesResult.inserted} inserted, ${casesResult.updated} updated`);
+    
+    // Update causelist status
     await supabase
       .from('raw_causelists')
       .update({ 
@@ -540,91 +762,59 @@ Deno.serve(async (req) => {
         structure_confidence: 0.9,
       })
       .eq('id', causelist_id);
-
-    // STEP 2: Extract NOTEs and create execution policies
-    console.log('[HTML-CAUSELIST-PARSE] Extracting notes and creating execution policies...');
-    const extractedNotes = extractNotesFromHtml(htmlContent);
-    let policiesCreated = 0;
     
-    if (extractedNotes.length > 0) {
-      // Insert notes into cause_list_notes
-      const notesToInsert = extractedNotes.map(note => ({
-        raw_causelist_id: causelist_id,
-        note_type: note.note_type,
-        note_text: note.note_text
-      }));
+    console.log(`[PHASE-3] Complete (${Date.now() - phase3Start}ms)`);
 
-      const { error: notesError } = await supabase
-        .from('cause_list_notes')
-        .insert(notesToInsert);
-
-      if (notesError) {
-        console.error('[HTML-CAUSELIST-PARSE] Failed to insert notes:', notesError);
-      } else {
-        console.log(`[HTML-CAUSELIST-PARSE] Inserted ${notesToInsert.length} notes`);
+    // =========================================================================
+    // PHASE 4: TRIGGER LIKELIHOOD DERIVATION
+    // =========================================================================
+    console.log('[PHASE-4] Triggering hearing likelihood derivation...');
+    const phase4Start = Date.now();
+    
+    // Only trigger if we have policies OR successfully inserted cases
+    if (policiesResult.inserted > 0 || casesResult.inserted > 0 || casesResult.updated > 0) {
+      try {
+        await supabase.functions.invoke('derive-hearing-likelihood', {
+          body: { causelist_id, date: listDate, bench }
+        });
+        console.log(`[PHASE-4] Likelihood derivation triggered`);
+      } catch (e) {
+        console.log('[PHASE-4] Likelihood derivation deferred (will run async)');
       }
-
-      // Create execution policies from notes
-      const policiesToInsert = extractedNotes.map(note => {
-        const classification = classifyPolicy(note.note_text, note.note_type);
-        return {
-          raw_causelist_id: causelist_id,
-          policy_text: note.note_text,
-          policy_scope: classification.policy_scope,
-          priority_rule: classification.priority_rule,
-          time_condition: classification.time_condition,
-          confidence: classification.confidence,
-          court_no: classification.court_no || note.court_no || null,
-          bench: bench,
-          authority_level: 'JUDICIAL_NOTE',
-        };
-      });
-
-      const { error: policyError } = await supabase
-        .from('daily_execution_policies')
-        .insert(policiesToInsert);
-
-      if (policyError) {
-        console.error('[HTML-CAUSELIST-PARSE] Failed to insert execution policies:', policyError);
-      } else {
-        policiesCreated = policiesToInsert.length;
-        console.log(`[HTML-CAUSELIST-PARSE] Created ${policiesCreated} execution policies`);
+      
+      // Trigger alias matching
+      try {
+        await supabase.functions.invoke('match-docket-aliases', {
+          body: { causelist_id, date: listDate, bench }
+        });
+        console.log(`[PHASE-4] Alias matching triggered`);
+      } catch (e) {
+        console.log('[PHASE-4] Alias matching deferred');
       }
     }
+    
+    console.log(`[PHASE-4] Complete (${Date.now() - phase4Start}ms)`);
 
-    // Trigger post-processing lawyer matching
-    try {
-      console.log('[HTML-CAUSELIST-PARSE] Triggering post-processing alias matching...');
-      await supabase.functions.invoke('match-docket-aliases', {
-        body: { causelist_id, date: listDate, bench }
-      });
-    } catch {
-      console.log('[HTML-CAUSELIST-PARSE] Post-processing match deferred');
-    }
-
-    // Trigger hearing likelihood derivation
-    try {
-      console.log('[HTML-CAUSELIST-PARSE] Triggering hearing likelihood derivation...');
-      await supabase.functions.invoke('derive-hearing-likelihood', {
-        body: { causelist_id }
-      });
-    } catch {
-      console.log('[HTML-CAUSELIST-PARSE] Hearing likelihood derivation deferred');
-    }
-
-    console.log(`[HTML-CAUSELIST-PARSE] Complete: ${insertedCount} inserted, ${updatedCount} updated, ${skippedCount} skipped, ${policiesCreated} policies`);
+    const totalTime = Date.now() - startTime;
+    console.log(`[HTML-CAUSELIST-PARSE] All phases complete in ${totalTime}ms`);
 
     return new Response(
       JSON.stringify({
         success: true,
+        phases: {
+          parse: `${cases.length} cases, ${extractedNotes.length} notes`,
+          policies: `${derivedPolicies.length} derived`,
+          persist: `${casesResult.inserted} inserted, ${casesResult.updated} updated`,
+          likelihood: policiesResult.inserted > 0 ? 'triggered' : 'skipped (no policies)',
+        },
         cases_found: cases.length,
-        cases_inserted: insertedCount,
-        cases_updated: updatedCount,
-        cases_skipped: skippedCount,
+        cases_inserted: casesResult.inserted,
+        cases_updated: casesResult.updated,
         courts_processed: courts.length,
         notes_extracted: extractedNotes.length,
-        policies_created: policiesCreated,
-        errors: errors.length > 0 ? errors : undefined,
+        policies_created: policiesResult.inserted,
+        processing_time_ms: totalTime,
+        errors: [...casesResult.errors, ...policiesResult.errors, ...notesResult.errors].slice(0, 10),
         bench,
         list_date: listDate,
       }),
