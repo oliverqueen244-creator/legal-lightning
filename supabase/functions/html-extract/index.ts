@@ -81,7 +81,7 @@ Deno.serve(async (req) => {
       .from('raw_causelists')
       .update({
         text_content: textContent,
-        status: 'extracted',
+        status: 'text_extracted',
         extraction_progress: {
           status: 'complete',
           total_pages: 1,
@@ -110,15 +110,15 @@ Deno.serve(async (req) => {
       // Don't fail, just log
     }
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        causelist_id,
-        text_length: textContent.length,
-        status: 'extracted',
-      }),
-      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+      return new Response(
+        JSON.stringify({
+          success: true,
+          causelist_id,
+          text_length: textContent.length,
+          status: 'text_extracted',
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
 
   } catch (error) {
     console.error('HTML extraction error:', error);
