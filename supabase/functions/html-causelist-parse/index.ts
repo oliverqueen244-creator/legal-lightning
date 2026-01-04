@@ -193,24 +193,48 @@ interface PartialCase {
   raw_rows: string[][];
 }
 
+// Configuration for item number detection
+const MIN_ITEM_NUMBER = 1;
+const MAX_ITEM_NUMBER = 500; // Courts rarely have more than 500 items per court
+
 /**
- * Extract item number from ANY cell in the row, not just index 0.
- * This handles tables where item numbers may appear in different positions.
- * Returns null if no item number found.
+ * Extract item number from FIRST TWO cells only (positional guard).
+ * Only accepts 1-3 digit numbers within reasonable range (range guard).
+ * This prevents false matches from case years (2023, 2024) and case identifiers (5400).
+ * 
+ * @param cells - Array of cell text content
+ * @param previousItem - The last known item number (for continuity check)
+ * @returns The detected item number, or null if not found
  */
-function extractItemNumber(cells: string[]): number | null {
-  for (const cell of cells) {
-    const trimmed = cell.trim();
-    // Match pure numeric OR cell with period like "1." or "175."
-    const match = trimmed.match(/^(\d+)\.?$/);
-    if (match) {
-      const num = parseInt(match[1], 10);
-      // Sanity check: item numbers should be reasonable (1-9999)
-      if (num >= 1 && num <= 9999) {
-        return num;
-      }
+function extractItemNumber(cells: string[], previousItem: number | null = null): number | null {
+  // POSITIONAL GUARD: Only check first 2 cells
+  const cellsToCheck = Math.min(2, cells.length);
+  
+  for (let i = 0; i < cellsToCheck; i++) {
+    const trimmed = cells[i].trim();
+    
+    // Only match 1-3 digit numbers (optionally with trailing period)
+    // This regex rejects 4+ digit numbers like years (2023) or case numbers (5400)
+    const match = trimmed.match(/^(\d{1,3})\.?$/);
+    if (!match) continue;
+    
+    const num = parseInt(match[1], 10);
+    
+    // RANGE GUARD: Reject numbers outside reasonable serial range
+    if (num < MIN_ITEM_NUMBER || num > MAX_ITEM_NUMBER) {
+      continue;
     }
+    
+    // CONTINUITY GUARD: If we have a previous item, check for reasonable jump
+    // This prevents random numbers from resetting item state
+    if (previousItem !== null && Math.abs(num - previousItem) > 100) {
+      // Large jump - likely not a real item number sequence
+      continue;
+    }
+    
+    return num;
   }
+  
   return null;
 }
 
@@ -411,8 +435,9 @@ function extractCasesFromSection(html: string, courtNo: string): ParsedCase[] {
     // -----------------------------------------
     // STEP 1: Detect item number if present
     // This updates our context state
+    // Pass currentItemNumber for continuity guard
     // -----------------------------------------
-    const maybeItemNo = extractItemNumber(cells);
+    const maybeItemNo = extractItemNumber(cells, currentItemNumber);
     if (maybeItemNo !== null) {
       currentItemNumber = maybeItemNo;
     }
