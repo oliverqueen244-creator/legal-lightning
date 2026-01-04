@@ -819,6 +819,7 @@ export type Database = {
         Row: {
           case_fingerprint: string | null
           case_number: string | null
+          confidence_source: string | null
           court_location: string | null
           court_room_no: string | null
           created_at: string | null
@@ -834,16 +835,20 @@ export type Database = {
           matched_profile_id: string | null
           matched_role: string | null
           needs_review: boolean | null
+          origin: string | null
           petitioner: string | null
           petitioner_lawyer: string | null
+          raw_causelist_id: string | null
           respondent: string | null
           respondent_lawyer: string | null
           source_url: string | null
           status: string | null
+          structure_confidence: number | null
         }
         Insert: {
           case_fingerprint?: string | null
           case_number?: string | null
+          confidence_source?: string | null
           court_location?: string | null
           court_room_no?: string | null
           created_at?: string | null
@@ -859,16 +864,20 @@ export type Database = {
           matched_profile_id?: string | null
           matched_role?: string | null
           needs_review?: boolean | null
+          origin?: string | null
           petitioner?: string | null
           petitioner_lawyer?: string | null
+          raw_causelist_id?: string | null
           respondent?: string | null
           respondent_lawyer?: string | null
           source_url?: string | null
           status?: string | null
+          structure_confidence?: number | null
         }
         Update: {
           case_fingerprint?: string | null
           case_number?: string | null
+          confidence_source?: string | null
           court_location?: string | null
           court_room_no?: string | null
           created_at?: string | null
@@ -884,12 +893,15 @@ export type Database = {
           matched_profile_id?: string | null
           matched_role?: string | null
           needs_review?: boolean | null
+          origin?: string | null
           petitioner?: string | null
           petitioner_lawyer?: string | null
+          raw_causelist_id?: string | null
           respondent?: string | null
           respondent_lawyer?: string | null
           source_url?: string | null
           status?: string | null
+          structure_confidence?: number | null
         }
         Relationships: [
           {
@@ -1768,16 +1780,23 @@ export type Database = {
           file_name: string | null
           file_size_bytes: number | null
           id: string
+          input_format:
+            | Database["public"]["Enums"]["causelist_input_format"]
+            | null
           list_date: string
           list_type: string
           page_count: number | null
           query_lawyer_name: string | null
           source: string | null
+          source_granularity:
+            | Database["public"]["Enums"]["source_granularity"]
+            | null
           source_type:
             | Database["public"]["Enums"]["causelist_source_type"]
             | null
           status: string | null
           storage_path: string
+          structure_confidence: number | null
           telegram_message_id: number | null
           text_content: string | null
           uploaded_by: string | null
@@ -1789,16 +1808,23 @@ export type Database = {
           file_name?: string | null
           file_size_bytes?: number | null
           id?: string
+          input_format?:
+            | Database["public"]["Enums"]["causelist_input_format"]
+            | null
           list_date: string
           list_type: string
           page_count?: number | null
           query_lawyer_name?: string | null
           source?: string | null
+          source_granularity?:
+            | Database["public"]["Enums"]["source_granularity"]
+            | null
           source_type?:
             | Database["public"]["Enums"]["causelist_source_type"]
             | null
           status?: string | null
           storage_path: string
+          structure_confidence?: number | null
           telegram_message_id?: number | null
           text_content?: string | null
           uploaded_by?: string | null
@@ -1810,16 +1836,23 @@ export type Database = {
           file_name?: string | null
           file_size_bytes?: number | null
           id?: string
+          input_format?:
+            | Database["public"]["Enums"]["causelist_input_format"]
+            | null
           list_date?: string
           list_type?: string
           page_count?: number | null
           query_lawyer_name?: string | null
           source?: string | null
+          source_granularity?:
+            | Database["public"]["Enums"]["source_granularity"]
+            | null
           source_type?:
             | Database["public"]["Enums"]["causelist_source_type"]
             | null
           status?: string | null
           storage_path?: string
+          structure_confidence?: number | null
           telegram_message_id?: number | null
           text_content?: string | null
           uploaded_by?: string | null
@@ -2190,6 +2223,7 @@ export type Database = {
       audit_scope: "release" | "feature" | "full-system"
       audit_status: "pass" | "conditional" | "fail"
       board_status: "hearing" | "passover" | "lunch" | "adjourned"
+      causelist_input_format: "PDF" | "HTML"
       causelist_source_type: "PDF" | "HTML_COMPLETE" | "HTML_SEARCH"
       chamber_role: "senior" | "junior" | "clerk"
       confidence_level: "excellent" | "good" | "degraded" | "risky" | "unsafe"
@@ -2227,6 +2261,7 @@ export type Database = {
       finding_status: "open" | "acknowledged" | "fixed"
       go_decision: "go" | "conditional_go" | "no_go"
       risk_type: "ux" | "trust" | "operational" | "legal" | "scale"
+      source_granularity: "FULL_CAUSELIST" | "COURT_SECTION" | "LAWYER_FILTERED"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -2366,6 +2401,7 @@ export const Constants = {
       audit_scope: ["release", "feature", "full-system"],
       audit_status: ["pass", "conditional", "fail"],
       board_status: ["hearing", "passover", "lunch", "adjourned"],
+      causelist_input_format: ["PDF", "HTML"],
       causelist_source_type: ["PDF", "HTML_COMPLETE", "HTML_SEARCH"],
       chamber_role: ["senior", "junior", "clerk"],
       confidence_level: ["excellent", "good", "degraded", "risky", "unsafe"],
@@ -2406,6 +2442,11 @@ export const Constants = {
       finding_status: ["open", "acknowledged", "fixed"],
       go_decision: ["go", "conditional_go", "no_go"],
       risk_type: ["ux", "trust", "operational", "legal", "scale"],
+      source_granularity: [
+        "FULL_CAUSELIST",
+        "COURT_SECTION",
+        "LAWYER_FILTERED",
+      ],
     },
   },
 } as const

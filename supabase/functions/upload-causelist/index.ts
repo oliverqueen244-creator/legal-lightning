@@ -9,37 +9,7 @@ interface UploadResult {
   causelist_id: string;
   storage_path: string;
   status: string;
-  source_type?: string;
-}
-
-// Detect if HTML is a Search Causelist (lawyer-filtered, multi-court)
-function detectSearchCauselist(htmlContent: string): { isSearch: boolean; lawyerName: string | null } {
-  // Pattern 1: Check for "Search Causelist" in title or header
-  if (/SEARCH\s*CAUSE\s*LIST/i.test(htmlContent)) {
-    // Try to extract lawyer name from the search
-    const lawyerMatch = htmlContent.match(/advocate\s*name[:\s]*([^<\n]+)/i) ||
-                        htmlContent.match(/lawyer\s*name[:\s]*([^<\n]+)/i) ||
-                        htmlContent.match(/search\s*for[:\s]*([^<\n]+)/i);
-    return {
-      isSearch: true,
-      lawyerName: lawyerMatch ? lawyerMatch[1].trim() : null
-    };
-  }
-  
-  // Pattern 2: Check for multi-court table structure typical of search results
-  // Multiple "Court No." entries with case data
-  const courtMatches = htmlContent.match(/Court\s*No\.?\s*\d+/gi);
-  if (courtMatches && courtMatches.length >= 3) {
-    // Has many courts - likely a search result across all courts
-    // Try to extract lawyer name from table headers or content
-    const lawyerMatch = htmlContent.match(/([A-Z][A-Za-z\s]+(?:PUROHIT|SHARMA|JAIN|GUPTA|VERMA|SINGH|AGRAWAL|AGARWAL|YADAV|CHAUHAN|RAO|MEHTA|KHAN|PATEL|REDDY|KUMAR|SAXENA|MISHRA|PANDEY|TIWARI))/i);
-    return {
-      isSearch: true,
-      lawyerName: lawyerMatch ? lawyerMatch[1].trim() : null
-    };
-  }
-  
-  return { isSearch: false, lawyerName: null };
+  input_format: string;
 }
 
 Deno.serve(async (req) => {
@@ -94,7 +64,6 @@ Deno.serve(async (req) => {
     const bench = formData.get('bench') as string;
     const listType = formData.get('list_type') as string;
     const listDate = formData.get('list_date') as string;
-    const queryLawyerName = formData.get('query_lawyer_name') as string | null;
 
     // Validate required fields
     if (!file || !bench || !listType || !listDate) {
@@ -112,10 +81,10 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Validate list type - now includes SEARCH
-    if (!['DAILY', 'SUPPLEMENTARY', 'SEARCH'].includes(listType)) {
+    // Validate list type
+    if (!['DAILY', 'SUPPLEMENTARY'].includes(listType)) {
       return new Response(
-        JSON.stringify({ error: 'Invalid list_type. Must be DAILY, SUPPLEMENTARY, or SEARCH' }),
+        JSON.stringify({ error: 'Invalid list_type. Must be DAILY or SUPPLEMENTARY' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -141,31 +110,15 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Read file content for HTML analysis
+    // Read file content
     const fileBuffer = await file.arrayBuffer();
-    let detectedSourceType: 'PDF' | 'HTML_COMPLETE' | 'HTML_SEARCH' = isPdf ? 'PDF' : 'HTML_COMPLETE';
-    let detectedLawyerName = queryLawyerName;
-
-    if (isHtml) {
-      // Analyze HTML content to detect if it's a Search Causelist
-      const htmlContent = new TextDecoder().decode(fileBuffer);
-      const searchDetection = detectSearchCauselist(htmlContent);
-      
-      if (searchDetection.isSearch || listType === 'SEARCH') {
-        detectedSourceType = 'HTML_SEARCH';
-        if (!detectedLawyerName && searchDetection.lawyerName) {
-          detectedLawyerName = searchDetection.lawyerName;
-        }
-        console.log(`[UPLOAD] Detected HTML_SEARCH causelist, lawyer: ${detectedLawyerName || 'unknown'}`);
-      }
-    }
 
     // Generate storage path
     const timestamp = Date.now();
     const extension = isPdf ? 'pdf' : 'html';
     const storagePath = `admin-uploads/${bench}/${listDate}/${timestamp}.${extension}`;
 
-    console.log(`Uploading file to ${storagePath} (source_type: ${detectedSourceType})`);
+    console.log(`Uploading file to ${storagePath} (input_format: ${isPdf ? 'PDF' : 'HTML'})`);
 
     // Upload to storage
     const { error: uploadError } = await supabase.storage
@@ -183,10 +136,10 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Create raw_causelists record with source_type
+    // Create raw_causelists record with input_format and source metadata
     const insertData: Record<string, unknown> = {
       bench,
-      list_type: listType === 'SEARCH' ? 'DAILY' : listType, // Store as DAILY for docket consistency
+      list_type: listType,
       list_date: listDate,
       storage_path: storagePath,
       file_name: file.name,
@@ -194,19 +147,17 @@ Deno.serve(async (req) => {
       status: 'downloaded',
       source: 'admin_upload',
       uploaded_by: user.id,
-      source_type: detectedSourceType,
+      // New schema fields
+      input_format: isPdf ? 'PDF' : 'HTML',
+      source_granularity: 'FULL_CAUSELIST',
+      structure_confidence: isPdf ? 0.7 : 0.9,
     };
 
-    // Add query_lawyer_name for HTML_SEARCH
-    if (detectedSourceType === 'HTML_SEARCH' && detectedLawyerName) {
-      insertData.query_lawyer_name = detectedLawyerName;
-    }
-
-    // For HTML, store the text content directly
+    // For HTML, store the text content directly and mark as higher confidence
     if (isHtml) {
       const htmlContent = new TextDecoder().decode(fileBuffer);
       insertData.text_content = htmlContent;
-      insertData.status = 'text_extracted'; // Skip extraction step
+      insertData.status = 'text_extracted';
     }
 
     const { data: causelist, error: dbError } = await supabase
@@ -217,7 +168,6 @@ Deno.serve(async (req) => {
 
     if (dbError) {
       console.error('Database insert error:', dbError);
-      // Try to clean up uploaded file
       await supabase.storage.from('causelist-pdfs').remove([storagePath]);
       return new Response(
         JSON.stringify({ error: 'Failed to create causelist record' }),
@@ -225,31 +175,22 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log(`Created causelist record: ${causelist.id} (source_type: ${detectedSourceType})`);
+    console.log(`Created causelist record: ${causelist.id} (input_format: ${isPdf ? 'PDF' : 'HTML'})`);
 
-    // Route based on source type
-    if (detectedSourceType === 'HTML_SEARCH') {
-      // For HTML_SEARCH, go directly to search-html-parse
-      console.log('Triggering search-html-parse for HTML_SEARCH...');
-      const { error: parseError } = await supabase.functions.invoke('search-html-parse', {
+    // Route based on input format
+    if (isHtml) {
+      // HTML causelists go directly to html-causelist-parse (no alias gating)
+      // Parses ALL cases unconditionally - lawyer matching happens post-processing
+      console.log('Triggering html-causelist-parse for HTML causelist...');
+      const { error: parseError } = await supabase.functions.invoke('html-causelist-parse', {
         body: { causelist_id: causelist.id },
       });
       
       if (parseError) {
-        console.error('search-html-parse trigger error:', parseError);
-      }
-    } else if (isHtml) {
-      // For regular HTML, call scan-lawyer-names (will route appropriately)
-      console.log('Triggering scan-lawyer-names for HTML...');
-      const { error: scanError } = await supabase.functions.invoke('scan-lawyer-names', {
-        body: { causelist_id: causelist.id },
-      });
-      
-      if (scanError) {
-        console.error('scan-lawyer-names trigger error:', scanError);
+        console.error('html-causelist-parse trigger error:', parseError);
       }
     } else {
-      // For PDF, call pdf-extract-chunk function
+      // For PDF, call pdf-extract-chunk function (then scan-lawyer-names for alias-gated AI parsing)
       console.log('Triggering PDF extraction...');
       const { error: extractError } = await supabase.functions.invoke('pdf-extract-chunk', {
         body: { causelist_id: causelist.id },
@@ -263,8 +204,8 @@ Deno.serve(async (req) => {
     const result: UploadResult = {
       causelist_id: causelist.id,
       storage_path: storagePath,
-      status: detectedSourceType === 'HTML_SEARCH' ? 'queued_for_direct_parse' : 'queued_for_extraction',
-      source_type: detectedSourceType,
+      status: isHtml ? 'queued_for_direct_parse' : 'queued_for_extraction',
+      input_format: isPdf ? 'PDF' : 'HTML',
     };
 
     console.log(`Upload complete: ${JSON.stringify(result)}`);
