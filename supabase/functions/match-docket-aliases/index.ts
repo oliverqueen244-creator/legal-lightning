@@ -97,35 +97,51 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Build query for unmatched cases
-    let docketQuery = supabase
-      .from('daily_court_docket')
-      .select('id, case_number, petitioner_lawyer, respondent_lawyer, court_location, court_room_no, date')
-      .is('matched_profile_id', null)
-      .or('petitioner_lawyer.not.is.null,respondent_lawyer.not.is.null')
-      .limit(500);
+    // Fetch ALL unmatched cases using pagination
+    const BATCH_SIZE = 1000;
+    let allUnmatchedCases: any[] = [];
+    let offset = 0;
+    let hasMore = true;
 
-    if (body.causelist_id) {
-      docketQuery = docketQuery.eq('raw_causelist_id', body.causelist_id);
-    }
-    if (body.date) {
-      docketQuery = docketQuery.eq('date', body.date);
-    }
-    if (body.bench) {
-      docketQuery = docketQuery.eq('court_location', body.bench);
+    while (hasMore) {
+      let docketQuery = supabase
+        .from('daily_court_docket')
+        .select('id, case_number, petitioner_lawyer, respondent_lawyer, court_location, court_room_no, date')
+        .is('matched_profile_id', null)
+        .or('petitioner_lawyer.not.is.null,respondent_lawyer.not.is.null')
+        .range(offset, offset + BATCH_SIZE - 1);
+
+      if (body.causelist_id) {
+        docketQuery = docketQuery.eq('raw_causelist_id', body.causelist_id);
+      }
+      if (body.date) {
+        docketQuery = docketQuery.eq('date', body.date);
+      }
+      if (body.bench) {
+        docketQuery = docketQuery.eq('court_location', body.bench);
+      }
+
+      const { data: batch, error: docketError } = await docketQuery;
+
+      if (docketError) {
+        console.error('[MATCH-DOCKET-ALIASES] Failed to fetch unmatched cases:', docketError);
+        return new Response(
+          JSON.stringify({ error: 'Failed to fetch cases' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      if (batch && batch.length > 0) {
+        allUnmatchedCases = allUnmatchedCases.concat(batch);
+        console.log(`[MATCH-DOCKET-ALIASES] Fetched ${batch.length} cases (total: ${allUnmatchedCases.length})`);
+        offset += BATCH_SIZE;
+        hasMore = batch.length === BATCH_SIZE;
+      } else {
+        hasMore = false;
+      }
     }
 
-    const { data: unmatchedCases, error: docketError } = await docketQuery;
-
-    if (docketError) {
-      console.error('[MATCH-DOCKET-ALIASES] Failed to fetch unmatched cases:', docketError);
-      return new Response(
-        JSON.stringify({ error: 'Failed to fetch cases' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    if (!unmatchedCases?.length) {
+    if (!allUnmatchedCases.length) {
       console.log('[MATCH-DOCKET-ALIASES] No unmatched cases to process');
       return new Response(
         JSON.stringify({ success: true, matches: 0, message: 'No unmatched cases' }),
@@ -133,27 +149,37 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log(`[MATCH-DOCKET-ALIASES] Processing ${unmatchedCases.length} unmatched cases against ${profiles.length} profiles`);
+    // Pre-fetch all aliases for all profiles once (optimization)
+    const { data: allAliases } = await supabase
+      .from('lawyer_aliases')
+      .select('profile_id, alias_name')
+      .in('profile_id', profiles.map(p => p.id));
+
+    const aliasesByProfile = new Map<string, string[]>();
+    for (const alias of (allAliases || [])) {
+      if (!aliasesByProfile.has(alias.profile_id)) {
+        aliasesByProfile.set(alias.profile_id, []);
+      }
+      aliasesByProfile.get(alias.profile_id)!.push(alias.alias_name);
+    }
+
+    console.log(`[MATCH-DOCKET-ALIASES] Processing ${allUnmatchedCases.length} unmatched cases against ${profiles.length} profiles (${allAliases?.length || 0} aliases)`);
 
     const matches: MatchResult[] = [];
     let updatedCount = 0;
 
-    for (const caseData of unmatchedCases) {
+    for (const caseData of allUnmatchedCases) {
       const petLawyer = caseData.petitioner_lawyer || '';
       const respLawyer = caseData.respondent_lawyer || '';
       
       let bestMatch: { profileId: string; alias: string; role: 'petitioner' | 'respondent'; confidence: number } | null = null;
 
       for (const profile of profiles) {
-        // Get profile's aliases
-        const { data: aliases } = await supabase
-          .from('lawyer_aliases')
-          .select('alias_name')
-          .eq('profile_id', profile.id);
+        // Use pre-fetched aliases instead of querying each time
+        const aliases = aliasesByProfile.get(profile.id) || [];
+        if (!aliases.length) continue;
 
-        if (!aliases?.length) continue;
-
-        for (const { alias_name } of aliases) {
+        for (const alias_name of aliases) {
           // Check petitioner lawyer
           if (petLawyer) {
             const petMatch = isAliasMatch(petLawyer, alias_name);
@@ -209,12 +235,12 @@ Deno.serve(async (req) => {
       }
     }
 
-    console.log(`[MATCH-DOCKET-ALIASES] Complete: ${updatedCount} cases matched out of ${unmatchedCases.length}`);
+    console.log(`[MATCH-DOCKET-ALIASES] Complete: ${updatedCount} cases matched out of ${allUnmatchedCases.length}`);
 
     return new Response(
       JSON.stringify({
         success: true,
-        cases_processed: unmatchedCases.length,
+        cases_processed: allUnmatchedCases.length,
         matches_made: updatedCount,
         matches: matches.slice(0, 50), // Return first 50 for debugging
       }),
