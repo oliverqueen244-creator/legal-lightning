@@ -6,15 +6,21 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Scale, Clock, AlertTriangle, ChevronRight, SkipForward, Coffee, Ban, Zap, Play, Calendar, FileText, Upload, Database } from 'lucide-react';
-import type { DocketItem, LiveBoardCache, BoardStatus } from '@/types/database';
+import type { DocketItem, LiveBoardCache, BoardStatus, HearingLikelihood } from '@/types/database';
 import { cn } from '@/lib/utils';
 import type { AppRole } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { CaseTimeEstimatorCompact } from './CaseTimeEstimator';
-
+import { HearingLikelihoodBadge } from './HearingLikelihoodBadge';
 interface DocketCardProps {
-  item: DocketItem & { status?: string; force_active?: boolean; created_at?: string };
+  item: DocketItem & { 
+    status?: string; 
+    force_active?: boolean; 
+    created_at?: string;
+    hearing_likelihood?: HearingLikelihood | null;
+    likelihood_reason?: string | null;
+  };
   liveBoard?: LiveBoardCache;
   userRole?: AppRole | null;
   onForceActive?: (itemId: string) => void;
@@ -223,6 +229,13 @@ export function DocketCard({ item, liveBoard, userRole, onForceActive, showDate,
               {/* Time Estimator */}
               {!isRunning && !isDone && !isPassover && liveBoard && (
                 <CaseTimeEstimatorCompact docketItem={item} liveBoard={liveBoard} />
+              )}
+              {/* Hearing Likelihood - Non-promissory indicator */}
+              {item.hearing_likelihood && item.hearing_likelihood !== 'UNKNOWN' && !isRunning && !isDone && (
+                <HearingLikelihoodBadge 
+                  likelihood={item.hearing_likelihood} 
+                  reason={item.likelihood_reason || null}
+                />
               )}
             </div>
             

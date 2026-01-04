@@ -69,11 +69,14 @@ export function CauseListNotesWidget({ date, bench }: CauseListNotesWidgetProps)
       <div className="bg-muted/50 px-4 py-3 border-b border-border/50">
         <div className="flex items-center gap-2">
           <FileText className="h-4 w-4 text-primary" />
-          <h3 className="font-semibold text-sm">Registry Notes</h3>
+          <h3 className="font-semibold text-sm">Court Notes</h3>
           <Badge variant="secondary" className="ml-auto text-xs">
             {notes.length}
           </Badge>
         </div>
+        <p className="text-[10px] text-muted-foreground mt-1">
+          Official registry notes affecting today's proceedings
+        </p>
       </div>
 
       <ScrollArea className="max-h-64">
@@ -114,6 +117,13 @@ export function CauseListNotesWidget({ date, bench }: CauseListNotesWidgetProps)
           ))}
         </div>
       </ScrollArea>
+      
+      {/* Non-promissory disclaimer */}
+      <div className="px-3 py-2 bg-muted/30 border-t border-border/30">
+        <p className="text-[9px] text-muted-foreground text-center">
+          ⚠️ Notes affect case scheduling but do not guarantee hearing. Actual proceedings may vary.
+        </p>
+      </div>
     </div>
   );
 }

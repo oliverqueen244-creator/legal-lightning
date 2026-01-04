@@ -826,9 +826,14 @@ export type Database = {
           date: string
           fingerprint_matched_at: string | null
           force_active: boolean | null
+          hearing_likelihood:
+            | Database["public"]["Enums"]["hearing_likelihood"]
+            | null
           id: string
           item_no: number | null
           judge_names: string | null
+          likelihood_derived_at: string | null
+          likelihood_reason: string | null
           list_type: string | null
           match_confidence: number | null
           match_method: string | null
@@ -855,9 +860,14 @@ export type Database = {
           date?: string
           fingerprint_matched_at?: string | null
           force_active?: boolean | null
+          hearing_likelihood?:
+            | Database["public"]["Enums"]["hearing_likelihood"]
+            | null
           id?: string
           item_no?: number | null
           judge_names?: string | null
+          likelihood_derived_at?: string | null
+          likelihood_reason?: string | null
           list_type?: string | null
           match_confidence?: number | null
           match_method?: string | null
@@ -884,9 +894,14 @@ export type Database = {
           date?: string
           fingerprint_matched_at?: string | null
           force_active?: boolean | null
+          hearing_likelihood?:
+            | Database["public"]["Enums"]["hearing_likelihood"]
+            | null
           id?: string
           item_no?: number | null
           judge_names?: string | null
+          likelihood_derived_at?: string | null
+          likelihood_reason?: string | null
           list_type?: string | null
           match_confidence?: number | null
           match_method?: string | null
@@ -909,6 +924,62 @@ export type Database = {
             columns: ["matched_profile_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      daily_execution_policies: {
+        Row: {
+          authority_level: string
+          bench: string | null
+          confidence: number
+          court_no: string | null
+          created_at: string
+          derived_at: string
+          id: string
+          policy_scope: Database["public"]["Enums"]["policy_scope"]
+          policy_text: string
+          priority_rule: Database["public"]["Enums"]["priority_rule"]
+          raw_causelist_id: string
+          source_page_number: number | null
+          time_condition: Database["public"]["Enums"]["time_condition"]
+        }
+        Insert: {
+          authority_level?: string
+          bench?: string | null
+          confidence?: number
+          court_no?: string | null
+          created_at?: string
+          derived_at?: string
+          id?: string
+          policy_scope?: Database["public"]["Enums"]["policy_scope"]
+          policy_text: string
+          priority_rule?: Database["public"]["Enums"]["priority_rule"]
+          raw_causelist_id: string
+          source_page_number?: number | null
+          time_condition?: Database["public"]["Enums"]["time_condition"]
+        }
+        Update: {
+          authority_level?: string
+          bench?: string | null
+          confidence?: number
+          court_no?: string | null
+          created_at?: string
+          derived_at?: string
+          id?: string
+          policy_scope?: Database["public"]["Enums"]["policy_scope"]
+          policy_text?: string
+          priority_rule?: Database["public"]["Enums"]["priority_rule"]
+          raw_causelist_id?: string
+          source_page_number?: number | null
+          time_condition?: Database["public"]["Enums"]["time_condition"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "daily_execution_policies_raw_causelist_id_fkey"
+            columns: ["raw_causelist_id"]
+            isOneToOne: false
+            referencedRelation: "raw_causelists"
             referencedColumns: ["id"]
           },
         ]
@@ -2260,8 +2331,20 @@ export type Database = {
       finding_severity: "low" | "medium" | "high" | "critical"
       finding_status: "open" | "acknowledged" | "fixed"
       go_decision: "go" | "conditional_go" | "no_go"
+      hearing_likelihood:
+        | "LIKELY"
+        | "CONDITIONAL"
+        | "LOW_PROBABILITY"
+        | "UNKNOWN"
+      policy_scope: "GLOBAL" | "COURT" | "BENCH" | "UNKNOWN"
+      priority_rule:
+        | "SUPPLEMENTARY_FIRST"
+        | "MAIN_ONLY"
+        | "TIME_BOUND"
+        | "UNSPECIFIED"
       risk_type: "ux" | "trust" | "operational" | "legal" | "scale"
       source_granularity: "FULL_CAUSELIST" | "COURT_SECTION" | "LAWYER_FILTERED"
+      time_condition: "IF_TIME_PERMITS" | "FIXED_ORDER" | "UNKNOWN"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -2441,12 +2524,26 @@ export const Constants = {
       finding_severity: ["low", "medium", "high", "critical"],
       finding_status: ["open", "acknowledged", "fixed"],
       go_decision: ["go", "conditional_go", "no_go"],
+      hearing_likelihood: [
+        "LIKELY",
+        "CONDITIONAL",
+        "LOW_PROBABILITY",
+        "UNKNOWN",
+      ],
+      policy_scope: ["GLOBAL", "COURT", "BENCH", "UNKNOWN"],
+      priority_rule: [
+        "SUPPLEMENTARY_FIRST",
+        "MAIN_ONLY",
+        "TIME_BOUND",
+        "UNSPECIFIED",
+      ],
       risk_type: ["ux", "trust", "operational", "legal", "scale"],
       source_granularity: [
         "FULL_CAUSELIST",
         "COURT_SECTION",
         "LAWYER_FILTERED",
       ],
+      time_condition: ["IF_TIME_PERMITS", "FIXED_ORDER", "UNKNOWN"],
     },
   },
 } as const
