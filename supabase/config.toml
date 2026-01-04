@@ -66,5 +66,8 @@ verify_jwt = true
 [functions.html-extract]
 verify_jwt = false
 
-[functions.search-html-parse]
+[functions.html-causelist-parse]
+verify_jwt = false
+
+[functions.match-docket-aliases]
 verify_jwt = false
