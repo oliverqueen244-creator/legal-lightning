@@ -1,11 +1,12 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { format, formatDistanceToNow } from 'date-fns';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { Scale, Clock, AlertTriangle, ChevronRight, SkipForward, Coffee, Ban, Zap, Play, Calendar, FileText, Upload, Database, User } from 'lucide-react';
+import { Scale, Clock, AlertTriangle, ChevronRight, SkipForward, Coffee, Ban, Zap, Play, Calendar, FileText, Upload, Database, User, Users } from 'lucide-react';
 import type { DocketItem, LiveBoardCache, BoardStatus, HearingLikelihood } from '@/types/database';
 import { cn } from '@/lib/utils';
 import type { AppRole } from '@/hooks/useAuth';
@@ -13,6 +14,19 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { CaseTimeEstimatorCompact } from './CaseTimeEstimator';
 import { HearingLikelihoodBadge } from './HearingLikelihoodBadge';
+import { useAliases } from '@/hooks/useAliases';
+
+// Helper function to format party names with smart truncation
+const formatPartyName = (name: string | null | undefined, maxLength = 28) => {
+  if (!name) return '';
+  const cleaned = name
+    .replace(/\s+AND\s+(ORS\.?|ANR\.?|OTHERS?)$/i, ' & Ors.')
+    .replace(/STATE OF RAJASTHAN/gi, 'State of Raj.')
+    .replace(/UNION OF INDIA/gi, 'UOI')
+    .trim();
+  if (cleaned.length <= maxLength) return cleaned;
+  return cleaned.substring(0, maxLength - 3) + '...';
+};
 interface DocketCardProps {
   item: DocketItem & { 
     status?: string; 
@@ -32,8 +46,10 @@ interface DocketCardProps {
 }
 
 export function DocketCard({ item, liveBoard, userRole, onForceActive, showDate, pendingDocCount = 0, cachedAt }: DocketCardProps) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [isForcing, setIsForcing] = useState(false);
+  const { aliases } = useAliases();
   
   const currentItem = liveBoard?.current_item ?? 0;
   const boardStatus: BoardStatus = liveBoard?.status ?? 'hearing';
@@ -50,15 +66,28 @@ export function DocketCard({ item, liveBoard, userRole, onForceActive, showDate,
   const isAdjourned = boardStatus === 'adjourned';
   const isDone = item.status === 'done';
 
+  // Determine which side the lawyer represents
+  const matchedAs = useMemo(() => {
+    if (!aliases || aliases.length === 0) return null;
+    const aliasNames = aliases.map(a => a.alias_name.toUpperCase());
+    if (aliasNames.some(alias => item.petitioner_lawyer?.toUpperCase().includes(alias))) {
+      return 'petitioner';
+    }
+    if (aliasNames.some(alias => item.respondent_lawyer?.toUpperCase().includes(alias))) {
+      return 'respondent';
+    }
+    return null;
+  }, [aliases, item.petitioner_lawyer, item.respondent_lawyer]);
+
   const getStatusText = () => {
-    if (item.force_active) return 'FORCED ACTIVE';
-    if (isDone) return 'COMPLETED';
-    if (isPassover) return 'SKIPPED';
-    if (isLunch) return 'LUNCH BREAK';
-    if (isAdjourned) return 'ADJOURNED';
-    if (isRunning) return 'RUNNING NOW';
-    if (isPanic) return `${distance} ITEMS AWAY`;
-    return `Item #${item.item_no}`;
+    if (item.force_active) return t('forced_active');
+    if (isDone) return t('completed');
+    if (isPassover) return t('skipped');
+    if (isLunch) return t('lunch_break');
+    if (isAdjourned) return t('adjourned');
+    if (isRunning) return t('running_now');
+    if (isPanic) return t('items_away', { count: distance });
+    return t('item_no', { number: item.item_no });
   };
 
   const getStatusIcon = () => {
@@ -92,8 +121,8 @@ export function DocketCard({ item, liveBoard, userRole, onForceActive, showDate,
     
     // P0 FIX: Block Force Active when offline - must be server-confirmed
     if (!navigator.onLine) {
-      toast.error('Connection required', {
-        description: 'You must be online to force a case active.',
+      toast.error(t('connection_required'), {
+        description: t('must_be_online'),
         duration: 4000,
       });
       return;
@@ -113,14 +142,14 @@ export function DocketCard({ item, liveBoard, userRole, onForceActive, showDate,
       
       if (error) throw error;
       
-      toast.success('Case marked as active', {
-        description: 'Status override applied. The case is now in "Running" mode.',
+      toast.success(t('case_marked_active'), {
+        description: t('status_override_applied'),
       });
       
       onForceActive?.(item.id);
     } catch (err) {
       console.error('Failed to force active:', err);
-      toast.error('Failed to update status');
+      toast.error(t('failed_update_status'));
     } finally {
       setIsForcing(false);
     }
@@ -159,7 +188,7 @@ export function DocketCard({ item, liveBoard, userRole, onForceActive, showDate,
               {cachedAt && (
                 <Badge variant="outline" className="flex items-center gap-1 text-muted-foreground border-muted">
                   <Database className="h-3 w-3" />
-                  Cached {formatDistanceToNow(cachedAt, { addSuffix: true })}
+                  {t('cached')} {formatDistanceToNow(cachedAt, { addSuffix: true })}
                 </Badge>
               )}
               {showDate && item.date && (
@@ -169,45 +198,52 @@ export function DocketCard({ item, liveBoard, userRole, onForceActive, showDate,
                 </Badge>
               )}
               {isSupplementary && (
-                <Badge variant="supplementary">SUPPLEMENTARY</Badge>
+                <Badge variant="supplementary">{t('supplementary')}</Badge>
+              )}
+              {/* Role Indicator Badge */}
+              {matchedAs && (
+                <Badge variant="outline" className="flex items-center gap-1 text-xs border-primary/50 text-primary">
+                  <Users className="h-3 w-3" aria-hidden="true" />
+                  {matchedAs === 'petitioner' ? t('petitioner_counsel') : t('respondent_counsel')}
+                </Badge>
               )}
               {item.force_active && (
                 <Badge className="flex items-center gap-1 bg-primary/20 text-primary border-primary/30">
                   <Zap className="h-3 w-3" aria-hidden="true" />
-                  FORCED
+                  {t('forced')}
                 </Badge>
               )}
               {isPassover && (
                 <Badge variant="secondary" className="flex items-center gap-1 bg-muted text-muted-foreground">
                   <SkipForward className="h-3 w-3" aria-hidden="true" />
-                  SKIPPED
+                  {t('skipped')}
                 </Badge>
               )}
               {isLunch && (
                 <Badge className="flex items-center gap-1 bg-court-warning/20 text-court-warning border-court-warning/30">
                   <Coffee className="h-3 w-3" aria-hidden="true" />
-                  LUNCH BREAK
+                  {t('lunch_break')}
                 </Badge>
               )}
               {isAdjourned && (
                 <Badge variant="secondary" className="flex items-center gap-1 bg-muted text-muted-foreground">
                   <Ban className="h-3 w-3" aria-hidden="true" />
-                  ADJOURNED
+                  {t('adjourned')}
                 </Badge>
               )}
               {isDone && (
                 <Badge className="flex items-center gap-1 bg-court-success/20 text-court-success border-court-success/30">
-                  COMPLETED
+                  {t('completed')}
                 </Badge>
               )}
               {isPanic && !item.force_active && (
                 <Badge variant="danger" className="flex items-center gap-1" role="status" aria-live="polite">
                   <AlertTriangle className="h-3 w-3" aria-hidden="true" />
-                  {isSupplementary ? 'URGENT (SUPP)' : 'URGENT'}
+                  {isSupplementary ? t('urgent_supp') : t('urgent')}
                 </Badge>
               )}
               {isRunning && !item.force_active && (
-                <Badge variant="running" role="status" aria-live="assertive">RUNNING NOW</Badge>
+                <Badge variant="running" role="status" aria-live="assertive">{t('running_now')}</Badge>
               )}
             </div>
             
@@ -221,7 +257,7 @@ export function DocketCard({ item, liveBoard, userRole, onForceActive, showDate,
             <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
               <span className="flex items-center gap-1">
                 <Scale className="h-4 w-4" aria-hidden="true" />
-                Court {item.court_room_no}
+                {t('court')} {item.court_room_no}
               </span>
               <span className="flex items-center gap-1">
                 <StatusIcon className="h-4 w-4" aria-hidden="true" />
@@ -246,12 +282,48 @@ export function DocketCard({ item, liveBoard, userRole, onForceActive, showDate,
                 />
               )}
             </div>
+
+            {/* Party Names - Petitioner v. Respondent */}
+            {(item.petitioner || item.respondent) && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <p className="text-sm text-muted-foreground mt-1.5 truncate cursor-help">
+                      <span className={cn(
+                        "font-medium",
+                        matchedAs === 'petitioner' ? "text-primary" : "text-foreground/80"
+                      )}>
+                        {formatPartyName(item.petitioner) || '—'}
+                      </span>
+                      <span className="mx-1.5 opacity-50">{t('vs')}</span>
+                      <span className={cn(
+                        matchedAs === 'respondent' ? "text-primary font-medium" : "text-foreground/70"
+                      )}>
+                        {formatPartyName(item.respondent) || '—'}
+                      </span>
+                    </p>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="max-w-sm">
+                    <div className="text-xs space-y-1">
+                      <p><strong>Petitioner:</strong> {item.petitioner || 'Not available'}</p>
+                      <p><strong>Respondent:</strong> {item.respondent || 'Not available'}</p>
+                    </div>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
             
-            {/* Show opposing party - abstracted language */}
-            {item.respondent_lawyer && !isPassover && (
-              <div className="mt-2 text-sm">
-                <span className="text-muted-foreground">Opposing: </span>
-                <span className="text-foreground">{item.respondent_lawyer}</span>
+            {/* Show opposing counsel */}
+            {!isPassover && (
+              <div className="mt-1.5 text-sm">
+                <span className="text-muted-foreground">{t('opposing')}: </span>
+                <span className="text-foreground">
+                  {matchedAs === 'petitioner' 
+                    ? (item.respondent_lawyer || '—')
+                    : matchedAs === 'respondent'
+                    ? (item.petitioner_lawyer || '—')
+                    : (item.respondent_lawyer || item.petitioner_lawyer || '—')}
+                </span>
               </div>
             )}
 
@@ -263,15 +335,15 @@ export function DocketCard({ item, liveBoard, userRole, onForceActive, showDate,
                     <div className="mt-2 inline-flex items-center gap-1">
                       <Badge variant="outline" className="text-xs flex items-center gap-1 border-court-warning/50 text-court-warning">
                         <FileText className="h-3 w-3" />
-                        {pendingDocCount} pending review
+                        {pendingDocCount} {t('pending_review')}
                       </Badge>
                     </div>
                   </TooltipTrigger>
                   <TooltipContent side="bottom" className="max-w-xs">
                     <p className="text-xs">
                       {userRole === 'SENIOR' || userRole === 'ADMIN' 
-                        ? 'Open War Room → Documents tab to review and approve'
-                        : 'Documents uploaded, awaiting senior review'}
+                        ? t('open_war_room_review')
+                        : t('documents_awaiting_review')}
                     </p>
                   </TooltipContent>
                 </Tooltip>
@@ -285,12 +357,12 @@ export function DocketCard({ item, liveBoard, userRole, onForceActive, showDate,
                   <TooltipTrigger asChild>
                     <div className="mt-1 inline-flex items-center gap-1 text-xs text-muted-foreground cursor-help">
                       <Upload className="h-3 w-3" />
-                      <span>Upload in Control Deck</span>
+                      <span>{t('upload_in_control_deck')}</span>
                     </div>
                   </TooltipTrigger>
                   <TooltipContent side="bottom" className="max-w-xs">
                     <p className="text-xs">
-                      Click to open Control Deck where you can upload case documents
+                      {t('click_upload_control_deck')}
                     </p>
                   </TooltipContent>
                 </Tooltip>
@@ -310,7 +382,7 @@ export function DocketCard({ item, liveBoard, userRole, onForceActive, showDate,
                 aria-label="Force this case to active status"
               >
                 <Play className="h-3 w-3 mr-1" />
-                {isForcing ? 'Activating...' : 'Force Active'}
+                {isForcing ? t('activating') : t('force_active')}
               </Button>
             )}
             

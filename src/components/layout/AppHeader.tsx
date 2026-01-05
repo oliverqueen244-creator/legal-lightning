@@ -1,10 +1,12 @@
 import { useState, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Calendar } from 'lucide-react';
 import { NetworkStatusPill } from './NetworkStatusPill';
 import { NotificationBell } from '@/components/notifications/NotificationBell';
 import { CourtModeBadge } from '@/components/court-mode/CourtModeBadge';
 import { PersistentLiveBoard } from './PersistentLiveBoard';
 import { UserMenu } from './UserMenu';
+import { LanguageToggle } from './LanguageToggle';
 import { OperationsConsole } from '@/components/admin/OperationsConsole';
 import { useLiveBoard } from '@/hooks/useLiveBoard';
 import { useDocket } from '@/hooks/useDocket';
@@ -17,6 +19,7 @@ import logoImage from '@/assets/logo.png';
  * NO exploration-first elements - reaction-first only
  */
 export function AppHeader() {
+  const { t } = useTranslation();
   const formattedDate = format(new Date(), 'yyyy-MM-dd');
   const { data: liveBoards } = useLiveBoard();
   const { data: docket } = useDocket(formattedDate);
@@ -65,7 +68,7 @@ export function AppHeader() {
                 Nyay-Hub
               </h1>
               <p className="text-xs text-muted-foreground">
-                Rajasthan High Court
+                {t('rajasthan_high_court')}
               </p>
             </div>
           </div>
@@ -77,6 +80,9 @@ export function AppHeader() {
 
           {/* Right: Critical Actions - One-Tap Rule */}
           <div className="flex items-center gap-2 sm:gap-3">
+            {/* Language Toggle */}
+            <LanguageToggle />
+
             {/* Court Mode Badge - Always visible */}
             <CourtModeBadge />
 

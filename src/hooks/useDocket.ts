@@ -16,7 +16,7 @@ export function useDocket(date?: string) {
       if (user?.id) {
         const { data: matchedData, error: matchedError } = await supabase
           .from('daily_court_docket')
-          .select('*, hearing_likelihood, likelihood_reason, likelihood_derived_at, judge_names')
+          .select('*, hearing_likelihood, likelihood_reason, likelihood_derived_at, judge_names, petitioner, respondent, petitioner_lawyer, respondent_lawyer')
           .eq('date', targetDate)
           .eq('matched_profile_id', user.id)
           .order('list_type', { ascending: false })
