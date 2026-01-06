@@ -63,6 +63,8 @@ export default defineConfig(({ mode }) => ({
         // Note: Actual reload is controlled by usePWAUpdate safety checks
         skipWaiting: true,
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
+        // Increase limit to handle large bundles (default is 2MB)
+        maximumFileSizeToCacheInBytes: 3 * 1024 * 1024, // 3 MiB
         navigateFallback: "/index.html",
         navigateFallbackDenylist: [/^\/api/, /^\/supabase/],
         runtimeCaching: [
