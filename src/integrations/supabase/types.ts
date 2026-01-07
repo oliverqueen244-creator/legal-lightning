@@ -560,6 +560,47 @@ export type Database = {
           },
         ]
       }
+      causelist_gap_audit: {
+        Row: {
+          actual_items: number
+          court_no: string
+          coverage_percent: number
+          detected_at: string
+          expected_items: number
+          id: string
+          missing_ranges: Json | null
+          raw_causelist_id: string
+        }
+        Insert: {
+          actual_items: number
+          court_no: string
+          coverage_percent: number
+          detected_at?: string
+          expected_items: number
+          id?: string
+          missing_ranges?: Json | null
+          raw_causelist_id: string
+        }
+        Update: {
+          actual_items?: number
+          court_no?: string
+          coverage_percent?: number
+          detected_at?: string
+          expected_items?: number
+          id?: string
+          missing_ranges?: Json | null
+          raw_causelist_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "causelist_gap_audit_raw_causelist_id_fkey"
+            columns: ["raw_causelist_id"]
+            isOneToOne: false
+            referencedRelation: "raw_causelists"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       chamber_invites: {
         Row: {
           chamber_id: string
