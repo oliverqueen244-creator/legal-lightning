@@ -203,10 +203,9 @@ const MAX_ITEM_NUMBER = 500; // Courts rarely have more than 500 items per court
  * This prevents false matches from case years (2023, 2024) and case identifiers (5400).
  * 
  * @param cells - Array of cell text content
- * @param previousItem - The last known item number (for continuity check)
  * @returns The detected item number, or null if not found
  */
-function extractItemNumber(cells: string[], previousItem: number | null = null): number | null {
+function extractItemNumber(cells: string[]): number | null {
   // POSITIONAL GUARD: Only check first 2 cells
   const cellsToCheck = Math.min(2, cells.length);
   
@@ -225,12 +224,8 @@ function extractItemNumber(cells: string[], previousItem: number | null = null):
       continue;
     }
     
-    // CONTINUITY GUARD: If we have a previous item, check for reasonable jump
-    // This prevents random numbers from resetting item state
-    if (previousItem !== null && Math.abs(num - previousItem) > 100) {
-      // Large jump - likely not a real item number sequence
-      continue;
-    }
+    // REMOVED: Continuity guard was causing items to be skipped when 
+    // there's a legitimate jump in item numbers (e.g., supplementary list starts at 164)
     
     return num;
   }
@@ -435,9 +430,8 @@ function extractCasesFromSection(html: string, courtNo: string): ParsedCase[] {
     // -----------------------------------------
     // STEP 1: Detect item number if present
     // This updates our context state
-    // Pass currentItemNumber for continuity guard
     // -----------------------------------------
-    const maybeItemNo = extractItemNumber(cells, currentItemNumber);
+    const maybeItemNo = extractItemNumber(cells);
     if (maybeItemNo !== null) {
       currentItemNumber = maybeItemNo;
     }
@@ -491,14 +485,33 @@ function extractCasesFromSection(html: string, courtNo: string): ParsedCase[] {
   if (cases.length > 0) {
     const itemNumbers = cases.map(c => c.item_no).filter((n): n is number => n !== null);
     const maxItem = Math.max(...itemNumbers, 0);
+    const minItem = Math.min(...itemNumbers, 1);
     const uniqueItems = new Set(itemNumbers).size;
-    const coverage = maxItem > 0 ? (uniqueItems / maxItem) * 100 : 100;
+    const expectedItems = maxItem - minItem + 1;
+    const coverage = expectedItems > 0 ? (uniqueItems / expectedItems) * 100 : 100;
     
-    console.log(`[PARSER] Court ${courtNo}: ${cases.length} cases, ${uniqueItems}/${maxItem} items (${coverage.toFixed(1)}% coverage)`);
+    // Find missing item ranges for gap audit
+    const itemSet = new Set(itemNumbers);
+    const missingRanges: { start: number; end: number }[] = [];
+    let rangeStart: number | null = null;
+    
+    for (let i = minItem; i <= maxItem; i++) {
+      if (!itemSet.has(i)) {
+        if (rangeStart === null) rangeStart = i;
+      } else if (rangeStart !== null) {
+        missingRanges.push({ start: rangeStart, end: i - 1 });
+        rangeStart = null;
+      }
+    }
+    if (rangeStart !== null) {
+      missingRanges.push({ start: rangeStart, end: maxItem });
+    }
+    
+    console.log(`[PARSER] Court ${courtNo}: ${cases.length} cases, items ${minItem}-${maxItem}, ${uniqueItems}/${expectedItems} present (${coverage.toFixed(1)}% coverage)`);
     
     // Warn if coverage is below 80%
-    if (maxItem > 10 && uniqueItems < maxItem * 0.8) {
-      console.warn(`[PARSER-INTEGRITY-WARNING] Court ${courtNo}: GAPS DETECTED! Expected ~${maxItem} items, got ${uniqueItems} unique (${coverage.toFixed(1)}%). Review HTML structure.`);
+    if (expectedItems > 10 && coverage < 80) {
+      console.warn(`[PARSER-INTEGRITY-WARNING] Court ${courtNo}: GAPS DETECTED! Missing ranges: ${JSON.stringify(missingRanges)}`);
     }
   }
   
@@ -943,18 +956,91 @@ Deno.serve(async (req) => {
     const casesResult = await batchUpsertCases(supabase, docketRecords);
     console.log(`[PHASE-3] Cases: ${casesResult.inserted} inserted, ${casesResult.updated} updated`);
     
+    // =========================================================================
+    // GAP AUDIT: Analyze coverage per court and log gaps
+    // =========================================================================
+    const courtCoverage: Record<string, { expected: number; actual: number; coverage: number; missingRanges: { start: number; end: number }[] }> = {};
+    let overallCoverage = 100;
+    let hasSignificantGaps = false;
+    
+    // Group cases by court for gap analysis
+    const casesByCourtForAudit = new Map<string, number[]>();
+    for (const c of cases) {
+      const courtNo = normalizeCourtNo(c.court_no);
+      if (!casesByCourtForAudit.has(courtNo)) {
+        casesByCourtForAudit.set(courtNo, []);
+      }
+      if (c.item_no !== null) {
+        casesByCourtForAudit.get(courtNo)!.push(c.item_no);
+      }
+    }
+    
+    for (const [courtNo, itemNumbers] of casesByCourtForAudit) {
+      if (itemNumbers.length === 0) continue;
+      
+      const maxItem = Math.max(...itemNumbers);
+      const minItem = Math.min(...itemNumbers);
+      const expectedItems = maxItem - minItem + 1;
+      const uniqueItems = new Set(itemNumbers).size;
+      const coverage = expectedItems > 0 ? (uniqueItems / expectedItems) * 100 : 100;
+      
+      // Find missing ranges
+      const itemSet = new Set(itemNumbers);
+      const missingRanges: { start: number; end: number }[] = [];
+      let rangeStart: number | null = null;
+      
+      for (let i = minItem; i <= maxItem; i++) {
+        if (!itemSet.has(i)) {
+          if (rangeStart === null) rangeStart = i;
+        } else if (rangeStart !== null) {
+          missingRanges.push({ start: rangeStart, end: i - 1 });
+          rangeStart = null;
+        }
+      }
+      if (rangeStart !== null) {
+        missingRanges.push({ start: rangeStart, end: maxItem });
+      }
+      
+      courtCoverage[courtNo] = { expected: expectedItems, actual: uniqueItems, coverage, missingRanges };
+      
+      if (expectedItems > 10 && coverage < 80) {
+        hasSignificantGaps = true;
+        console.warn(`[GAP-AUDIT] Court ${courtNo}: ${coverage.toFixed(1)}% coverage, missing: ${JSON.stringify(missingRanges)}`);
+        
+        // Log to gap audit table
+        await supabase
+          .from('causelist_gap_audit')
+          .insert({
+            raw_causelist_id: causelist_id,
+            court_no: courtNo,
+            expected_items: expectedItems,
+            actual_items: uniqueItems,
+            coverage_percent: coverage,
+            missing_ranges: missingRanges,
+          });
+      }
+    }
+    
+    // Calculate overall coverage
+    const totalExpected = Object.values(courtCoverage).reduce((sum, c) => sum + c.expected, 0);
+    const totalActual = Object.values(courtCoverage).reduce((sum, c) => sum + c.actual, 0);
+    overallCoverage = totalExpected > 0 ? (totalActual / totalExpected) * 100 : 100;
+    
+    // Determine final status based on coverage
+    const finalStatus = hasSignificantGaps ? 'parsed_incomplete' : 'parsed_complete';
+    
     // Update causelist status
     await supabase
       .from('raw_causelists')
       .update({ 
-        status: 'parsed_complete',
+        status: finalStatus,
         input_format: 'HTML',
         source_granularity: 'FULL_CAUSELIST',
-        structure_confidence: 0.9,
+        structure_confidence: overallCoverage >= 90 ? 0.95 : overallCoverage >= 80 ? 0.9 : 0.7,
       })
       .eq('id', causelist_id);
     
-    console.log(`[PHASE-3] Complete (${Date.now() - phase3Start}ms)`);
+    console.log(`[PHASE-3] Complete - Status: ${finalStatus}, Coverage: ${overallCoverage.toFixed(1)}% (${Date.now() - phase3Start}ms)`);
 
     // =========================================================================
     // PHASE 4: TRIGGER LIKELIHOOD DERIVATION
