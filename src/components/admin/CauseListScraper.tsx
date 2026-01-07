@@ -19,6 +19,7 @@ import {
 import { toast } from 'sonner';
 import { formatDistanceToNow } from 'date-fns';
 import { CauseListUploader } from './CauseListUploader';
+import { RecentCauselistsPanel } from './RecentCauselistsPanel';
 
 interface ScraperLog {
   id: string;
@@ -132,6 +133,9 @@ export function CauseListScraper() {
 
   return (
     <div className="space-y-6">
+      {/* Recent Causelists - Check before uploading */}
+      <RecentCauselistsPanel />
+
       {/* Direct Upload */}
       <CauseListUploader />
 
