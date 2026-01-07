@@ -86,14 +86,19 @@ export function PersistentLiveBoard({ className }: PersistentLiveBoardProps) {
     return nearest;
   }, null as { item: typeof filteredDocket[0]; board: typeof filteredLiveBoards[0] | undefined; distance: number } | null);
 
-  // Loading state
+  // CRITICAL FIX: Call useStalenessState UNCONDITIONALLY before any early returns
+  // This was causing React hook rule violations when called after conditional returns
+  const lastUpdatedForStaleness = nearestCase?.board?.last_updated ?? null;
+  const { secondsSinceUpdate, isStale, isWarning } = useStalenessState(lastUpdatedForStaleness);
+
+  // Loading state - after all hooks are called
   if (liveBoardLoading || docketLoading) {
     return (
       <div className={cn('h-10 bg-secondary/50 rounded-lg animate-pulse', className)} />
     );
   }
 
-  // No cases today
+  // No cases today - after all hooks are called
   if (!nearestCase) {
     return null;
   }
@@ -101,9 +106,6 @@ export function PersistentLiveBoard({ className }: PersistentLiveBoardProps) {
   const { item, board, distance } = nearestCase;
   const currentItem = board?.current_item ?? 0;
   const status = board?.status ?? 'hearing';
-
-  // P0 FIX: Staleness tracking
-  const { secondsSinceUpdate, isStale, isWarning } = useStalenessState(board?.last_updated);
   
   // Format last update time for display
   const lastUpdateTime = board?.last_updated 
