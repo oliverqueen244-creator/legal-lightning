@@ -91,6 +91,7 @@ const TechnicalDossier = () => {
                   <li>Parser Fallback System</li>
                   <li>Error Reporting System</li>
                   <li>HTML Cause List Parsing</li>
+                  <li>Codebase Statistics</li>
                 </ol>
               </div>
             </div>
@@ -2316,11 +2317,230 @@ queryClient.setQueryData(['notifications'], (old) => [...old, newNotif]);`}</pre
 
           <Separator className="my-8" />
 
+          {/* Section 25: Codebase Statistics */}
+          <section className="mb-10 print:page-break-inside-avoid">
+            <h2 className="text-2xl font-bold text-black mb-4 flex items-center gap-2">
+              <Code className="h-6 w-6" />
+              25. Codebase Statistics
+            </h2>
+
+            <div className="space-y-6">
+              <p className="text-sm text-gray-600">
+                Comprehensive metrics about the Nyay-Hub codebase structure, size, and composition.
+              </p>
+
+              {/* Summary Cards */}
+              <div className="grid md:grid-cols-4 gap-4">
+                <div className="border border-gray-300 rounded-lg p-4 text-center">
+                  <p className="text-3xl font-bold text-black">~55,000</p>
+                  <p className="text-sm text-gray-600">Total Lines of Code</p>
+                </div>
+                <div className="border border-gray-300 rounded-lg p-4 text-center">
+                  <p className="text-3xl font-bold text-black">253+</p>
+                  <p className="text-sm text-gray-600">TypeScript/TSX Files</p>
+                </div>
+                <div className="border border-gray-300 rounded-lg p-4 text-center">
+                  <p className="text-3xl font-bold text-black">25</p>
+                  <p className="text-sm text-gray-600">Edge Functions</p>
+                </div>
+                <div className="border border-gray-300 rounded-lg p-4 text-center">
+                  <p className="text-3xl font-bold text-black">53</p>
+                  <p className="text-sm text-gray-600">Custom React Hooks</p>
+                </div>
+              </div>
+
+              {/* Detailed Breakdown */}
+              <div className="bg-gray-100 p-4 rounded-lg border border-gray-300 font-mono text-xs overflow-x-auto">
+                <pre className="text-gray-700 whitespace-pre">
+{`┌────────────────────────────────────────────────────────────────────────────┐
+│                         CODEBASE STATISTICS                                 │
+└────────────────────────────────────────────────────────────────────────────┘
+
+  TOTAL LINES OF CODE
+  ───────────────────
+  Frontend (src/)           ~44,000 lines   (225 files)
+  Edge Functions            ~10,800 lines   (28 files)
+  ─────────────────────────────────────────────────────
+  TOTAL                     ~55,000 lines   (253 files)
+
+
+  FRONTEND BREAKDOWN (src/)
+  ─────────────────────────
+
+  Directory              Files    Description
+  ──────────────────────────────────────────────────────────────────────
+  components/            ~180     React UI components
+  ├── admin/              20      Admin panel components
+  ├── dashboard/          15      Dashboard widgets
+  ├── war-room/           10      War room features
+  ├── layout/             10      Layout components (Header, Nav, etc.)
+  ├── ui/                 50      Shadcn/UI base components
+  ├── chambers/            5      Chamber management
+  ├── court-focus/         3      Court focus mode
+  ├── court-mode/          2      Courtroom mode
+  ├── pwa/                 4      PWA components
+  └── (others)           ~60      Other feature components
+  
+  hooks/                   53     Custom React hooks
+  pages/                   12     Route pages
+  lib/                      7     Utility libraries
+  integrations/             2     Supabase client & types
+
+
+  EDGE FUNCTIONS BREAKDOWN (supabase/functions/)
+  ──────────────────────────────────────────────
+
+  Function                        Purpose
+  ──────────────────────────────────────────────────────────────────────
+  telegram-webhook                Incoming Telegram bot messages
+  download-causelists             Download PDFs from Telegram
+  upload-causelist                Manual causelist upload
+  
+  html-causelist-parse            Parse HTML format causelists
+  html-extract                    Extract text from HTML files
+  parse-case                      AI-powered case parsing
+  parse-all-cases                 Batch parsing orchestrator
+  pdf-extract-chunk               PDF text extraction
+  extract-causelist-notes         Extract notes & policies
+  
+  auto-match-aliases              Auto-match lawyer aliases
+  match-docket-aliases            Match cases to user aliases
+  scan-lawyer-names               Extract lawyer names from text
+  
+  scrape-live-board               Scrape court display boards
+  sync-live-board                 Sync live board to database
+  simulate-live-board             Dev: simulate board updates
+  
+  ai-worker                       AI job processing queue
+  search-indian-kanoon            Legal case search API
+  derive-hearing-likelihood       Calculate hearing probability
+  
+  data-validation                 Data integrity checks
+  health-check                    Court portal health
+  escalate-whatsapp               WhatsApp notifications
+  
+  scrape-causelist                Web scraping causelists
+  scrape-telegram-causelist       Telegram causelist processing
+
+  _shared/                        Shared utilities
+  ├── timing.ts                   Timing obfuscation
+  ├── errorReporting.ts           Error logging
+  └── fallbackController.ts       Parser fallback logic
+
+
+  CUSTOM HOOKS (53 total)
+  ───────────────────────
+
+  Authentication & Users          Data & State
+  ────────────────────────        ─────────────────────────
+  useAuth                         useDocket
+  useUserRole                     useChambers
+  useAliases                      useArguments
+  useSubscription                 useCaseDocuments
+  useSubscriptionManager          useCaseHistory
+                                  useJudgmentReferences
+  
+  Court & Live Features           Offline & Sync
+  ────────────────────────        ─────────────────────────
+  useLiveBoard                    useOfflineCache
+  useCourtFocusMode               usePendingSync
+  useCourtMode                    useSyncHealth
+  useCourtroomSnapshot            useQueryCache
+  useCourtNotifications           useOfflineThresholdMemory
+  useCourtOverrides               
+  useUpcomingCases                Network & PWA
+                                  ─────────────────────────
+  AI & Intelligence               useNetworkStatus
+  ────────────────────────        useConnectionHealth
+  useJudgeIntelligence            usePWAUpdate
+  useParserConfidence             usePWAUpdateSafety
+  useMorningBrief                 
+  useWhisper                      Utilities
+  useIndianKanoonSearch           ─────────────────────────
+                                  use-mobile
+  Admin & Monitoring              use-toast
+  ────────────────────────        useFileUpload
+  useAdminErrors                  useRateLimit
+  useDataValidation               useSensitiveView
+  useFallbackLogs                 useAudioRecorder
+  useAudit                        useNotificationSound
+  useBatchOperations              useNotificationEscalation
+
+
+  UI COMPONENTS LIBRARY
+  ─────────────────────
+
+  Base Components (shadcn/ui):    50+ components
+  ──────────────────────────────────────────────
+  • Form controls: Button, Input, Checkbox, Select, Switch, Slider
+  • Layout: Card, Dialog, Sheet, Drawer, Tabs, Accordion
+  • Navigation: NavigationMenu, Menubar, DropdownMenu
+  • Feedback: Toast, Alert, Badge, Progress, Skeleton
+  • Data display: Table, Avatar, Calendar, Chart
+  • Overlay: Popover, Tooltip, HoverCard, ContextMenu
+
+
+  DEPENDENCIES
+  ────────────
+
+  Core Framework:    React 18, TypeScript, Vite
+  UI/Styling:        TailwindCSS, Shadcn/UI, Lucide Icons
+  State/Data:        TanStack Query, React Hook Form, Zod
+  Backend:           Supabase JS, idb (IndexedDB)
+  Features:          react-i18next, react-pdf, recharts
+  PWA:               vite-plugin-pwa, Workbox
+
+
+  DATABASE TABLES (28 tables)
+  ───────────────────────────
+
+  Core:              profiles, user_roles, lawyer_aliases
+  Cases:             daily_court_docket, case_documents, case_arguments
+  Documents:         judgment_attachments, document_annotations
+  Live:              live_board_cache, sync_status, court_metadata
+  Chambers:          chambers, chamber_memberships, chamber_invites
+  Notes:             cause_list_notes, daily_execution_policies, post_court_notes
+  AI/Parse:          ai_jobs, ai_parse_cache, raw_causelists, case_parse_queue
+  Admin:             admin_error_events, audit_runs, audit_findings, audit_risks
+  Notifications:     notifications, notification_escalations
+  Monitoring:        parser_confidence_runs, parser_fallback_log, scraper_logs`}
+                </pre>
+              </div>
+
+              {/* Version Info */}
+              <div className="border border-gray-300 rounded-lg p-4">
+                <h4 className="font-medium text-black mb-2">Version Information</h4>
+                <div className="grid md:grid-cols-3 gap-4 text-sm text-gray-600">
+                  <div>
+                    <strong>React:</strong> 18.3.1
+                  </div>
+                  <div>
+                    <strong>TypeScript:</strong> 5.x
+                  </div>
+                  <div>
+                    <strong>Vite:</strong> 5.4.x
+                  </div>
+                  <div>
+                    <strong>TailwindCSS:</strong> 3.x
+                  </div>
+                  <div>
+                    <strong>Supabase JS:</strong> 2.86.0
+                  </div>
+                  <div>
+                    <strong>TanStack Query:</strong> 5.83.0
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <Separator className="my-8" />
+
           {/* Footer */}
           <footer className="text-center text-sm text-gray-500 py-8 border-t border-gray-300">
             <p className="font-semibold">Nyay-Hub Technical Dossier</p>
             <p>Built by Izafa Labs</p>
-            <p className="mt-2">Document Version: 3.0</p>
+            <p className="mt-2">Document Version: 3.1</p>
             <p>Generated: {new Date().toISOString()}</p>
           </footer>
 
