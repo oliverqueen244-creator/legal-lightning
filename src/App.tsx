@@ -21,10 +21,12 @@ import { InstallDiscoveryBanner, PostInstallConfirmation } from "./components/pw
 import { CourtFocusOverlay } from "./components/court-focus";
 import { SplashScreen } from "./components/layout/SplashScreen";
 import { PWAUpdateManager } from "./components/pwa/PWAUpdateManager";
+import { ErrorBoundary } from "./components/layout/ErrorBoundary";
 
 const queryClient = new QueryClient();
 
 const App = () => (
+  <ErrorBoundary>
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       {/* FormDirtyProvider MUST wrap SyncConflictProvider for safety checks */}
@@ -68,6 +70,7 @@ const App = () => (
       </FormDirtyProvider>
     </TooltipProvider>
   </QueryClientProvider>
+  </ErrorBoundary>
 );
 
 export default App;
