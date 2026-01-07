@@ -171,6 +171,9 @@ function fuzzyMatch(normalizedLawyerField: string, normalizedAlias: string): num
  * Attempt to match a lawyer field against sorted aliases
  * Returns the best match or null if no safe match found
  */
+// Maximum length for lawyer name fields to prevent DoS via algorithmic complexity
+const MAX_LAWYER_FIELD_LENGTH = 500;
+
 function matchLawyerField(
   lawyerField: string | null,
   role: 'petitioner' | 'respondent',
@@ -178,8 +181,21 @@ function matchLawyerField(
 ): MatchResult | null {
   if (!lawyerField) return null;
   
-  const normalizedField = normalize(lawyerField);
+  // Input length validation to prevent DoS attacks
+  let sanitizedField = lawyerField;
+  if (sanitizedField.length > MAX_LAWYER_FIELD_LENGTH) {
+    console.warn(`[auto-match] Lawyer field too long (${sanitizedField.length}), truncating`);
+    sanitizedField = sanitizedField.substring(0, MAX_LAWYER_FIELD_LENGTH);
+  }
+  
+  const normalizedField = normalize(sanitizedField);
   if (!normalizedField) return null;
+  
+  // Additional protection: skip if normalized result is still suspiciously long
+  if (normalizedField.length > 400) {
+    console.warn(`[auto-match] Normalized field too long, skipping match`);
+    return null;
+  }
 
   // Skip if the entire field is just an ignored label
   if (isIgnoredLabel(normalizedField)) return null;
