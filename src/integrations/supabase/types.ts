@@ -2246,6 +2246,14 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_chamber_member: {
+        Args: { _chamber_id: string; _user_id: string }
+        Returns: boolean
+      }
+      is_chamber_owner: {
+        Args: { _chamber_id: string; _user_id: string }
+        Returns: boolean
+      }
       is_fallback_disabled: { Args: { p_bench_code: string }; Returns: boolean }
       log_error_event: {
         Args: {
