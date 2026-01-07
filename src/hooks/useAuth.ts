@@ -11,10 +11,8 @@ export function useAuth() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [role, setRole] = useState<AppRole | null>(null);
   const [loading, setLoading] = useState(true);
-  const [profileLoading, setProfileLoading] = useState(false);
 
   const fetchProfile = useCallback(async (userId: string) => {
-    setProfileLoading(true);
     try {
       const { data, error } = await supabase
         .from('profiles')
@@ -31,8 +29,6 @@ export function useAuth() {
     } catch (err) {
       console.error('[useAuth] Profile fetch error:', err);
       setProfile(null);
-    } finally {
-      setProfileLoading(false);
     }
   }, []);
 
@@ -51,24 +47,24 @@ export function useAuth() {
 
   useEffect(() => {
     let isMounted = true;
+    let initialLoadDone = false;
 
     // Set up auth state listener FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         if (!isMounted) return;
         
+        console.log('[useAuth] Auth state change:', event, !!session);
+        
         setSession(session);
         setUser(session?.user ?? null);
         
-        if (session?.user) {
-          // Use setTimeout to avoid potential deadlock with Supabase client
-          setTimeout(() => {
-            if (isMounted) {
-              fetchProfile(session.user.id);
-              fetchRole(session.user.id);
-            }
-          }, 0);
-        } else {
+        // Only fetch profile/role on auth state changes AFTER initial load
+        // to avoid duplicate fetches
+        if (session?.user && initialLoadDone) {
+          fetchProfile(session.user.id);
+          fetchRole(session.user.id);
+        } else if (!session) {
           setProfile(null);
           setRole(null);
         }
@@ -82,11 +78,13 @@ export function useAuth() {
         
         if (!isMounted) return;
         
+        console.log('[useAuth] Initial session:', !!session);
+        
         setSession(session);
         setUser(session?.user ?? null);
         
         if (session?.user) {
-          // Wait for profile to load before setting loading to false
+          // Wait for profile and role to load before setting loading to false
           await Promise.all([
             fetchProfile(session.user.id),
             fetchRole(session.user.id)
@@ -96,6 +94,7 @@ export function useAuth() {
         console.error('[useAuth] Session initialization error:', err);
       } finally {
         if (isMounted) {
+          initialLoadDone = true;
           setLoading(false);
         }
       }
@@ -139,15 +138,12 @@ export function useAuth() {
     return { error };
   };
 
-  // Combined loading state: auth loading OR profile still loading after auth
-  const isFullyLoaded = !loading && (!session || !profileLoading);
-
   return {
     user,
     session,
     profile,
     role,
-    loading: !isFullyLoaded,
+    loading,
     signIn,
     signUp,
     signOut,
