@@ -9,7 +9,7 @@
  * All logs are admin-only and used for parsing intelligence diagnostics.
  */
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
 export type ErrorSeverity = 'P0' | 'P1' | 'P2';
 
