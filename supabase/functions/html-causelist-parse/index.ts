@@ -1,4 +1,4 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -78,6 +78,20 @@ interface ParseRequest {
   causelist_id: string;
 }
 
+// Override types that can be extracted from NOTICE text
+type OverrideType = 'judge_substitution' | 'bench_conversion' | 'court_reassignment' | 'serial_range_reassignment' | 'timing_override';
+
+interface ExtractedOverride {
+  court_no: string;
+  override_type: OverrideType;
+  from_serial: number | null;
+  to_serial: number | null;
+  new_judge: string | null;
+  bench_type: string | null; // 'SB' | 'DB' | null
+  timing_note: string | null;
+  source_text: string;
+}
+
 // NOTE patterns for HTML extraction
 const NOTE_PATTERNS = [
   { pattern: /NOTE\s*[:\-]\s*([^\n<]+(?:\n(?![A-Z]{2,})[^\n<]+)*)/gi, type: 'NOTE' },
@@ -121,6 +135,112 @@ function extractNotesFromHtml(html: string): ExtractedNote[] {
     seen.add(key);
     return true;
   });
+}
+
+// STEP 3: Extract court overrides from SUPPLEMENTARY NOTICE text
+// This parses judicial instructions that modify court operations
+function extractOverridesFromNotes(notes: ExtractedNote[], bench: string): ExtractedOverride[] {
+  const overrides: ExtractedOverride[] = [];
+  
+  for (const note of notes) {
+    const text = note.note_text;
+    const textLower = text.toLowerCase();
+    
+    // Pattern 1: Judge substitution 
+    // "Court No. X ... items Y to Z ... will be taken up by Justice NAME"
+    const judgeSubPatterns = [
+      /Court\s*No\.?\s*:?\s*(\d+)[\s\S]*?(?:items?|serial\s*nos?\.?|sr\.?\s*nos?\.?)\s*(\d+)\s*(?:to|[-–])\s*(\d+)[\s\S]*?(?:before|by|taken\s*up\s*by)\s*(?:HON['']?BLE\s*)?(?:MR\.?\s*|MRS\.?\s*)?JUSTICE\s+([A-Z][A-Z\s\.]+)/gi,
+      /Court\s*No\.?\s*:?\s*(\d+)[\s\S]*?(?:before|by)\s*(?:HON['']?BLE\s*)?(?:MR\.?\s*|MRS\.?\s*)?JUSTICE\s+([A-Z][A-Z\s\.]+)[\s\S]*?(?:items?|serial)\s*(\d+)\s*(?:to|[-–])\s*(\d+)/gi,
+    ];
+    
+    for (const pattern of judgeSubPatterns) {
+      const matches = text.matchAll(pattern);
+      for (const match of matches) {
+        const courtNo = match[1];
+        const fromSerial = parseInt(match[2], 10);
+        const toSerial = parseInt(match[3], 10);
+        const newJudge = match[4]?.trim();
+        
+        if (courtNo && !isNaN(fromSerial) && !isNaN(toSerial) && newJudge) {
+          overrides.push({
+            court_no: courtNo,
+            override_type: 'judge_substitution',
+            from_serial: fromSerial,
+            to_serial: toSerial,
+            new_judge: newJudge,
+            bench_type: null,
+            timing_note: null,
+            source_text: text.substring(0, 200),
+          });
+        }
+      }
+    }
+    
+    // Pattern 2: Bench conversion (Single Bench ↔ Division Bench)
+    // "Court No. X ... DB/Division Bench ... items Y to Z"
+    if (textLower.includes('division bench') || textLower.includes('d.b.') || textLower.includes('db ')) {
+      const courtMatch = text.match(/Court\s*No\.?\s*:?\s*(\d+)/i);
+      const rangeMatch = text.match(/(?:items?|serial\s*nos?\.?)\s*(\d+)\s*(?:to|[-–])\s*(\d+)/i);
+      
+      if (courtMatch) {
+        overrides.push({
+          court_no: courtMatch[1],
+          override_type: 'bench_conversion',
+          from_serial: rangeMatch ? parseInt(rangeMatch[1], 10) : null,
+          to_serial: rangeMatch ? parseInt(rangeMatch[2], 10) : null,
+          new_judge: null,
+          bench_type: 'DB',
+          timing_note: null,
+          source_text: text.substring(0, 200),
+        });
+      }
+    }
+    
+    // Pattern 3: Timing override
+    // "items X to Y will be taken up after lunch / at 2:00 PM"
+    const timingPatterns = [
+      /(?:items?|serial)\s*(\d+)\s*(?:to|[-–])\s*(\d+)[\s\S]*?(?:after\s+lunch|at\s+\d{1,2}[:\.]?\d{0,2}\s*(?:am|pm)?)/i,
+      /(?:after\s+lunch|at\s+\d{1,2}[:\.]?\d{0,2}\s*(?:am|pm)?)[\s\S]*?(?:items?|serial)\s*(\d+)\s*(?:to|[-–])\s*(\d+)/i,
+    ];
+    
+    for (const pattern of timingPatterns) {
+      const timingMatch = text.match(pattern);
+      if (timingMatch) {
+        const courtMatch = text.match(/Court\s*No\.?\s*:?\s*(\d+)/i);
+        if (courtMatch) {
+          overrides.push({
+            court_no: courtMatch[1],
+            override_type: 'timing_override',
+            from_serial: parseInt(timingMatch[1], 10) || null,
+            to_serial: parseInt(timingMatch[2], 10) || null,
+            new_judge: null,
+            bench_type: null,
+            timing_note: timingMatch[0],
+            source_text: text.substring(0, 200),
+          });
+        }
+      }
+    }
+    
+    // Pattern 4: Court reassignment
+    // "matters of Court No. X will be heard in Court No. Y"
+    const reassignPattern = /(?:matters|cases|items)\s*(?:of|from)?\s*Court\s*No\.?\s*:?\s*(\d+)[\s\S]*?(?:will be|shall be|to be)\s*(?:heard|taken)\s*(?:in|by|before)\s*Court\s*No\.?\s*:?\s*(\d+)/i;
+    const reassignMatch = text.match(reassignPattern);
+    if (reassignMatch) {
+      overrides.push({
+        court_no: reassignMatch[1],
+        override_type: 'court_reassignment',
+        from_serial: null,
+        to_serial: null,
+        new_judge: `Reassigned to Court ${reassignMatch[2]}`,
+        bench_type: null,
+        timing_note: null,
+        source_text: text.substring(0, 200),
+      });
+    }
+  }
+  
+  return overrides;
 }
 
 // Court name normalization map
@@ -649,7 +769,8 @@ function derivePoliciesInMemory(
 // deno-lint-ignore no-explicit-any
 async function batchUpsertCases(
   supabase: any,
-  records: DocketRecord[]
+  records: DocketRecord[],
+  sourceListType: string = 'DAILY'
 ): Promise<{ inserted: number; updated: number; errors: string[] }> {
   let inserted = 0;
   let updated = 0;
@@ -657,7 +778,12 @@ async function batchUpsertCases(
   
   const batchSize = calculateBatchSize(records.length);
   const totalBatches = Math.ceil(records.length / batchSize);
-  console.log(`[PHASE-3] Dynamic batch size: ${batchSize} (${totalBatches} batches for ${records.length} cases)`);
+  console.log(`[PHASE-3] Dynamic batch size: ${batchSize} (${totalBatches} batches for ${records.length} cases, source: ${sourceListType})`);
+  
+  // STEP 2: FORMAL PRECEDENCE MODEL
+  // - DAILY = BASE PLAN (inserted fresh, can be updated by SUPPLEMENTARY)
+  // - SUPPLEMENTARY = OVERRIDE LAYER (updates existing, inserts new items)
+  const isSupplementary = sourceListType === 'SUPPLEMENTARY';
   
   for (let batchNum = 0; batchNum < totalBatches; batchNum++) {
     const start = batchNum * batchSize;
@@ -667,41 +793,68 @@ async function batchUpsertCases(
     console.log(`[PHASE-3] Processing batch ${batchNum + 1}/${totalBatches} (${batch.length} cases)`);
     
     try {
-      // Use upsert with unique index for efficient batch operations
-      // The unique index idx_daily_court_docket_unique_case handles conflicts
-      const { data, error } = await supabase
-        .from('daily_court_docket')
-        .upsert(batch, {
-          onConflict: 'court_location,court_room_no,case_number,date',
-          ignoreDuplicates: false,
-        })
-        .select('id');
-      
-      if (error) {
-        // If upsert fails, try simple insert (ignore duplicates)
-        console.log(`[PHASE-3] Batch ${batchNum + 1} upsert error: ${error.message}, trying insert...`);
+      if (isSupplementary) {
+        // STEP 2: SUPPLEMENTARY lists are ADDITIVE, not destructive
+        // Insert new records that don't exist in DAILY list
+        // For SUPPLEMENTARY, we insert with list_type='SUPPLEMENTARY' to preserve provenance
+        // We do NOT overwrite DAILY records - both coexist
         
-        const { data: insertData, error: insertError } = await supabase
+        const { data, error } = await supabase
           .from('daily_court_docket')
           .insert(batch)
           .select('id');
         
-        if (insertError) {
-          // Some records may be duplicates - this is expected, count what we got
-          if (insertError.message.includes('duplicate') || insertError.message.includes('unique')) {
-            console.log(`[PHASE-3] Batch ${batchNum + 1}: duplicates found, records already exist`);
-            updated += batch.length; // Count as updates (already exist)
+        if (error) {
+          if (error.message.includes('duplicate') || error.message.includes('unique')) {
+            // Record already exists from DAILY list - this is expected
+            // STEP 2: SUPPLEMENTARY does NOT overwrite DAILY base data
+            console.log(`[PHASE-3] Batch ${batchNum + 1}: ${batch.length} already in DAILY list (preserved)`);
+            updated += batch.length;
           } else {
-            console.error(`[PHASE-3] Batch ${batchNum + 1} insert failed: ${insertError.message}`);
-            errors.push(`Batch ${batchNum + 1}: ${insertError.message}`);
+            console.error(`[PHASE-3] Batch ${batchNum + 1} insert failed: ${error.message}`);
+            errors.push(`Batch ${batchNum + 1}: ${error.message}`);
           }
         } else {
-          inserted += insertData?.length || 0;
-          console.log(`[PHASE-3] Batch ${batchNum + 1} inserted: ${insertData?.length || 0}`);
+          // These are NEW supplementary items not in DAILY list
+          inserted += data?.length || 0;
+          console.log(`[PHASE-3] Batch ${batchNum + 1} inserted: ${data?.length || 0} new SUPPLEMENTARY items`);
         }
       } else {
-        inserted += data?.length || batch.length;
-        console.log(`[PHASE-3] Batch ${batchNum + 1} upserted: ${data?.length || batch.length} records`);
+        // DAILY list: Use upsert (BASE PLAN)
+        // The unique index idx_daily_court_docket_unique_case handles conflicts
+        const { data, error } = await supabase
+          .from('daily_court_docket')
+          .upsert(batch, {
+            onConflict: 'court_location,court_room_no,case_number,date',
+            ignoreDuplicates: false,
+          })
+          .select('id');
+        
+        if (error) {
+          // If upsert fails, try simple insert
+          console.log(`[PHASE-3] Batch ${batchNum + 1} upsert error: ${error.message}, trying insert...`);
+          
+          const { data: insertData, error: insertError } = await supabase
+            .from('daily_court_docket')
+            .insert(batch)
+            .select('id');
+          
+          if (insertError) {
+            if (insertError.message.includes('duplicate') || insertError.message.includes('unique')) {
+              console.log(`[PHASE-3] Batch ${batchNum + 1}: duplicates found, records already exist`);
+              updated += batch.length;
+            } else {
+              console.error(`[PHASE-3] Batch ${batchNum + 1} insert failed: ${insertError.message}`);
+              errors.push(`Batch ${batchNum + 1}: ${insertError.message}`);
+            }
+          } else {
+            inserted += insertData?.length || 0;
+            console.log(`[PHASE-3] Batch ${batchNum + 1} inserted: ${insertData?.length || 0}`);
+          }
+        } else {
+          inserted += data?.length || batch.length;
+          console.log(`[PHASE-3] Batch ${batchNum + 1} upserted: ${data?.length || batch.length} records`);
+        }
       }
     } catch (batchError) {
       const errorMsg = batchError instanceof Error ? batchError.message : 'Unknown error';
@@ -885,12 +1038,24 @@ Deno.serve(async (req) => {
     }
 
     // =========================================================================
-    // PHASE 2: DERIVE POLICIES IN MEMORY
+    // PHASE 2: DERIVE POLICIES IN MEMORY + EXTRACT OVERRIDES
     // =========================================================================
     console.log('[PHASE-2] Deriving execution policies in memory...');
     const phase2Start = Date.now();
     
     const derivedPolicies = derivePoliciesInMemory(extractedNotes, causelist_id, bench);
+    
+    // STEP 1 FIX: Get the TRUE list_type from the raw_causelists record
+    // This is the source of truth - NOT a hardcoded value
+    const sourceListType: string = causelist.list_type || 'DAILY';
+    console.log(`[PHASE-2] Source list_type from raw_causelists: ${sourceListType}`);
+    
+    // STEP 3: Extract court overrides from SUPPLEMENTARY notices
+    let extractedOverrides: ExtractedOverride[] = [];
+    if (sourceListType === 'SUPPLEMENTARY') {
+      extractedOverrides = extractOverridesFromNotes(extractedNotes, bench);
+      console.log(`[PHASE-2] Extracted ${extractedOverrides.length} court overrides from SUPPLEMENTARY notices`);
+    }
     
     // Fetch court metadata for judge name lookups
     const { data: courtMetadata } = await supabase
@@ -906,7 +1071,7 @@ Deno.serve(async (req) => {
     }
     console.log(`[PHASE-2] Loaded ${judgesByCourtNo.size} court->judge mappings from metadata`);
     
-    // Prepare docket records
+    // Prepare docket records with CORRECT list_type (STEP 1 FIX)
     const docketRecords: DocketRecord[] = cases.map(caseData => {
       const courtNo = normalizeCourtNo(caseData.court_no);
       // Try: parsed judge_names -> extract from HTML -> court_metadata lookup
@@ -926,7 +1091,8 @@ Deno.serve(async (req) => {
         petitioner_lawyer: caseData.petitioner_lawyer,
         respondent_lawyer: caseData.respondent_lawyer,
         judge_names: judgeNames,
-        list_type: 'DAILY',
+        // STEP 1 FIX: Use the TRUE source list_type, NOT hardcoded 'DAILY'
+        list_type: sourceListType,
         status: 'pending',
         origin: 'HTML_FULL_CAUSELIST',
         confidence_source: 'court_structure',
@@ -936,7 +1102,7 @@ Deno.serve(async (req) => {
       };
     });
     
-    console.log(`[PHASE-2] Complete: ${derivedPolicies.length} policies derived (${Date.now() - phase2Start}ms)`);
+    console.log(`[PHASE-2] Complete: ${derivedPolicies.length} policies, ${extractedOverrides.length} overrides derived (${Date.now() - phase2Start}ms)`);
 
     // =========================================================================
     // PHASE 3: BATCH PERSISTENCE
@@ -952,9 +1118,45 @@ Deno.serve(async (req) => {
     const policiesResult = await batchInsertPolicies(supabase, derivedPolicies);
     console.log(`[PHASE-3] Policies: ${policiesResult.inserted} inserted`);
     
-    // Insert/upsert cases in batches
-    const casesResult = await batchUpsertCases(supabase, docketRecords);
+    // Insert/upsert cases in batches (with STEP 2 precedence logic)
+    const casesResult = await batchUpsertCases(supabase, docketRecords, sourceListType);
     console.log(`[PHASE-3] Cases: ${casesResult.inserted} inserted, ${casesResult.updated} updated`);
+    
+    // STEP 3: Insert court_overrides from SUPPLEMENTARY notices
+    let overridesInserted = 0;
+    if (extractedOverrides.length > 0) {
+      console.log(`[PHASE-3] Inserting ${extractedOverrides.length} court overrides...`);
+      
+      for (const override of extractedOverrides) {
+        try {
+          const { error: overrideError } = await supabase
+            .from('court_overrides')
+            .upsert({
+              court_location: bench,
+              court_no: override.court_no,
+              override_date: listDate,
+              from_serial: override.from_serial,
+              to_serial: override.to_serial,
+              new_judge: override.new_judge,
+              override_type: override.override_type,
+              source_causelist_id: causelist_id,
+              is_active: true,
+            }, {
+              onConflict: 'court_location,court_no,override_date,override_type',
+            });
+          
+          if (!overrideError) {
+            overridesInserted++;
+          } else {
+            console.warn(`[PHASE-3] Override insert failed: ${overrideError.message}`);
+          }
+        } catch (e) {
+          console.warn(`[PHASE-3] Override insert exception:`, e);
+        }
+      }
+      
+      console.log(`[PHASE-3] Court overrides: ${overridesInserted}/${extractedOverrides.length} inserted`);
+    }
     
     // =========================================================================
     // GAP AUDIT: Analyze coverage per court and log gaps
@@ -1078,15 +1280,18 @@ Deno.serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: true,
+        source_list_type: sourceListType, // STEP 1: Report TRUE source type
         phases: {
           parse: `${cases.length} cases, ${extractedNotes.length} notes`,
           policies: `${derivedPolicies.length} derived`,
-          persist: `${casesResult.inserted} inserted, ${casesResult.updated} updated`,
+          overrides: `${overridesInserted} court overrides from notices`, // STEP 3
+          persist: `${casesResult.inserted} inserted, ${casesResult.updated} preserved`,
           likelihood: policiesResult.inserted > 0 ? 'triggered' : 'skipped (no policies)',
         },
         cases_found: cases.length,
         cases_inserted: casesResult.inserted,
         cases_updated: casesResult.updated,
+        overrides_inserted: overridesInserted, // STEP 3
         courts_processed: courts.length,
         notes_extracted: extractedNotes.length,
         policies_created: policiesResult.inserted,
