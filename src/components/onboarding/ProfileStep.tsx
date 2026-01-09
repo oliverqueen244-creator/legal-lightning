@@ -92,7 +92,6 @@ export default function ProfileStep({ data, onChange }: ProfileStepProps) {
               <MapPin className="w-4 h-4 text-primary" />
               <div>
                 <p className="font-medium">Jaipur Bench</p>
-                <p className="text-xs text-muted-foreground">Principal Bench</p>
               </div>
             </div>
           </Label>
@@ -114,7 +113,6 @@ export default function ProfileStep({ data, onChange }: ProfileStepProps) {
               <MapPin className="w-4 h-4 text-primary" />
               <div>
                 <p className="font-medium">Jodhpur Bench</p>
-                <p className="text-xs text-muted-foreground">Circuit Bench</p>
               </div>
             </div>
           </Label>
