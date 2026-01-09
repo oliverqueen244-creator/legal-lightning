@@ -4,6 +4,9 @@ import { supabase } from '@/integrations/supabase/client';
 import type { DocketItem } from '@/types/database';
 import { useAuth } from './useAuth';
 
+// PHASE 0.3: Stale time to reduce refetch noise on mount/focus
+const DOCKET_STALE_TIME = 30_000; // 30 seconds
+
 export function useDocket(date?: string) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -31,20 +34,40 @@ export function useDocket(date?: string) {
       // Return empty array if no matches found
       return [] as DocketItem[];
     },
+    // PHASE 0.3: Don't refetch immediately on mount/focus
+    staleTime: DOCKET_STALE_TIME,
+    // PHASE 3.1: Add timeout for slow networks
+    gcTime: 5 * 60 * 1000, // Keep in garbage collection for 5 min
   });
-  // Subscribe to realtime changes
+
+  // Subscribe to realtime changes - PHASE 1.2: Granular invalidation
   useEffect(() => {
     const channel = supabase
-      .channel('docket-changes')
+      .channel(`docket-changes-${targetDate}`)
       .on(
         'postgres_changes',
         {
           event: '*',
           schema: 'public',
           table: 'daily_court_docket',
+          filter: `date=eq.${targetDate}`,
         },
-        () => {
-          queryClient.invalidateQueries({ queryKey: ['docket'] });
+        (payload) => {
+          // PHASE 1.2: Only invalidate if the change affects user's cases
+          const newRecord = payload.new as any;
+          const oldRecord = payload.old as any;
+          
+          if (user?.id) {
+            // Only invalidate if the change is for user's matched cases
+            if (
+              newRecord?.matched_profile_id === user.id ||
+              oldRecord?.matched_profile_id === user.id
+            ) {
+              queryClient.invalidateQueries({ 
+                queryKey: ['docket', user.id, targetDate] 
+              });
+            }
+          }
         }
       )
       .subscribe();
@@ -52,14 +75,14 @@ export function useDocket(date?: string) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [queryClient]);
+  }, [queryClient, targetDate, user?.id]);
 
   return query;
 }
 
 export function useDocketItem(id: string) {
   return useQuery({
-    queryKey: ['docket', id],
+    queryKey: ['docket-item', id],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('daily_court_docket')
@@ -71,5 +94,6 @@ export function useDocketItem(id: string) {
       return data as DocketItem | null;
     },
     enabled: !!id,
+    staleTime: DOCKET_STALE_TIME,
   });
 }

@@ -3,6 +3,9 @@ import { supabase } from '@/integrations/supabase/client';
 import type { DocketItem } from '@/types/database';
 import { useAuth } from './useAuth';
 
+// PHASE 0.3: Stale time for upcoming cases
+const UPCOMING_STALE_TIME = 60_000; // 60 seconds
+
 export function useUpcomingCases() {
   const { user } = useAuth();
   const today = new Date().toISOString().split('T')[0];
@@ -37,5 +40,7 @@ export function useUpcomingCases() {
       if (error) throw error;
       return data as DocketItem[];
     },
+    // PHASE 0.3: Reduce refetch noise
+    staleTime: UPCOMING_STALE_TIME,
   });
 }

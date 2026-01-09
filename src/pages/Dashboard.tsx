@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { format } from 'date-fns';
 import { DocketCard } from '@/components/dashboard/DocketCard';
@@ -25,6 +25,7 @@ import { useMorningBrief } from '@/hooks/useMorningBrief';
 import { usePendingCaptures } from '@/hooks/usePostCourtCapture';
 import { useUpcomingCases } from '@/hooks/useUpcomingCases';
 import { useCourtMode } from '@/hooks/useCourtMode';
+import { useCacheHydration } from '@/hooks/useCacheIntegration';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -58,12 +59,41 @@ export default function Dashboard() {
   // Format date for API calls - must be before useDocket
   const formattedDate = format(selectedDate, 'yyyy-MM-dd');
   
+  // PHASE 1.1: Cache hydration and persistence
+  const { user } = useAuth();
+  const { saveDocketCache, saveLiveBoardCache, saveMorningBriefCache, saveUpcomingCache } = useCacheHydration(user?.id);
+  
   const { data: docket, isLoading: docketLoading, refetch, dataUpdatedAt: docketUpdatedAt, isFetching: docketFetching } = useDocket(formattedDate);
   const { data: liveBoards, isLoading: liveBoardLoading, dataUpdatedAt: liveBoardUpdatedAt, isFetching: liveBoardFetching, refetch: refetchLiveBoard } = useLiveBoard();
   const { data: morningBrief, isLoading: briefLoading, refetch: refetchBrief, dataUpdatedAt: briefUpdatedAt, isFetching: briefFetching } = useMorningBrief();
   const { data: pendingCaptures } = usePendingCaptures();
   const { data: upcomingCases, isLoading: upcomingLoading, dataUpdatedAt: upcomingUpdatedAt, isFetching: upcomingFetching, refetch: refetchUpcoming } = useUpcomingCases();
   const { isCourtModeEnabled } = useCourtMode();
+
+  // PHASE 1.1: Persist data to IndexedDB when it changes (for offline access)
+  useEffect(() => {
+    if (docket && docket.length > 0) {
+      saveDocketCache(docket, formattedDate);
+    }
+  }, [docket, formattedDate, saveDocketCache]);
+
+  useEffect(() => {
+    if (liveBoards && liveBoards.length > 0) {
+      saveLiveBoardCache(liveBoards);
+    }
+  }, [liveBoards, saveLiveBoardCache]);
+
+  useEffect(() => {
+    if (morningBrief) {
+      saveMorningBriefCache(morningBrief);
+    }
+  }, [morningBrief, saveMorningBriefCache]);
+
+  useEffect(() => {
+    if (upcomingCases && upcomingCases.length > 0) {
+      saveUpcomingCache(upcomingCases);
+    }
+  }, [upcomingCases, saveUpcomingCache]);
 
   // Get user's selected benches (could be "JAIPUR", "JODHPUR", or "JAIPUR,JODHPUR")
   const userBenches = profile?.bench?.split(',').map(b => b.trim().toUpperCase()) ?? [];
