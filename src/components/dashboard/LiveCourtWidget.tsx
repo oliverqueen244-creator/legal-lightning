@@ -7,6 +7,7 @@ import { useCourtSyncHealth } from '@/hooks/useSyncHealth';
 import { isCourtHours } from '@/hooks/useLiveBoard';
 import { useCourtOverrides, findOverrideForItem } from '@/hooks/useCourtOverrides';
 import { useEffectiveJudge } from '@/hooks/useEffectiveJudge';
+import { useRoleSemantics } from '@/hooks/useRoleSemantics';
 
 interface LiveCourtWidgetProps {
   courtRoom: string;
@@ -33,6 +34,9 @@ export function LiveCourtWidget({
   const syncHealth = useCourtSyncHealth(courtLocation, courtRoom, liveBoard);
   const courtHoursStatus = isCourtHours();
   const isActive = liveBoard?.is_active ?? false;
+  
+  // CORRECTNESS PLAN 3: Role-aware labels
+  const { caseRunningLabel, caseApproachingLabel, isClerkRole } = useRoleSemantics();
   
   // Fetch court overrides for today
   const { data: overrides = [] } = useCourtOverrides(courtLocation, courtRoom);
@@ -275,7 +279,8 @@ export function LiveCourtWidget({
           {isMyTurn ? (
             <div className="flex items-center justify-center gap-2 text-primary font-bold">
               <Gavel className="h-5 w-5 animate-bounce" />
-              <span className="text-lg">YOUR CASE IS NOW!</span>
+              {/* CORRECTNESS PLAN 3: Role-aware label */}
+              <span className="text-lg">{caseRunningLabel}</span>
             </div>
           ) : distance && distance > 0 ? (
             <div className="flex items-center justify-center gap-2">
@@ -285,7 +290,8 @@ export function LiveCourtWidget({
                 <Clock className="h-4 w-4 text-muted-foreground" />
               )}
               <span className={`font-medium ${isPanic ? 'text-court-danger-light' : 'text-muted-foreground'}`}>
-                Your case (#{myItemNumber}) is{' '}
+                {/* CORRECTNESS PLAN 3: Role-aware label */}
+                {isClerkRole ? 'Tracked case' : 'Your case'} (#{myItemNumber}) is{' '}
                 <span className={`font-bold ${isPanic ? 'text-court-danger-light text-xl' : 'text-primary'}`}>
                   {distance}
                 </span>
@@ -298,7 +304,10 @@ export function LiveCourtWidget({
               </span>
             </div>
           ) : (
-            <span className="text-muted-foreground">Your case has passed</span>
+            <span className="text-muted-foreground">
+              {/* CORRECTNESS PLAN 3: Role-aware label */}
+              {isClerkRole ? 'Tracked case has passed' : 'Your case has passed'}
+            </span>
           )}
         </div>
       )}

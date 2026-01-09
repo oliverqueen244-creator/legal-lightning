@@ -5,8 +5,9 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { useAliases } from '@/hooks/useAliases';
 import { useAuth } from '@/hooks/useAuth';
+import { useRoleSemantics } from '@/hooks/useRoleSemantics';
 import { supabase } from '@/integrations/supabase/client';
-import { Search, Loader2, CheckCircle2, Scale, MapPin, Calendar, AlertTriangle, Upload, MessageSquare, ShieldAlert } from 'lucide-react';
+import { Search, Loader2, CheckCircle2, Scale, MapPin, Calendar, AlertTriangle, Upload, MessageSquare, ShieldAlert, Ban } from 'lucide-react';
 import { toast } from 'sonner';
 import type { MatchedCase } from '@/types/database';
 
@@ -19,6 +20,7 @@ const MAX_BULK_CONFIRM = 20;
 export default function CourtScan({ bench }: CourtScanProps) {
   const { user } = useAuth();
   const { aliases } = useAliases();
+  const { canConfirmMatches, isClerkRole } = useRoleSemantics();
   const [isScanning, setIsScanning] = useState(false);
   const [scannedCases, setScannedCases] = useState<MatchedCase[]>([]);
   const [selectedCases, setSelectedCases] = useState<Set<string>>(new Set());
@@ -106,6 +108,12 @@ export default function CourtScan({ bench }: CourtScanProps) {
   };
 
   const handleConfirm = async () => {
+    // CORRECTNESS PLAN 3: Clerks cannot confirm case matches
+    if (!canConfirmMatches) {
+      toast.error('Clerk accounts cannot claim case ownership. Only lawyers can confirm case matches.');
+      return;
+    }
+
     if (selectedCases.size === 0) {
       toast.error('Please select at least one case to confirm');
       return;

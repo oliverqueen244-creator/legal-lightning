@@ -743,6 +743,44 @@ export type Database = {
           },
         ]
       }
+      clerk_delegations: {
+        Row: {
+          chamber_id: string | null
+          clerk_id: string
+          created_by: string | null
+          delegated_at: string
+          id: string
+          lawyer_id: string
+          revoked_at: string | null
+        }
+        Insert: {
+          chamber_id?: string | null
+          clerk_id: string
+          created_by?: string | null
+          delegated_at?: string
+          id?: string
+          lawyer_id: string
+          revoked_at?: string | null
+        }
+        Update: {
+          chamber_id?: string | null
+          clerk_id?: string
+          created_by?: string | null
+          delegated_at?: string
+          id?: string
+          lawyer_id?: string
+          revoked_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "clerk_delegations_chamber_id_fkey"
+            columns: ["chamber_id"]
+            isOneToOne: false
+            referencedRelation: "chambers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       court_metadata: {
         Row: {
           bench: string
@@ -2298,7 +2336,12 @@ export type Database = {
         Args: { _chamber_id: string; _user_id: string }
         Returns: boolean
       }
+      is_delegated_clerk: {
+        Args: { _clerk_id: string; _lawyer_id: string }
+        Returns: boolean
+      }
       is_fallback_disabled: { Args: { p_bench_code: string }; Returns: boolean }
+      is_lawyer_role: { Args: { _user_id: string }; Returns: boolean }
       log_error_event: {
         Args: {
           p_app_version?: string
