@@ -27,6 +27,7 @@ import { useCaseHistory, useCaseHasHistory } from '@/hooks/useCaseHistory';
 import { usePostCourtNotes } from '@/hooks/usePostCourtCapture';
 import { useAuth } from '@/hooks/useAuth';
 import { useEffectiveJudge } from '@/hooks/useEffectiveJudge';
+import { useCourtSessionState, getCurrentItem, isRunningState } from '@/hooks/useCourtSessionState';
 import type { CaseArgument } from '@/types/database';
 import { cn } from '@/lib/utils';
 
@@ -83,10 +84,14 @@ export default function WarRoom() {
     }
   }, [documents, selectedDocId]);
 
-  const currentItem = liveBoard?.current_item ?? 0;
+  // CORRECTNESS PLAN 2: Use canonical court session state
+  const courtSession = useCourtSessionState(liveBoard);
+  const currentItem = getCurrentItem(liveBoard);
   const distance = docketItem ? docketItem.item_no - currentItem : 0;
-  const isPanic = distance > 0 && distance <= 5;
-  const isRunning = distance <= 0;
+  
+  // CORRECTNESS PLAN 2: Canonical RUNNING - requires inSession && distance <= 0
+  const isPanic = courtSession.inSession && distance > 0 && distance <= 5;
+  const isRunning = isRunningState(courtSession, docketItem?.item_no, liveBoard);
 
   const handleSelectArg = (arg: CaseArgument) => {
     setSelectedArg(arg);
@@ -179,8 +184,9 @@ export default function WarRoom() {
                       </Badge>
                     )}
                     
+                    {/* CORRECTNESS PLAN 2: Use MARKED RUNNING instead of RUNNING NOW */}
                     {isRunning && (
-                      <Badge variant="running" role="status" aria-live="assertive">RUNNING NOW</Badge>
+                      <Badge variant="running" role="status" aria-live="assertive">MARKED RUNNING</Badge>
                     )}
                   </div>
                   

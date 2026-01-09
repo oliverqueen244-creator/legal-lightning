@@ -15,6 +15,7 @@ import { useDocketItem } from '@/hooks/useDocket';
 import { useWhisperFeed } from '@/hooks/useWhisper';
 import { useLiveBoardForCourt } from '@/hooks/useLiveBoard';
 import { useDocumentUpload, useExtendedDocuments } from '@/hooks/useDocumentManagement';
+import { useCourtSessionState, getCurrentItem, isRunningState } from '@/hooks/useCourtSessionState';
 import { cn } from '@/lib/utils';
 import { DOCUMENT_TYPE_LABELS } from '@/types/documents';
 
@@ -31,10 +32,14 @@ export default function ControlDeck() {
   );
   const { uploadDocument, uploading } = useDocumentUpload(caseId!);
 
-  const currentItem = liveBoard?.current_item ?? 0;
+  // CORRECTNESS PLAN 2: Use canonical court session state
+  const courtSession = useCourtSessionState(liveBoard);
+  const currentItem = getCurrentItem(liveBoard);
   const distance = docketItem ? docketItem.item_no - currentItem : 0;
-  const isPanic = distance > 0 && distance <= 5;
-  const isRunning = distance <= 0;
+  
+  // CORRECTNESS PLAN 2: Canonical RUNNING - requires inSession && distance <= 0
+  const isPanic = courtSession.inSession && distance > 0 && distance <= 5;
+  const isRunning = isRunningState(courtSession, docketItem?.item_no, liveBoard);
 
   // Get document stats
   const pendingDocs = documents?.filter((d) => d.review_status === 'pending') || [];
@@ -100,8 +105,9 @@ export default function ControlDeck() {
                       <Badge variant="danger">{distance} ITEMS AWAY</Badge>
                     )}
                     
+                    {/* CORRECTNESS PLAN 2: Use MARKED RUNNING instead of RUNNING NOW */}
                     {isRunning && (
-                      <Badge variant="running">RUNNING NOW</Badge>
+                      <Badge variant="running">MARKED RUNNING</Badge>
                     )}
                   </div>
                   

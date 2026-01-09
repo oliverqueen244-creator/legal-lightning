@@ -5,6 +5,7 @@ import { useLiveBoard } from './useLiveBoard';
 import { useDocket } from './useDocket';
 import { useCourtNotifications, getThresholdForDistance, calculateItemDistance } from './useCourtNotifications';
 import { useNetworkStatus } from './useNetworkStatus';
+import { deriveCourtSessionState, getCurrentItem, CURRENT_ITEM_FALLBACK } from './useCourtSessionState';
 import type { DocketItem, LiveBoardCache } from '@/types/database';
 
 export interface FocusModeCase {
@@ -49,6 +50,7 @@ export function useCourtFocusMode() {
   }, []);
 
   // Get the user's matched cases with their current status
+  // CORRECTNESS PLAN 2: Use canonical session state for status determination
   const matchedCasesWithStatus = useMemo((): FocusModeCase[] => {
     if (!docketItems?.length || !user?.id) return [];
 
@@ -61,12 +63,16 @@ export function useCourtFocusMode() {
             lb.court_no === item.court_room_no
         ) || null;
 
-        const currentItem = liveBoard?.current_item || 1;
+        // CORRECTNESS PLAN 2: Use canonical current item fallback
+        const currentItem = getCurrentItem(liveBoard);
         const distance = item.item_no ? calculateItemDistance(item.item_no, currentItem) : 999;
+        
+        // CORRECTNESS PLAN 2: Use canonical session state
+        const courtSession = deriveCourtSessionState(liveBoard);
 
-        // Determine status
+        // Determine status - CORRECTNESS PLAN 2: Gate by inSession
         let status: FocusModeCase['status'] = 'waiting';
-        if (distance === 0 && liveBoard?.is_active) {
+        if (distance === 0 && courtSession.inSession) {
           status = 'running';
         } else if (distance > 0 && distance <= 3) {
           status = 'next';
@@ -82,7 +88,7 @@ export function useCourtFocusMode() {
           liveBoard,
           distance,
           status,
-          isActive: liveBoard?.is_active ?? false,
+          isActive: courtSession.isActive,
         };
       })
       .sort((a, b) => {
