@@ -52,7 +52,12 @@ export default function Auth() {
 
   // Redirect if already authenticated
   useEffect(() => {
-    if (isAuthenticated && !loading && profile) {
+    if (isAuthenticated && !loading) {
+      // If no profile exists yet, send to onboarding to create it
+      if (!profile) {
+        navigate('/onboarding');
+        return;
+      }
       // Check if onboarding is completed
       if (profile.onboarding_completed) {
         navigate('/');
