@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, memo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { format, formatDistanceToNow } from 'date-fns';
@@ -45,7 +45,8 @@ interface DocketCardProps {
   cachedAt?: number;
 }
 
-export function DocketCard({ item, liveBoard, userRole, onForceActive, showDate, pendingDocCount = 0, cachedAt }: DocketCardProps) {
+// PHASE 2.2: Memoized DocketCard to prevent re-renders on unrelated live board changes
+function DocketCardInner({ item, liveBoard, userRole, onForceActive, showDate, pendingDocCount = 0, cachedAt }: DocketCardProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [isForcing, setIsForcing] = useState(false);
@@ -401,3 +402,42 @@ export function DocketCard({ item, liveBoard, userRole, onForceActive, showDate,
     </Card>
   );
 }
+
+// PHASE 2.2: Export memoized component to prevent unnecessary re-renders
+export const DocketCard = memo(DocketCardInner, (prevProps, nextProps) => {
+  // Only re-render if these props changed
+  if (prevProps.item.id !== nextProps.item.id) return false;
+  if (prevProps.item.status !== nextProps.item.status) return false;
+  if (prevProps.item.force_active !== nextProps.item.force_active) return false;
+  
+  // Check if live board changes affect THIS card
+  const prevCurrent = prevProps.liveBoard?.current_item;
+  const nextCurrent = nextProps.liveBoard?.current_item;
+  const prevStatus = prevProps.liveBoard?.status;
+  const nextStatus = nextProps.liveBoard?.status;
+  
+  if (prevCurrent !== nextCurrent) {
+    // Only re-render if distance-based status would change
+    const prevDistance = prevProps.item.item_no - (prevCurrent ?? 0);
+    const nextDistance = nextProps.item.item_no - (nextCurrent ?? 0);
+    const threshold = prevProps.item.list_type === 'SUPPLEMENTARY' ? 10 : 5;
+    
+    // Re-render if crossing panic/running thresholds
+    const prevIsPanic = prevDistance > 0 && prevDistance <= threshold;
+    const nextIsPanic = nextDistance > 0 && nextDistance <= threshold;
+    const prevIsRunning = prevDistance <= 0;
+    const nextIsRunning = nextDistance <= 0;
+    
+    if (prevIsPanic !== nextIsPanic || prevIsRunning !== nextIsRunning) {
+      return false; // Do re-render
+    }
+  }
+  
+  if (prevStatus !== nextStatus) return false;
+  if (prevProps.userRole !== nextProps.userRole) return false;
+  if (prevProps.showDate !== nextProps.showDate) return false;
+  if (prevProps.pendingDocCount !== nextProps.pendingDocCount) return false;
+  if (prevProps.cachedAt !== nextProps.cachedAt) return false;
+  
+  return true; // Skip re-render
+});

@@ -57,6 +57,9 @@ export function isCourtHours(): { inSession: boolean; reason: string } {
   }
 }
 
+// PHASE 0.3: Stale time for live board
+const LIVEBOARD_STALE_TIME = 15_000; // 15 seconds
+
 export function useLiveBoard() {
   const queryClient = useQueryClient();
 
@@ -75,8 +78,11 @@ export function useLiveBoard() {
         is_active: item.is_active ?? false
       })) as LiveBoardCache[];
     },
+    // PHASE 0.3: Reduce refetch noise
+    staleTime: LIVEBOARD_STALE_TIME,
   });
 
+  // PHASE 1.2: Granular realtime invalidation by court
   useEffect(() => {
     const channel = supabase
       .channel('live-board-changes')
@@ -87,8 +93,32 @@ export function useLiveBoard() {
           schema: 'public',
           table: 'live_board_cache',
         },
-        () => {
-          queryClient.invalidateQueries({ queryKey: ['liveBoard'] });
+        (payload) => {
+          // PHASE 1.2: Patch cache directly instead of full invalidation
+          const newRecord = payload.new as LiveBoardCache;
+          
+          if (newRecord && payload.eventType !== 'DELETE') {
+            queryClient.setQueryData<LiveBoardCache[]>(['liveBoard'], (old) => {
+              if (!old) return [newRecord];
+              
+              // Find and update the specific court
+              const index = old.findIndex(
+                b => b.court_location === newRecord.court_location && 
+                     b.court_no === newRecord.court_no
+              );
+              
+              if (index >= 0) {
+                const updated = [...old];
+                updated[index] = newRecord;
+                return updated;
+              }
+              
+              return [...old, newRecord];
+            });
+          } else {
+            // For deletes, invalidate fully
+            queryClient.invalidateQueries({ queryKey: ['liveBoard'] });
+          }
         }
       )
       .subscribe();

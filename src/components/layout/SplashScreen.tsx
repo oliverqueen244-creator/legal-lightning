@@ -1,18 +1,26 @@
 import { useState, useEffect } from 'react';
 import logoImage from '@/assets/logo.png';
 import { cn } from '@/lib/utils';
+import { hasCachedDashboardData } from '@/hooks/useCacheIntegration';
 
 const SPLASH_SHOWN_KEY = 'nyayhub_splash_shown_session';
 
 // Routes where splash should NOT show (documentation/dossier pages)
 const SKIP_SPLASH_ROUTES = ['/dossier', '/technical-dossier', '/docs', '/install'];
 
+// PHASE 0.1: Maximum splash duration reduced from 1500ms to 500ms
+const MAX_SPLASH_DURATION = 500;
+
 /**
- * Branded Splash Screen
+ * Branded Splash Screen - OPTIMIZED
  * 
  * Shows the Nyay-Hub logo during initial app load.
- * Only shows once per session to avoid annoyance.
- * Does not show on documentation/dossier pages.
+ * Now skips if:
+ * - Already shown this session
+ * - On documentation/dossier pages
+ * - Cached dashboard data exists (instant render priority)
+ * 
+ * Maximum display: 500ms (down from 1500-2000ms)
  */
 export function SplashScreen() {
   const [isVisible, setIsVisible] = useState(false);
@@ -31,24 +39,40 @@ export function SplashScreen() {
       return;
     }
 
-    // Show splash
-    setIsVisible(true);
-    sessionStorage.setItem(SPLASH_SHOWN_KEY, 'true');
+    // PHASE 0.1: Skip splash if cached data exists - prioritize instant render
+    const checkCacheAndShow = async () => {
+      try {
+        const hasCachedData = await hasCachedDashboardData();
+        if (hasCachedData) {
+          console.log('[Splash] Skipping - cached data available for instant render');
+          sessionStorage.setItem(SPLASH_SHOWN_KEY, 'true');
+          return;
+        }
+      } catch {
+        // If cache check fails, show splash briefly
+      }
+      
+      // Show splash (first visit or no cache)
+      setIsVisible(true);
+      sessionStorage.setItem(SPLASH_SHOWN_KEY, 'true');
 
-    // Start fade out after 1.5 seconds
-    const fadeTimer = setTimeout(() => {
-      setIsFadingOut(true);
-    }, 1500);
+      // Start fade out after reduced duration
+      const fadeTimer = setTimeout(() => {
+        setIsFadingOut(true);
+      }, MAX_SPLASH_DURATION);
 
-    // Remove from DOM after fade completes
-    const removeTimer = setTimeout(() => {
-      setIsVisible(false);
-    }, 2000);
+      // Remove from DOM after fade completes
+      const removeTimer = setTimeout(() => {
+        setIsVisible(false);
+      }, MAX_SPLASH_DURATION + 300);
 
-    return () => {
-      clearTimeout(fadeTimer);
-      clearTimeout(removeTimer);
+      return () => {
+        clearTimeout(fadeTimer);
+        clearTimeout(removeTimer);
+      };
     };
+
+    checkCacheAndShow();
   }, []);
 
   if (!isVisible) return null;
@@ -56,7 +80,7 @@ export function SplashScreen() {
   return (
     <div
       className={cn(
-        'fixed inset-0 z-[100] flex flex-col items-center justify-center bg-background transition-opacity duration-500',
+        'fixed inset-0 z-[100] flex flex-col items-center justify-center bg-background transition-opacity duration-300',
         isFadingOut && 'opacity-0 pointer-events-none'
       )}
     >
