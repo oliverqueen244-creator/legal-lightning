@@ -3,35 +3,50 @@ import { Clock, Timer, TrendingUp, AlertTriangle, Zap } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import type { DocketItem, LiveBoardCache } from '@/types/database';
+import { 
+  useCourtSessionState, 
+  getCurrentItem, 
+  shouldShowWaitTime,
+  type CourtSessionState 
+} from '@/hooks/useCourtSessionState';
 
 interface CaseTimeEstimatorProps {
   docketItem: DocketItem;
   liveBoard?: LiveBoardCache;
   avgMinutesPerCase?: number;
+  /** Optional pre-computed session state to avoid duplicate computation */
+  courtSession?: CourtSessionState;
 }
 
 export function CaseTimeEstimator({ 
   docketItem, 
   liveBoard,
-  avgMinutesPerCase = 6 // Default 6 minutes per case
+  avgMinutesPerCase = 6, // Default 6 minutes per case
+  courtSession: externalSession
 }: CaseTimeEstimatorProps) {
   const [estimatedTime, setEstimatedTime] = useState<string>('--');
   const [estimatedMinutes, setEstimatedMinutes] = useState<number>(0);
   const [progress, setProgress] = useState<number>(0);
   const [urgencyLevel, setUrgencyLevel] = useState<'safe' | 'warning' | 'urgent' | 'now'>('safe');
 
+  // CORRECTNESS PLAN 2: Use canonical session state
+  const derivedSession = useCourtSessionState(liveBoard);
+  const courtSession = externalSession ?? derivedSession;
+
   useEffect(() => {
-    if (!liveBoard || !docketItem.item_no) {
+    // CORRECTNESS PLAN 2: Hide if not in hearing session
+    if (!liveBoard || !docketItem.item_no || !shouldShowWaitTime(courtSession)) {
       setEstimatedTime('No data');
       return;
     }
 
-    const currentItem = liveBoard.current_item || 1;
+    const currentItem = getCurrentItem(liveBoard);
     const myItem = docketItem.item_no;
     const casesAhead = myItem - currentItem;
 
     if (casesAhead <= 0) {
-      setEstimatedTime('Your turn!');
+      // CORRECTNESS PLAN 2: Use MARKED instead of certainty-implying language
+      setEstimatedTime('Your case is marked');
       setEstimatedMinutes(0);
       setProgress(100);
       setUrgencyLevel('now');
@@ -52,7 +67,6 @@ export function CaseTimeEstimator({
     }
 
     // Calculate progress (assuming max 50 items in a day)
-    const maxItems = 50;
     const progressValue = Math.min(((currentItem / myItem) * 100), 100);
     setProgress(progressValue);
 
@@ -64,7 +78,7 @@ export function CaseTimeEstimator({
     } else {
       setUrgencyLevel('safe');
     }
-  }, [liveBoard, docketItem, avgMinutesPerCase]);
+  }, [liveBoard, docketItem, avgMinutesPerCase, courtSession]);
 
   const getUrgencyConfig = () => {
     switch (urgencyLevel) {
@@ -74,7 +88,8 @@ export function CaseTimeEstimator({
           bgClass: 'bg-primary/20 border-primary',
           textClass: 'text-primary',
           badgeVariant: 'gold' as const,
-          label: 'NOW',
+          // CORRECTNESS PLAN 2: Use MARKED instead of NOW
+          label: 'MARKED',
         };
       case 'urgent':
         return {
@@ -106,11 +121,13 @@ export function CaseTimeEstimator({
   const config = getUrgencyConfig();
   const Icon = config.icon;
 
-  if (!liveBoard) {
+  // CORRECTNESS PLAN 2: Hide entirely when not in hearing session
+  if (!liveBoard || !shouldShowWaitTime(courtSession)) {
     return null;
   }
 
-  const casesAhead = (docketItem.item_no || 0) - (liveBoard.current_item || 1);
+  const currentItem = getCurrentItem(liveBoard);
+  const casesAhead = (docketItem.item_no || 0) - currentItem;
 
   return (
     <div className={`rounded-lg border p-3 ${config.bgClass}`}>
@@ -138,10 +155,11 @@ export function CaseTimeEstimator({
           )}
         </div>
         
+        {/* CORRECTNESS PLAN 2: Use MARKED instead of GO NOW */}
         {urgencyLevel === 'now' && (
           <div className="flex items-center gap-1 text-primary animate-pulse">
             <Zap className="h-5 w-5" />
-            <span className="text-sm font-bold">GO NOW!</span>
+            <span className="text-sm font-bold">MARKED</span>
           </div>
         )}
       </div>
@@ -150,7 +168,7 @@ export function CaseTimeEstimator({
       {casesAhead > 0 && (
         <div className="mt-3">
           <div className="flex justify-between text-xs text-muted-foreground mb-1">
-            <span>Item #{liveBoard.current_item}</span>
+            <span>Item #{currentItem}</span>
             <span>Your Item #{docketItem.item_no}</span>
           </div>
           <Progress 
@@ -175,19 +193,28 @@ export function CaseTimeEstimator({
 export function CaseTimeEstimatorCompact({ 
   docketItem, 
   liveBoard,
-  avgMinutesPerCase = 6
+  avgMinutesPerCase = 6,
+  courtSession: externalSession
 }: CaseTimeEstimatorProps) {
-  if (!liveBoard || !docketItem.item_no) return null;
+  // CORRECTNESS PLAN 2: Use canonical session state
+  const derivedSession = useCourtSessionState(liveBoard);
+  const courtSession = externalSession ?? derivedSession;
 
-  const currentItem = liveBoard.current_item || 1;
+  // CORRECTNESS PLAN 2: Hide entirely when not in hearing session
+  if (!liveBoard || !docketItem.item_no || !shouldShowWaitTime(courtSession)) {
+    return null;
+  }
+
+  const currentItem = getCurrentItem(liveBoard);
   const myItem = docketItem.item_no;
   const casesAhead = myItem - currentItem;
 
   if (casesAhead <= 0) {
+    // CORRECTNESS PLAN 2: Use MARKED instead of NOW!
     return (
       <div className="flex items-center gap-1 text-primary animate-pulse">
         <Zap className="h-3 w-3" />
-        <span className="text-xs font-bold">NOW!</span>
+        <span className="text-xs font-bold">MARKED</span>
       </div>
     );
   }

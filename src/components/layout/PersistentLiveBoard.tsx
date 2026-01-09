@@ -6,6 +6,7 @@ import { useLiveBoard } from '@/hooks/useLiveBoard';
 import { useDocket } from '@/hooks/useDocket';
 import { useAuth } from '@/hooks/useAuth';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
+import { deriveCourtSessionState, getCurrentItem, CURRENT_ITEM_FALLBACK } from '@/hooks/useCourtSessionState';
 import { format, differenceInSeconds } from 'date-fns';
 import { useState, useEffect } from 'react';
 
@@ -18,7 +19,7 @@ interface PersistentLiveBoardProps {
  * Shows: Current court item, user's nearest case, item distance
  * One-tap accessible, non-intrusive, color-coded by urgency
  * 
- * P0 FIX: Shows OFFLINE overlay when offline to prevent false confidence
+ * CORRECTNESS PLAN 2: Uses canonical court session state
  */
 /**
  * P0 FIX: Staleness indicator helper
@@ -77,7 +78,8 @@ export function PersistentLiveBoard({ className }: PersistentLiveBoardProps) {
     const board = filteredLiveBoards.find(
       b => b.court_location === item.court_location && b.court_no === item.court_room_no
     );
-    const currentItem = board?.current_item ?? 0;
+    // CORRECTNESS PLAN 2: Use canonical fallback
+    const currentItem = getCurrentItem(board);
     const distance = (item.item_no ?? 0) - currentItem;
     
     if (distance < 0) return nearest; // Already passed
@@ -104,18 +106,22 @@ export function PersistentLiveBoard({ className }: PersistentLiveBoardProps) {
   }
 
   const { item, board, distance } = nearestCase;
-  const currentItem = board?.current_item ?? 0;
-  const status = board?.status ?? 'hearing';
+  
+  // CORRECTNESS PLAN 2: Use canonical session state
+  const courtSession = deriveCourtSessionState(board);
+  const currentItem = getCurrentItem(board);
   
   // Format last update time for display
   const lastUpdateTime = board?.last_updated 
     ? format(new Date(board.last_updated), 'h:mm a')
     : null;
 
-  // Urgency levels - DISABLED when offline (P0 FIX)
-  const isPanic = isOnline && distance > 0 && distance <= 5;
-  const isImminent = isOnline && distance > 0 && distance <= 10;
-  const isRunning = isOnline && distance <= 0;
+  // CORRECTNESS PLAN 2: Urgency levels gated by session state
+  // Only show urgency when inSession === true
+  const isPanic = isOnline && courtSession.inSession && distance > 0 && distance <= 5;
+  const isImminent = isOnline && courtSession.inSession && distance > 0 && distance <= 10;
+  // CORRECTNESS PLAN 2: Canonical RUNNING - requires inSession && distance <= 0
+  const isRunning = isOnline && courtSession.inSession && distance <= 0;
 
   return (
     <TooltipProvider>
@@ -143,16 +149,16 @@ export function PersistentLiveBoard({ className }: PersistentLiveBoardProps) {
         </div>
       )}
 
-      {/* Court Status Indicator */}
+      {/* Court Status Indicator - CORRECTNESS PLAN 2: Use session state */}
       <div className="flex items-center gap-2">
         <Activity className={cn(
           'h-4 w-4',
-          // P0 FIX: Dim status colors when offline
+          // Show status based on court session, not raw board status
           !isOnline && 'text-muted-foreground',
-          isOnline && status === 'hearing' && 'text-court-success',
-          isOnline && status === 'passover' && 'text-court-warning',
-          isOnline && status === 'lunch' && 'text-muted-foreground',
-          isOnline && status === 'adjourned' && 'text-muted-foreground'
+          isOnline && courtSession.inSession && 'text-court-success',
+          isOnline && !courtSession.inSession && courtSession.reason === 'lunch' && 'text-muted-foreground',
+          isOnline && !courtSession.inSession && courtSession.reason === 'passover' && 'text-court-warning',
+          isOnline && !courtSession.inSession && courtSession.reason !== 'lunch' && courtSession.reason !== 'passover' && 'text-muted-foreground'
         )} />
         <div className="text-xs text-muted-foreground hidden sm:block">
           <MapPin className="h-3 w-3 inline mr-1" />
@@ -185,7 +191,7 @@ export function PersistentLiveBoard({ className }: PersistentLiveBoardProps) {
         </span>
       </div>
 
-      {/* Distance Badge - P0 FIX: Show muted version when offline */}
+      {/* Distance Badge - CORRECTNESS PLAN 2: Use MARKED instead of NOW */}
       <Badge
         variant={!isOnline ? 'secondary' : isPanic ? 'danger' : isImminent ? 'secondary' : isRunning ? 'running' : 'outline'}
         className={cn(
@@ -195,7 +201,7 @@ export function PersistentLiveBoard({ className }: PersistentLiveBoardProps) {
         )}
       >
         {isPanic && isOnline && <AlertTriangle className="h-3 w-3" />}
-        {isRunning && isOnline ? 'NOW' : `${distance} away`}
+        {isRunning && isOnline ? 'MARKED' : `${distance} away`}
       </Badge>
 
       {/* P0 FIX: Staleness Indicator */}

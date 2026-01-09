@@ -15,6 +15,7 @@ import { toast } from 'sonner';
 import { CaseTimeEstimatorCompact } from './CaseTimeEstimator';
 import { HearingLikelihoodBadge } from './HearingLikelihoodBadge';
 import { useAliases } from '@/hooks/useAliases';
+import { useCourtSessionState, getCurrentItem, isRunningState, shouldShowWaitTime, CURRENT_ITEM_FALLBACK } from '@/hooks/useCourtSessionState';
 
 // Helper function to format party names with smart truncation
 const formatPartyName = (name: string | null | undefined, maxLength = 28) => {
@@ -52,19 +53,21 @@ function DocketCardInner({ item, liveBoard, userRole, onForceActive, showDate, p
   const [isForcing, setIsForcing] = useState(false);
   const { aliases } = useAliases();
   
-  const currentItem = liveBoard?.current_item ?? 0;
-  const boardStatus: BoardStatus = liveBoard?.status ?? 'hearing';
+  // CORRECTNESS PLAN 2: Use canonical court session state
+  const courtSession = useCourtSessionState(liveBoard);
+  const currentItem = getCurrentItem(liveBoard);
   const distance = item.item_no - currentItem;
   
   // Enhanced panic logic: Different thresholds for daily vs supplementary
   const isSupplementary = item.list_type === 'SUPPLEMENTARY';
   const panicThreshold = isSupplementary ? 10 : 5;
   
-  const isPanic = distance > 0 && distance <= panicThreshold && boardStatus === 'hearing';
-  const isRunning = (distance <= 0 && boardStatus === 'hearing') || item.force_active;
-  const isPassover = boardStatus === 'passover' || item.status === 'passover';
-  const isLunch = boardStatus === 'lunch';
-  const isAdjourned = boardStatus === 'adjourned';
+  // CORRECTNESS PLAN 2: Canonical RUNNING - requires inSession && distance <= 0
+  const isPanic = distance > 0 && distance <= panicThreshold && courtSession.inSession;
+  const isRunning = isRunningState(courtSession, item.item_no, liveBoard) || item.force_active;
+  const isPassover = courtSession.boardStatus === 'passover' || item.status === 'passover';
+  const isLunch = courtSession.boardStatus === 'lunch';
+  const isAdjourned = courtSession.boardStatus === 'adjourned';
   const isDone = item.status === 'done';
 
   // Determine which side the lawyer represents
@@ -243,8 +246,9 @@ function DocketCardInner({ item, liveBoard, userRole, onForceActive, showDate, p
                   {isSupplementary ? t('urgent_supp') : t('urgent')}
                 </Badge>
               )}
+              {/* CORRECTNESS PLAN 2: Use MARKED RUNNING instead of RUNNING NOW */}
               {isRunning && !item.force_active && (
-                <Badge variant="running" role="status" aria-live="assertive">{t('running_now')}</Badge>
+                <Badge variant="running" role="status" aria-live="assertive">{t('marked_running', 'MARKED RUNNING')}</Badge>
               )}
             </div>
             
@@ -271,9 +275,9 @@ function DocketCardInner({ item, liveBoard, userRole, onForceActive, showDate, p
                   {item.judge_names}
                 </span>
               )}
-              {/* Time Estimator */}
-              {!isRunning && !isDone && !isPassover && liveBoard && (
-                <CaseTimeEstimatorCompact docketItem={item} liveBoard={liveBoard} />
+              {/* Time Estimator - CORRECTNESS PLAN 2: Only show when in hearing session */}
+              {!isRunning && !isDone && !isPassover && liveBoard && shouldShowWaitTime(courtSession) && (
+                <CaseTimeEstimatorCompact docketItem={item} liveBoard={liveBoard} courtSession={courtSession} />
               )}
               {/* Hearing Likelihood - Non-promissory indicator */}
               {item.hearing_likelihood && item.hearing_likelihood !== 'UNKNOWN' && !isRunning && !isDone && (
