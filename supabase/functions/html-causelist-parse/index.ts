@@ -447,31 +447,38 @@ function finalizeParsedCase(partial: PartialCase, courtNo: string): ParsedCase {
   // Get the first row of this case (contains primary column structure)
   const firstRow = partial.raw_rows[0] || [];
   
-  // STRUCTURAL COLUMN DETECTION:
-  // Find the column index that contains the case number, then case title is the next column
+  // =========================================================================
+  // STRUCTURAL COLUMN DETECTION (STRICT MODE - NO FALLBACKS)
+  // =========================================================================
+  // Find the column index that contains the case number, then case title is the next column.
+  // If case number column cannot be positively identified → skip party extraction entirely.
+  // NO GUESSING. NO DEFAULTS. Prefer missing data over wrong data.
+  
   let caseNumberColIndex = -1;
   let caseTitleColIndex = -1;
+  let structuralCertainty = false; // Flag: true only if case number column is positively identified
   
   for (let i = 0; i < firstRow.length; i++) {
     const cell = firstRow[i];
-    // Check if this cell contains the case number
-    if (cell.includes(partial.case_number) || 
-        /\b\w+\.?\w*\.?\s*\d+\/\d{4}\b/.test(cell)) {
+    // Check if this cell contains the exact case number we parsed
+    if (cell.includes(partial.case_number)) {
       caseNumberColIndex = i;
-      // Case title is the next column
-      caseTitleColIndex = i + 1;
+      // Case title is the immediate next column
+      if (i + 1 < firstRow.length) {
+        caseTitleColIndex = i + 1;
+        structuralCertainty = true;
+      }
       break;
     }
   }
   
-  // Fallback: If case number column not found, use structural default (column 2)
-  if (caseTitleColIndex === -1 || caseTitleColIndex >= firstRow.length) {
-    // Default to column index 2 if available, else try column 1
-    caseTitleColIndex = firstRow.length > 2 ? 2 : (firstRow.length > 1 ? 1 : -1);
-  }
+  // ❌ REMOVED: All index-based fallbacks deleted
+  // If we cannot positively identify the case number column, we do NOT guess.
+  // Party extraction will be skipped, but case_title_raw may still be stored if found.
   
   // Extract case title from the structural column across all rows of this case
-  if (caseTitleColIndex >= 0) {
+  // Only proceed if we have structural certainty
+  if (structuralCertainty && caseTitleColIndex >= 0) {
     const titleParts: string[] = [];
     for (const row of partial.raw_rows) {
       if (caseTitleColIndex < row.length) {
@@ -492,50 +499,76 @@ function finalizeParsedCase(partial: PartialCase, courtNo: string): ParsedCase {
   }
   
   // =========================================================================
+  // HARD LAWYER-MARKER EXCLUSION GATE
+  // =========================================================================
+  // If the case title cell contains lawyer markers (-P / -R), this is NOT a party title.
+  // Skip party extraction entirely to prevent cross-contamination.
+  // Lawyer names in Rajasthan HC causelists consistently include -P / -R suffixes.
+  // Party titles do not.
+  
+  const LAWYER_MARKER_PATTERN = /-\s*[PR]\b/i;
+  const isLawyerColumn = caseTitleCell && LAWYER_MARKER_PATTERN.test(caseTitleCell);
+  
+  if (isLawyerColumn) {
+    // Clear case_title_raw since this is actually a lawyer column, not parties
+    parsedCase.case_title_raw = null;
+    // Skip all party extraction - parties remain null (Priority C)
+    // Lawyer extraction will still proceed normally below
+  }
+  
+  // =========================================================================
   // PRIORITY A: Explicit delimiter (vs, v/s, versus, v.)
   // =========================================================================
   let partyExtractionDone = false;
   
-  // First check the case title cell for explicit delimiters
-  const cellsToCheck = caseTitleCell ? [caseTitleCell, ...allCells] : allCells;
-  
-  for (const cell of cellsToCheck) {
-    const cellLower = cell.toLowerCase();
+  // Only attempt party extraction if:
+  // 1. We have structural certainty (case number column positively identified)
+  // 2. The case title cell does NOT contain lawyer markers
+  if (structuralCertainty && !isLawyerColumn && caseTitleCell) {
+    const cellLower = caseTitleCell.toLowerCase();
     if (cellLower.includes(' vs ') || cellLower.includes(' v/s ') || 
-        cellLower.includes(' versus ') || cell.includes(' Vs. ') || 
-        cell.includes(' VS ') || cellLower.includes(' v. ')) {
-      const parts = cell.split(/\s+(?:vs\.?|v\/s|versus|VS|v\.)\s+/i);
+        cellLower.includes(' versus ') || caseTitleCell.includes(' Vs. ') || 
+        caseTitleCell.includes(' VS ') || cellLower.includes(' v. ')) {
+      const parts = caseTitleCell.split(/\s+(?:vs\.?|v\/s|versus|VS|v\.)\s+/i);
       if (parts.length >= 2) {
-        parsedCase.petitioner = parts[0].trim().substring(0, 500) || null;
-        parsedCase.respondent = parts.slice(1).join(' ').trim().substring(0, 500) || null;
-        partyExtractionDone = true;
-        // Capture as raw title if not already set
-        if (!parsedCase.case_title_raw) {
-          parsedCase.case_title_raw = cell.substring(0, 2000).trim() || null;
+        const petitioner = parts[0].trim().substring(0, 500);
+        const respondent = parts.slice(1).join(' ').trim().substring(0, 500);
+        
+        // Final safety check: extracted values must not contain lawyer markers
+        if (!LAWYER_MARKER_PATTERN.test(petitioner) && !LAWYER_MARKER_PATTERN.test(respondent)) {
+          parsedCase.petitioner = petitioner || null;
+          parsedCase.respondent = respondent || null;
+          partyExtractionDone = true;
         }
       }
-      break;
     }
   }
   
   // =========================================================================
   // PRIORITY B: Multi-line case title fallback
-  // Applied only when: no explicit delimiter AND case title has ≥2 non-empty lines
+  // Applied only when: 
+  // - No explicit delimiter found
+  // - Structural certainty exists
+  // - Case title cell does NOT contain lawyer markers
+  // - Case title has ≥2 non-empty lines
   // =========================================================================
-  if (!partyExtractionDone && caseTitleCell) {
-    // FIXED REGEX: Split by line breaks (CR/LF) and HTML block elements
-    // Correct pattern without broken || alternation
+  if (!partyExtractionDone && structuralCertainty && !isLawyerColumn && caseTitleCell) {
+    // Split by line breaks (CR/LF) and HTML block elements
     const lines = caseTitleCell
       .split(/\r?\n|<br\s*\/?>|<\/p>|<\/div>/gi)
       .map(l => l.replace(/<[^>]+>/g, '').trim())
       .filter(l => l.length > 0);
     
     if (lines.length >= 2) {
-      // First non-empty line = petitioner
-      parsedCase.petitioner = lines[0].substring(0, 500) || null;
-      // Remaining lines joined with space = respondent
-      parsedCase.respondent = lines.slice(1).join(' ').trim().substring(0, 500) || null;
-      partyExtractionDone = true;
+      const petitioner = lines[0].substring(0, 500);
+      const respondent = lines.slice(1).join(' ').trim().substring(0, 500);
+      
+      // Final safety check: extracted values must not contain lawyer markers
+      if (!LAWYER_MARKER_PATTERN.test(petitioner) && !LAWYER_MARKER_PATTERN.test(respondent)) {
+        parsedCase.petitioner = petitioner || null;
+        parsedCase.respondent = respondent || null;
+        partyExtractionDone = true;
+      }
     }
   }
   
