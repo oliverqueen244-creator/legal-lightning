@@ -406,6 +406,10 @@ function isHeaderRow(cells: string[]): boolean {
  * - Priority A: Explicit "vs" delimiter in case title cell
  * - Priority B: Multi-line case title fallback (first line = petitioner, rest = respondent)
  * - Priority C: Leave as null, store case_title_raw for auditability
+ * 
+ * STRUCTURAL APPROACH: Uses fixed column position for case title extraction.
+ * Rajasthan HC HTML causelists have consistent column order:
+ * [0] Item No | [1] Case Number | [2] Case Title/Parties | [3] Pet. Lawyer | [4] Resp. Lawyer
  */
 function finalizeParsedCase(partial: PartialCase, courtNo: string): ParsedCase {
   const allCells = partial.raw_rows.flat();
@@ -425,42 +429,60 @@ function finalizeParsedCase(partial: PartialCase, courtNo: string): ParsedCase {
   };
   
   // =========================================================================
-  // PARTY EXTRACTION: Priority-based approach
+  // STRUCTURAL CASE TITLE EXTRACTION
   // =========================================================================
+  // 
+  // Use structural column position instead of heuristic detection.
+  // The case title column is typically at index 2 (after item_no and case_number).
+  // For rows with fewer columns, we scan the first row for the title column.
+  //
+  // Column structure in Rajasthan HC HTML causelists:
+  // - Column 0/1: Item number (1-3 digits)
+  // - Column 1/2: Case number (pattern like "S.B.C.W.P..1234/2024")
+  // - Column 2/3: Case title (party names, multi-line)
+  // - Column 3/4+: Lawyer names (contain "-P" or "-R" markers)
   
-  // STEP 1: Identify the case title cell
-  // The case title is typically the largest multi-line cell containing party names
-  // It's usually NOT the cell with case number, and NOT the lawyer cells
   let caseTitleCell: string | null = null;
-  let caseTitleCellIndex = -1;
   
-  for (let i = 0; i < allCells.length; i++) {
-    const cell = allCells[i];
-    
-    // Skip cells that are clearly case numbers
-    if (/^\s*\w+\.?\s*\d+\/\d{4}\s*$/.test(cell)) continue;
-    
-    // Skip cells that are item numbers
-    if (/^\s*\d{1,3}\.?\s*$/.test(cell)) continue;
-    
-    // Skip cells that are lawyer markers (contain -P or -R patterns)
-    if (/[-–]\s*[PR]\b/i.test(cell)) continue;
-    
-    // Look for cells that have party name characteristics:
-    // - Contains names (capitalized words)
-    // - May have line breaks (BR tags converted to spaces, or multiple lines)
-    // - May have "M/S", "STATE OF", organization names, etc.
-    const hasPartyIndicators = 
-      /\b(?:M\/S|STATE\s+OF|UNION\s+OF|GOVERNMENT|SECRETARY|COMMISSIONER|COLLECTOR|CORPORATION|LTD|PVT|SONS|THROUGH|AGAINST)\b/i.test(cell) ||
-      /^[A-Z][A-Z\s]+$/m.test(cell) || // All caps names
-      cell.split(/\n|\r/).filter(l => l.trim()).length >= 2; // Multi-line
-    
-    if (hasPartyIndicators && cell.length > 10) {
-      // Prefer the first substantial party-like cell
-      if (caseTitleCell === null || cell.length > caseTitleCell.length) {
-        caseTitleCell = cell;
-        caseTitleCellIndex = i;
+  // Get the first row of this case (contains primary column structure)
+  const firstRow = partial.raw_rows[0] || [];
+  
+  // STRUCTURAL COLUMN DETECTION:
+  // Find the column index that contains the case number, then case title is the next column
+  let caseNumberColIndex = -1;
+  let caseTitleColIndex = -1;
+  
+  for (let i = 0; i < firstRow.length; i++) {
+    const cell = firstRow[i];
+    // Check if this cell contains the case number
+    if (cell.includes(partial.case_number) || 
+        /\b\w+\.?\w*\.?\s*\d+\/\d{4}\b/.test(cell)) {
+      caseNumberColIndex = i;
+      // Case title is the next column
+      caseTitleColIndex = i + 1;
+      break;
+    }
+  }
+  
+  // Fallback: If case number column not found, use structural default (column 2)
+  if (caseTitleColIndex === -1 || caseTitleColIndex >= firstRow.length) {
+    // Default to column index 2 if available, else try column 1
+    caseTitleColIndex = firstRow.length > 2 ? 2 : (firstRow.length > 1 ? 1 : -1);
+  }
+  
+  // Extract case title from the structural column across all rows of this case
+  if (caseTitleColIndex >= 0) {
+    const titleParts: string[] = [];
+    for (const row of partial.raw_rows) {
+      if (caseTitleColIndex < row.length) {
+        const cellContent = row[caseTitleColIndex].trim();
+        if (cellContent.length > 0) {
+          titleParts.push(cellContent);
+        }
       }
+    }
+    if (titleParts.length > 0) {
+      caseTitleCell = titleParts.join('\n');
     }
   }
   
@@ -474,7 +496,10 @@ function finalizeParsedCase(partial: PartialCase, courtNo: string): ParsedCase {
   // =========================================================================
   let partyExtractionDone = false;
   
-  for (const cell of allCells) {
+  // First check the case title cell for explicit delimiters
+  const cellsToCheck = caseTitleCell ? [caseTitleCell, ...allCells] : allCells;
+  
+  for (const cell of cellsToCheck) {
     const cellLower = cell.toLowerCase();
     if (cellLower.includes(' vs ') || cellLower.includes(' v/s ') || 
         cellLower.includes(' versus ') || cell.includes(' Vs. ') || 
@@ -484,7 +509,7 @@ function finalizeParsedCase(partial: PartialCase, courtNo: string): ParsedCase {
         parsedCase.petitioner = parts[0].trim().substring(0, 500) || null;
         parsedCase.respondent = parts.slice(1).join(' ').trim().substring(0, 500) || null;
         partyExtractionDone = true;
-        // Also capture as raw title if not already set
+        // Capture as raw title if not already set
         if (!parsedCase.case_title_raw) {
           parsedCase.case_title_raw = cell.substring(0, 2000).trim() || null;
         }
@@ -495,20 +520,21 @@ function finalizeParsedCase(partial: PartialCase, courtNo: string): ParsedCase {
   
   // =========================================================================
   // PRIORITY B: Multi-line case title fallback
-  // If no explicit delimiter AND case title has 2+ non-empty lines
+  // Applied only when: no explicit delimiter AND case title has ≥2 non-empty lines
   // =========================================================================
   if (!partyExtractionDone && caseTitleCell) {
-    // Split by actual line breaks or <br> tag remnants
+    // FIXED REGEX: Split by line breaks (CR/LF) and HTML block elements
+    // Correct pattern without broken || alternation
     const lines = caseTitleCell
-      .split(/\n|\r|<br\s*\/?>|<\/p>|<\/div>/gi)
+      .split(/\r?\n|<br\s*\/?>|<\/p>|<\/div>/gi)
       .map(l => l.replace(/<[^>]+>/g, '').trim())
       .filter(l => l.length > 0);
     
     if (lines.length >= 2) {
       // First non-empty line = petitioner
       parsedCase.petitioner = lines[0].substring(0, 500) || null;
-      // Remaining lines joined = respondent
-      parsedCase.respondent = lines.slice(1).join(' ').substring(0, 500).trim() || null;
+      // Remaining lines joined with space = respondent
+      parsedCase.respondent = lines.slice(1).join(' ').trim().substring(0, 500) || null;
       partyExtractionDone = true;
     }
   }
