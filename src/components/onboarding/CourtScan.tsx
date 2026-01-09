@@ -6,13 +6,15 @@ import { Badge } from '@/components/ui/badge';
 import { useAliases } from '@/hooks/useAliases';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
-import { Search, Loader2, CheckCircle2, Scale, MapPin, Calendar, AlertTriangle, Upload, MessageSquare } from 'lucide-react';
+import { Search, Loader2, CheckCircle2, Scale, MapPin, Calendar, AlertTriangle, Upload, MessageSquare, ShieldAlert } from 'lucide-react';
 import { toast } from 'sonner';
 import type { MatchedCase } from '@/types/database';
 
 interface CourtScanProps {
   bench: 'JAIPUR' | 'JODHPUR' | 'BOTH';
 }
+
+const MAX_BULK_CONFIRM = 20;
 
 export default function CourtScan({ bench }: CourtScanProps) {
   const { user } = useAuth();
@@ -86,13 +88,14 @@ export default function CourtScan({ bench }: CourtScanProps) {
       });
 
       setScannedCases(matched);
-      setSelectedCases(new Set(matched.map((c) => c.id)));
+      // CRITICAL: Do NOT auto-select. User must explicitly select cases.
+      setSelectedCases(new Set());
       setScanComplete(true);
 
       if (matched.length === 0) {
         toast.info('No matching cases found in current records');
       } else {
-        toast.success(`Found ${matched.length} potential cases`);
+        toast.success(`Found ${matched.length} potential cases. Please review and select yours.`);
       }
     } catch (error) {
       console.error('Scan error:', error);
@@ -108,17 +111,71 @@ export default function CourtScan({ bench }: CourtScanProps) {
       return;
     }
 
+    // SAFETY: Pre-confirmation verification - ensure selected cases actually contain aliases
+    const aliasNames = aliases.map((a) => a.alias_name.toLowerCase());
+    const verifiedCaseIds: string[] = [];
+    const unverifiedCaseIds: string[] = [];
+
+    Array.from(selectedCases).forEach((caseId) => {
+      const caseData = scannedCases.find((c) => c.id === caseId);
+      if (!caseData) {
+        unverifiedCaseIds.push(caseId);
+        return;
+      }
+
+      const hasAliasMatch = aliasNames.some(
+        (alias) =>
+          caseData.alias_matched?.toLowerCase().includes(alias) ||
+          scannedCases.find((c) => c.id === caseId)?.alias_matched
+      );
+
+      if (hasAliasMatch && caseData.alias_matched) {
+        verifiedCaseIds.push(caseId);
+      } else {
+        unverifiedCaseIds.push(caseId);
+      }
+    });
+
+    if (unverifiedCaseIds.length > 0) {
+      toast.error(`${unverifiedCaseIds.length} selected case(s) could not be verified. Please deselect them.`);
+      return;
+    }
+
+    // SAFETY: Limit bulk confirmation
+    if (verifiedCaseIds.length > MAX_BULK_CONFIRM) {
+      toast.error(`You can confirm a maximum of ${MAX_BULK_CONFIRM} cases at once. Please deselect some cases.`);
+      return;
+    }
+
     setIsConfirming(true);
 
     try {
-      const { error } = await supabase
-        .from('daily_court_docket')
-        .update({ matched_profile_id: user?.id })
-        .in('id', Array.from(selectedCases));
+      // Confirm each case with full audit metadata
+      const confirmPromises = verifiedCaseIds.map((caseId) => {
+        const caseData = scannedCases.find((c) => c.id === caseId);
+        return supabase
+          .from('daily_court_docket')
+          .update({
+            matched_profile_id: user?.id,
+            match_method: 'court_scan_manual',
+            match_confidence: 0.9,
+            matched_role: caseData?.matched_as || null,
+            needs_review: true,
+          })
+          .eq('id', caseId);
+      });
 
-      if (error) throw error;
+      const results = await Promise.all(confirmPromises);
+      
+      // Check for any errors
+      const errors = results.filter((r) => r.error);
+      if (errors.length > 0) {
+        console.error('Some cases failed to confirm:', errors);
+        toast.error(`${errors.length} case(s) failed to link. Please try again.`);
+        return;
+      }
 
-      toast.success(`${selectedCases.size} cases linked to your profile`);
+      toast.success(`${verifiedCaseIds.length} cases linked to your profile`);
       setScannedCases((prev) => prev.filter((c) => !selectedCases.has(c.id)));
       setSelectedCases(new Set());
     } catch (error) {
@@ -161,6 +218,11 @@ Thank you.
     if (newSelected.has(caseId)) {
       newSelected.delete(caseId);
     } else {
+      // Check bulk limit before adding
+      if (newSelected.size >= MAX_BULK_CONFIRM) {
+        toast.warning(`Maximum ${MAX_BULK_CONFIRM} cases can be confirmed at once`);
+        return;
+      }
       newSelected.add(caseId);
     }
     setSelectedCases(newSelected);
@@ -170,7 +232,12 @@ Thank you.
     if (selectedCases.size === scannedCases.length) {
       setSelectedCases(new Set());
     } else {
-      setSelectedCases(new Set(scannedCases.map((c) => c.id)));
+      // Limit to MAX_BULK_CONFIRM cases
+      const caseIds = scannedCases.slice(0, MAX_BULK_CONFIRM).map((c) => c.id);
+      setSelectedCases(new Set(caseIds));
+      if (scannedCases.length > MAX_BULK_CONFIRM) {
+        toast.info(`Selected first ${MAX_BULK_CONFIRM} cases. Confirm these first, then select more.`);
+      }
     }
   };
 
@@ -212,12 +279,23 @@ Thank you.
       {/* Results */}
       {scanComplete && scannedCases.length > 0 && (
         <div className="space-y-4">
+          {/* Safety notice */}
+          <div className="flex items-start gap-2 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+            <ShieldAlert className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
+            <p className="text-xs text-amber-700 dark:text-amber-400">
+              <strong>Verify carefully:</strong> Only select cases where you are actually the lawyer. 
+              Matches are based on name similarity and may include other lawyers.
+            </p>
+          </div>
+
           <div className="flex items-center justify-between">
             <p className="text-sm font-medium">
-              Found {scannedCases.length} cases
+              Found {scannedCases.length} cases • {selectedCases.size} selected
             </p>
             <Button variant="ghost" size="sm" onClick={toggleAll}>
-              {selectedCases.size === scannedCases.length ? 'Deselect All' : 'Select All'}
+              {selectedCases.size === scannedCases.length || selectedCases.size === MAX_BULK_CONFIRM 
+                ? 'Deselect All' 
+                : `Select ${Math.min(scannedCases.length, MAX_BULK_CONFIRM)}`}
             </Button>
           </div>
 
