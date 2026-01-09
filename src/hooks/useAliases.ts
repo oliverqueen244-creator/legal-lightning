@@ -31,6 +31,13 @@ export function useAliases() {
     mutationFn: async ({ aliasName, isPrimary = false }: { aliasName: string; isPrimary?: boolean }) => {
       if (!user?.id) throw new Error('Not authenticated');
       
+      // SAFETY: Minimum alias length to prevent false matches
+      const trimmedName = aliasName.trim();
+      if (trimmedName.length < 5) {
+        toast.error('Alias must be at least 5 characters to prevent false matches.');
+        throw new Error('Alias too short');
+      }
+
       // Rate limit check
       if (isLimited) {
         toast.error('Too many requests. Please wait a moment.');
@@ -42,7 +49,7 @@ export function useAliases() {
           .from('lawyer_aliases')
           .insert({
             profile_id: user.id,
-            alias_name: aliasName,
+            alias_name: trimmedName,
             is_primary: isPrimary,
           })
           .select()
