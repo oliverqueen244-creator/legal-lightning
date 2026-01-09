@@ -860,6 +860,7 @@ export type Database = {
         Row: {
           case_fingerprint: string | null
           case_number: string | null
+          case_title_raw: string | null
           confidence_source: string | null
           court_location: string | null
           court_room_no: string | null
@@ -894,6 +895,7 @@ export type Database = {
         Insert: {
           case_fingerprint?: string | null
           case_number?: string | null
+          case_title_raw?: string | null
           confidence_source?: string | null
           court_location?: string | null
           court_room_no?: string | null
@@ -928,6 +930,7 @@ export type Database = {
         Update: {
           case_fingerprint?: string | null
           case_number?: string | null
+          case_title_raw?: string | null
           confidence_source?: string | null
           court_location?: string | null
           court_room_no?: string | null

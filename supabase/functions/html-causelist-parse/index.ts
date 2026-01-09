@@ -26,6 +26,7 @@ interface ParsedCase {
   judge_names: string | null;
   stage: string | null;
   next_date: string | null;
+  case_title_raw: string | null; // Verbatim case title for auditability
 }
 
 interface ExtractedNote {
@@ -72,6 +73,7 @@ interface DocketRecord {
   structure_confidence: number;
   raw_causelist_id: string;
   source_url: string;
+  case_title_raw: string | null;
 }
 
 interface ParseRequest {
@@ -399,10 +401,14 @@ function isHeaderRow(cells: string[]): boolean {
 /**
  * Finalize a partial case into a full ParsedCase by extracting
  * parties, lawyers, and other details from combined row data.
+ * 
+ * Party extraction priority (as per specification):
+ * - Priority A: Explicit "vs" delimiter in case title cell
+ * - Priority B: Multi-line case title fallback (first line = petitioner, rest = respondent)
+ * - Priority C: Leave as null, store case_title_raw for auditability
  */
 function finalizeParsedCase(partial: PartialCase, courtNo: string): ParsedCase {
   const allCells = partial.raw_rows.flat();
-  const combinedText = allCells.join(' ');
   
   const parsedCase: ParsedCase = {
     court_no: courtNo,
@@ -415,22 +421,104 @@ function finalizeParsedCase(partial: PartialCase, courtNo: string): ParsedCase {
     judge_names: null,
     stage: null,
     next_date: null,
+    case_title_raw: null,
   };
   
-  // Extract parties from combined text (vs/v/s/versus patterns)
+  // =========================================================================
+  // PARTY EXTRACTION: Priority-based approach
+  // =========================================================================
+  
+  // STEP 1: Identify the case title cell
+  // The case title is typically the largest multi-line cell containing party names
+  // It's usually NOT the cell with case number, and NOT the lawyer cells
+  let caseTitleCell: string | null = null;
+  let caseTitleCellIndex = -1;
+  
+  for (let i = 0; i < allCells.length; i++) {
+    const cell = allCells[i];
+    
+    // Skip cells that are clearly case numbers
+    if (/^\s*\w+\.?\s*\d+\/\d{4}\s*$/.test(cell)) continue;
+    
+    // Skip cells that are item numbers
+    if (/^\s*\d{1,3}\.?\s*$/.test(cell)) continue;
+    
+    // Skip cells that are lawyer markers (contain -P or -R patterns)
+    if (/[-–]\s*[PR]\b/i.test(cell)) continue;
+    
+    // Look for cells that have party name characteristics:
+    // - Contains names (capitalized words)
+    // - May have line breaks (BR tags converted to spaces, or multiple lines)
+    // - May have "M/S", "STATE OF", organization names, etc.
+    const hasPartyIndicators = 
+      /\b(?:M\/S|STATE\s+OF|UNION\s+OF|GOVERNMENT|SECRETARY|COMMISSIONER|COLLECTOR|CORPORATION|LTD|PVT|SONS|THROUGH|AGAINST)\b/i.test(cell) ||
+      /^[A-Z][A-Z\s]+$/m.test(cell) || // All caps names
+      cell.split(/\n|\r/).filter(l => l.trim()).length >= 2; // Multi-line
+    
+    if (hasPartyIndicators && cell.length > 10) {
+      // Prefer the first substantial party-like cell
+      if (caseTitleCell === null || cell.length > caseTitleCell.length) {
+        caseTitleCell = cell;
+        caseTitleCellIndex = i;
+      }
+    }
+  }
+  
+  // Store raw case title for auditability (even if we can't extract parties)
+  if (caseTitleCell) {
+    parsedCase.case_title_raw = caseTitleCell.substring(0, 2000).trim() || null;
+  }
+  
+  // =========================================================================
+  // PRIORITY A: Explicit delimiter (vs, v/s, versus, v.)
+  // =========================================================================
+  let partyExtractionDone = false;
+  
   for (const cell of allCells) {
-    if (cell.toLowerCase().includes(' vs ') || cell.toLowerCase().includes(' v/s ') || 
-        cell.toLowerCase().includes(' versus ') || cell.includes(' Vs. ') || cell.includes(' VS ')) {
-      const parts = cell.split(/\s+(?:vs\.?|v\/s|versus|VS)\s+/i);
+    const cellLower = cell.toLowerCase();
+    if (cellLower.includes(' vs ') || cellLower.includes(' v/s ') || 
+        cellLower.includes(' versus ') || cell.includes(' Vs. ') || 
+        cell.includes(' VS ') || cellLower.includes(' v. ')) {
+      const parts = cell.split(/\s+(?:vs\.?|v\/s|versus|VS|v\.)\s+/i);
       if (parts.length >= 2) {
         parsedCase.petitioner = parts[0].trim().substring(0, 500) || null;
-        parsedCase.respondent = parts[1].trim().substring(0, 500) || null;
+        parsedCase.respondent = parts.slice(1).join(' ').trim().substring(0, 500) || null;
+        partyExtractionDone = true;
+        // Also capture as raw title if not already set
+        if (!parsedCase.case_title_raw) {
+          parsedCase.case_title_raw = cell.substring(0, 2000).trim() || null;
+        }
       }
       break;
     }
   }
   
-  // Extract lawyers from combined rows (patterns like "Name -P" or "Name -R")
+  // =========================================================================
+  // PRIORITY B: Multi-line case title fallback
+  // If no explicit delimiter AND case title has 2+ non-empty lines
+  // =========================================================================
+  if (!partyExtractionDone && caseTitleCell) {
+    // Split by actual line breaks or <br> tag remnants
+    const lines = caseTitleCell
+      .split(/\n|\r|<br\s*\/?>|<\/p>|<\/div>/gi)
+      .map(l => l.replace(/<[^>]+>/g, '').trim())
+      .filter(l => l.length > 0);
+    
+    if (lines.length >= 2) {
+      // First non-empty line = petitioner
+      parsedCase.petitioner = lines[0].substring(0, 500) || null;
+      // Remaining lines joined = respondent
+      parsedCase.respondent = lines.slice(1).join(' ').substring(0, 500).trim() || null;
+      partyExtractionDone = true;
+    }
+  }
+  
+  // PRIORITY C: Leave as null (already initialized as null)
+  // case_title_raw is already stored above for auditability
+  
+  // =========================================================================
+  // LAWYER EXTRACTION (unchanged from existing logic)
+  // =========================================================================
   const petLawyers: string[] = [];
   const respLawyers: string[] = [];
   
@@ -455,7 +543,9 @@ function finalizeParsedCase(partial: PartialCase, courtNo: string): ParsedCase {
     parsedCase.respondent_lawyer = [...new Set(respLawyers)].join(', ');
   }
   
-  // Extract stage from keywords
+  // =========================================================================
+  // STAGE EXTRACTION (unchanged)
+  // =========================================================================
   const stageKeywords = ['fresh', 'hearing', 'admission', 'final', 'arguments', 'orders', 'misc', 'motion', 'regular'];
   for (const cell of allCells) {
     const cellLower = cell.toLowerCase();
@@ -468,7 +558,9 @@ function finalizeParsedCase(partial: PartialCase, courtNo: string): ParsedCase {
     if (parsedCase.stage) break;
   }
   
-  // Extract next date
+  // =========================================================================
+  // NEXT DATE EXTRACTION (unchanged)
+  // =========================================================================
   const datePattern = /\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}/;
   for (const cell of allCells) {
     const dateMatch = cell.match(datePattern);
@@ -1099,6 +1191,7 @@ Deno.serve(async (req) => {
         structure_confidence: 0.9,
         raw_causelist_id: causelist_id,
         source_url: `html:${causelist_id}`,
+        case_title_raw: caseData.case_title_raw,
       };
     });
     
