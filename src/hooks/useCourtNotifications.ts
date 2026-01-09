@@ -7,6 +7,7 @@ import { useLiveBoard } from './useLiveBoard';
 import { useDocket } from './useDocket';
 import { useNetworkStatus } from './useNetworkStatus';
 import { useOfflineThresholdMemory } from './useOfflineThresholdMemory';
+import { getRoleCaseLabel } from './useRoleSemantics';
 import type { DocketItem, LiveBoardCache } from '@/types/database';
 
 export type NotificationSeverity = 'info' | 'warning' | 'critical';
@@ -58,7 +59,7 @@ export function calculateItemDistance(caseItem: number, currentItem: number): nu
 }
 
 export function useCourtNotifications() {
-  const { user } = useAuth();
+  const { user, role } = useAuth();
   const queryClient = useQueryClient();
   const { isCourtModeEnabled, isWithinCourtHours, settings: courtModeSettings } = useCourtMode();
   const { data: liveBoards } = useLiveBoard();
@@ -139,6 +140,9 @@ export function useCourtNotifications() {
       return;
     }
 
+    // CORRECTNESS PLAN 3: Use role-aware case labels
+    const caseLabel = getRoleCaseLabel(role);
+
     const title = type === 'skipped' 
       ? `Case Skipped: ${docketItem.case_number}`
       : type === 'approaching'
@@ -146,10 +150,10 @@ export function useCourtNotifications() {
       : `Case Alert: ${docketItem.case_number}`;
 
     const message = type === 'skipped'
-      ? `Your case at Item ${docketItem.item_no} in Court ${docketItem.court_room_no} was passed over.`
+      ? `${caseLabel} at Item ${docketItem.item_no} in Court ${docketItem.court_room_no} was passed over.`
       : distance <= 2
-      ? `Your case is ${distance === 0 ? 'NOW' : `${distance} item${distance > 1 ? 's' : ''} away`} in Court ${docketItem.court_room_no}.`
-      : `Your case at Item ${docketItem.item_no} is ${distance} items away in Court ${docketItem.court_room_no}.`;
+      ? `${caseLabel} is ${distance === 0 ? 'NOW' : `${distance} item${distance > 1 ? 's' : ''} away`} in Court ${docketItem.court_room_no}.`
+      : `${caseLabel} at Item ${docketItem.item_no} is ${distance} items away in Court ${docketItem.court_room_no}.`;
 
     const { error } = await supabase
       .from('notifications')
@@ -288,7 +292,8 @@ export function useCourtNotifications() {
           notification_type: 'approaching',
           severity: 'critical',
           title: 'Court Alert (After Reconnect)',
-          message: `Your case crossed a critical proximity threshold while you were offline.\nPlease verify the current court status.`,
+          // CORRECTNESS PLAN 3: Use role-aware case labels
+          message: `${getRoleCaseLabel(role)} crossed a critical proximity threshold while you were offline.\nPlease verify the current court status.`,
           item_distance: entry.lastKnownDistance,
           threshold_crossed: 'immediate',
           status: 'sent',

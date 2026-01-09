@@ -182,11 +182,16 @@ export default function Auth() {
                     type="text"
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
-                    placeholder="Adv. Rakesh Sharma"
+                    placeholder={role === 'CLERK' ? 'Ramesh Kumar' : 'Adv. Rakesh Sharma'}
                     className="pl-10"
                     required={!isLogin}
                   />
                 </div>
+                {role === 'CLERK' && (
+                  <p className="text-xs text-muted-foreground">
+                    Clerk accounts have read-only access and cannot claim case ownership.
+                  </p>
+                )}
               </div>
             )}
 
@@ -275,7 +280,7 @@ export default function Auth() {
                       className="flex flex-col items-center justify-center rounded-lg border-2 border-border bg-card p-3 cursor-pointer hover:bg-accent peer-data-[state=checked]:border-primary peer-data-[state=checked]:bg-primary/5"
                     >
                       <span className="font-semibold text-foreground text-sm">Clerk</span>
-                      <span className="text-[10px] text-muted-foreground mt-1 text-center">Read-only</span>
+                      <span className="text-[10px] text-muted-foreground mt-1 text-center">Track cases (read-only)</span>
                     </Label>
                   </div>
                 </RadioGroup>
