@@ -167,151 +167,152 @@ serve(async (req) => {
         }
 
         const pageUrl = `${ECOURTS_CONFIG.baseUrl}${ECOURTS_CONFIG.endpoints.caseNo}?state_cd=${ECOURTS_CONFIG.stateCode}&dist_cd=${ECOURTS_CONFIG.distCode}&court_code=${benchConfig.courtCode}&stateNm=Rajasthan`;
-        console.log(`[TRIAL] Using Browserless /function to run full flow: ${pageUrl}`);
+        console.log(`[TRIAL] Using Browserless /chromium/bql: ${pageUrl}`);
 
         // Clean up case_type (remove trailing parenthesis)
         const cleanCaseType = caseData.case_type.replace(/\)$/, '');
 
-        // Create Puppeteer script to run in Browserless
-        // This maintains the same session for CAPTCHA and form submission
-        const puppeteerCode = `
-          module.exports = async ({ page }) => {
-            const pageUrl = "${pageUrl}";
-            const caseType = "${cleanCaseType}";
-            const caseNumber = "${caseData.case_number}";
-            const caseYear = "${caseData.case_year}";
-            const twoCaptchaKey = "${twoCaptchaKey}";
+        // Use BrowserQL to run entire flow in a single session
+        const captchaStartTime = Date.now();
 
-            // Navigate to the case search page
-            await page.goto(pageUrl, { waitUntil: 'networkidle2', timeout: 30000 });
-
-            // Wait for CAPTCHA image to load
-            await page.waitForSelector('#captcha_image', { timeout: 10000 });
-
-            // Get CAPTCHA image as base64
-            const captchaBase64 = await page.evaluate(() => {
-              const img = document.getElementById('captcha_image');
-              if (!img) return null;
-              const canvas = document.createElement('canvas');
-              canvas.width = img.width;
-              canvas.height = img.height;
-              const ctx = canvas.getContext('2d');
-              ctx.drawImage(img, 0, 0);
-              return canvas.toDataURL('image/png').split(',')[1];
-            });
-
-            if (!captchaBase64) {
-              return { error: 'Could not extract CAPTCHA image' };
+        // BrowserQL query to load page, take screenshot of CAPTCHA, and get form HTML
+        // Using screenshot to capture CAPTCHA image in same session (session-bound captcha)
+        const bqlQuery = `
+          mutation GetCaptchaWithScreenshot {
+            goto(url: "${pageUrl}", waitUntil: networkIdle) {
+              status
             }
-
-            // Submit CAPTCHA to 2Captcha
-            const submitRes = await fetch('http://2captcha.com/in.php', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-              body: new URLSearchParams({
-                key: twoCaptchaKey,
-                method: 'base64',
-                body: captchaBase64,
-                json: '1',
-              }),
-            });
-            const submitData = await submitRes.json();
-            if (submitData.status !== 1) {
-              return { error: 'CAPTCHA submit failed: ' + submitData.request };
+            captchaScreenshot: screenshot(selector: "#captcha_image", encoding: BASE64, fullPage: false) {
+              base64
             }
-
-            const captchaId = submitData.request;
-
-            // Poll for solution
-            let solution = null;
-            for (let i = 0; i < 24; i++) { // 2 minutes max
-              await new Promise(r => setTimeout(r, 5000));
-              const pollRes = await fetch('http://2captcha.com/res.php?key=' + twoCaptchaKey + '&action=get&id=' + captchaId + '&json=1');
-              const pollData = await pollRes.json();
-              if (pollData.status === 1) {
-                solution = pollData.request;
-                break;
-              } else if (pollData.request !== 'CAPCHA_NOT_READY') {
-                return { error: '2Captcha solve failed: ' + pollData.request };
-              }
+            caseTypeSelect: querySelector(selector: "#case_type") {
+              outerHTML
             }
-
-            if (!solution) {
-              return { error: 'CAPTCHA solve timeout' };
-            }
-
-            // Wait for case_type dropdown to be populated (JS loads options)
-            await page.waitForFunction(() => {
-              const select = document.getElementById('case_type');
-              return select && select.options.length > 1;
-            }, { timeout: 10000 });
-
-            // Select case type
-            await page.evaluate((caseType) => {
-              const select = document.getElementById('case_type');
-              for (let opt of select.options) {
-                if (opt.text.includes(caseType) || opt.value.includes(caseType)) {
-                  select.value = opt.value;
-                  break;
-                }
-              }
-            }, caseType);
-
-            // Fill in the form
-            await page.type('#search_case_no', caseNumber);
-            await page.type('#rgyear', caseYear);
-            await page.type('#captcha', solution);
-
-            // Submit the form
-            await Promise.all([
-              page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 }),
-              page.click('input[type="submit"], button[type="submit"]'),
-            ]);
-
-            // Get the result HTML
-            const resultHtml = await page.content();
-
-            return {
-              success: true,
-              solution: solution,
-              htmlLength: resultHtml.length,
-              html: resultHtml,
-            };
-          };
+          }
         `;
 
-        const captchaStartTime = Date.now();
-        
-        const browserlessResponse = await fetch(`${BROWSERLESS_API_URL}/function?token=${browserlessKey}`, {
+        const bqlResponse = await fetch(`${BROWSERLESS_API_URL}/chromium/bql?token=${browserlessKey}`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            code: puppeteerCode,
-          }),
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query: bqlQuery }),
         });
 
-        if (!browserlessResponse.ok) {
-          const blError = await browserlessResponse.text();
-          result.errors.push(`Browserless error: ${browserlessResponse.status} - ${blError}`);
+        if (!bqlResponse.ok) {
+          const errText = await bqlResponse.text();
+          result.errors.push(`Browserless BQL error: ${bqlResponse.status} - ${errText}`);
           results.push(result);
           continue;
         }
 
-        const browserlessResult = await browserlessResponse.json();
-        
-        if (browserlessResult.error) {
-          result.errors.push(`Browserless execution error: ${browserlessResult.error}`);
+        const bqlResult = await bqlResponse.json();
+        console.log(`[TRIAL] BQL response:`, JSON.stringify(bqlResult).slice(0, 500));
+
+        // Get CAPTCHA image as base64 from screenshot
+        const captchaBase64 = bqlResult.data?.captchaScreenshot?.base64;
+        const caseTypeHtml = bqlResult.data?.caseTypeSelect?.outerHTML || '';
+
+        if (!captchaBase64 || captchaBase64.length < 100) {
+          result.errors.push(`CAPTCHA screenshot failed. Got: ${captchaBase64?.length || 0} chars`);
           results.push(result);
           continue;
         }
 
-        result.captcha_status = 'success';
+        console.log(`[TRIAL] CAPTCHA screenshot captured (${captchaBase64.length} chars base64)`);
+
+        // Submit to 2Captcha
+        const submitParams = new URLSearchParams({
+          key: twoCaptchaKey,
+          method: 'base64',
+          body: captchaBase64,
+          json: '1',
+        });
+
+        const submitRes = await fetch(`${TWOCAPTCHA_CONFIG.apiUrl}/in.php`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: submitParams,
+        });
+        const submitData = await submitRes.json();
+
+        if (submitData.status !== 1) {
+          result.errors.push(`2Captcha submit failed: ${submitData.request}`);
+          results.push(result);
+          continue;
+        }
+
+        const captchaId = submitData.request;
+        console.log(`[TRIAL] 2Captcha ID: ${captchaId}. Polling for solution...`);
+
+        // Poll for CAPTCHA solution
+        let captchaSolution: string | null = null;
+        for (let i = 0; i < 24; i++) {
+          await new Promise(r => setTimeout(r, TWOCAPTCHA_CONFIG.pollInterval));
+          
+          const pollRes = await fetch(
+            `${TWOCAPTCHA_CONFIG.apiUrl}/res.php?key=${twoCaptchaKey}&action=get&id=${captchaId}&json=1`
+          );
+          const pollData = await pollRes.json();
+
+          if (pollData.status === 1) {
+            captchaSolution = pollData.request;
+            break;
+          } else if (pollData.request !== 'CAPCHA_NOT_READY') {
+            result.errors.push(`2Captcha error: ${pollData.request}`);
+            break;
+          }
+        }
+
+        if (!captchaSolution) {
+          result.errors.push('CAPTCHA solve timeout');
+          result.captcha_status = 'failed';
+          results.push(result);
+          continue;
+        }
+
         result.captcha_solve_time_ms = Date.now() - captchaStartTime;
-        console.log(`[TRIAL] Browserless function completed in ${result.captcha_solve_time_ms}ms`);
+        result.captcha_status = 'success';
+        console.log(`[TRIAL] CAPTCHA solved in ${result.captcha_solve_time_ms}ms: ${captchaSolution}`);
 
-        const resultHtml = browserlessResult.html || '';
+        // Parse case_type options to find correct value
+        const optionMatch = caseTypeHtml.match(new RegExp(`value=["']([^"']*)["'][^>]*>${cleanCaseType}`, 'i'));
+        const caseTypeValue = optionMatch ? optionMatch[1] : cleanCaseType;
+        console.log(`[TRIAL] Case type value: ${caseTypeValue}`);
+
+        // Submit form directly to eCourts (POST request with form data)
+        // eCourts form submits to case_no_qry.php
+        const formSubmitUrl = `${ECOURTS_CONFIG.baseUrl}/cases/case_no_qry.php`;
+        
+        const formData = new URLSearchParams({
+          state_cd: ECOURTS_CONFIG.stateCode,
+          dist_cd: ECOURTS_CONFIG.distCode,
+          court_code: benchConfig.courtCode,
+          case_type: caseTypeValue,
+          search_case_no: String(caseData.case_number),
+          rgyear: String(caseData.case_year),
+          captcha: captchaSolution,
+          submit: 'Submit',
+        });
+
+        console.log(`[TRIAL] Submitting form to ${formSubmitUrl}`);
+        
+        const formSubmitResponse = await fetch(formSubmitUrl, {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Origin': ECOURTS_CONFIG.baseUrl,
+            'Referer': pageUrl,
+          },
+          body: formData,
+        });
+
+        if (!formSubmitResponse.ok) {
+          result.errors.push(`Form submit error: ${formSubmitResponse.status}`);
+          results.push(result);
+          continue;
+        }
+
+        const resultHtml = await formSubmitResponse.text();
+        console.log(`[TRIAL] Form submitted, result HTML: ${resultHtml.length} chars`);
         console.log(`[TRIAL] Result HTML length: ${resultHtml.length}`);
 
         // Check if CAPTCHA was wrong
