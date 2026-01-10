@@ -13,6 +13,7 @@ interface SearchResult {
   court?: string;
   judges?: string[];
   searchVector?: string;
+  docId?: string;
 }
 
 interface SearchVector {
@@ -33,7 +34,7 @@ function buildSearchVectors(params: {
 }): SearchVector[] {
   const vectors: SearchVector[] = [];
   
-  // Court ID mapping
+  // Court ID mapping for Indian Kanoon API
   const courtMapping: Record<string, string> = {
     'JAIPUR': 'rajasthan',
     'JODHPUR': 'rajasthan',
@@ -147,110 +148,170 @@ function buildSearchVectors(params: {
   return vectors;
 }
 
-// Perform a single search on Indian Kanoon
-async function performSearch(searchQuery: string, maxResults: number): Promise<SearchResult[]> {
-  const searchUrl = `https://indiankanoon.org/search/?formInput=${encodeURIComponent(searchQuery)}&pagenum=0`;
+// Perform search using Indian Kanoon API with authentication
+async function performApiSearch(searchQuery: string, maxResults: number, apiKey: string): Promise<SearchResult[]> {
+  // Indian Kanoon API endpoint
+  const apiUrl = 'https://api.indiankanoon.org/search/';
   
-  console.log(`Searching: ${searchQuery}`);
+  console.log(`API Search: ${searchQuery}`);
   
-  const response = await fetch(searchUrl, {
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-      'Accept-Language': 'en-US,en;q=0.5',
-    }
-  });
+  try {
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Token ${apiKey}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        formInput: searchQuery,
+        pagenum: '0',
+      }),
+    });
 
-  if (!response.ok) {
-    console.error(`Search failed: ${response.status}`);
+    if (!response.ok) {
+      console.error(`API search failed: ${response.status} ${response.statusText}`);
+      const text = await response.text();
+      console.error(`Response: ${text.slice(0, 500)}`);
+      return [];
+    }
+
+    const data = await response.json();
+    const results: SearchResult[] = [];
+    
+    // Parse API response - structure varies but typically has docs array
+    const docs = data.docs || data.results || [];
+    
+    for (const doc of docs.slice(0, maxResults)) {
+      const docId = doc.tid || doc.docid || doc.id;
+      const title = doc.title || doc.headline || 'Untitled';
+      const snippet = doc.headline || doc.snippet || doc.docsource || '';
+      
+      // Build URL from doc ID
+      const url = docId 
+        ? `https://indiankanoon.org/doc/${docId}/`
+        : doc.url || '';
+      
+      // Extract court info
+      let court: string | undefined;
+      const docsource = (doc.docsource || '').toLowerCase();
+      if (docsource.includes('supreme court')) court = 'Supreme Court of India';
+      else if (docsource.includes('rajasthan') && docsource.includes('jaipur')) court = 'Rajasthan High Court - Jaipur';
+      else if (docsource.includes('rajasthan') && docsource.includes('jodhpur')) court = 'Rajasthan High Court - Jodhpur';
+      else if (docsource.includes('rajasthan')) court = 'Rajasthan High Court';
+      else if (docsource.includes('delhi')) court = 'Delhi High Court';
+      else if (doc.docsource) court = doc.docsource;
+      
+      // Parse date
+      const date = doc.publishdate || doc.date;
+      
+      // Extract judges
+      const judges: string[] = [];
+      if (doc.author) {
+        const authorStr = Array.isArray(doc.author) ? doc.author.join(', ') : doc.author;
+        const judgePattern = /(?:Justice\s+)?([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/g;
+        let judgeMatch;
+        while ((judgeMatch = judgePattern.exec(authorStr)) !== null) {
+          judges.push(judgeMatch[1]);
+        }
+      }
+      
+      results.push({
+        title: title.replace(/<[^>]*>/g, '').trim(),
+        url,
+        snippet: snippet.replace(/<[^>]*>/g, '').trim().slice(0, 400),
+        date,
+        court,
+        judges: judges.length > 0 ? judges : undefined,
+        docId: docId?.toString(),
+      });
+    }
+    
+    console.log(`API returned ${results.length} results`);
+    return results;
+    
+  } catch (error) {
+    console.error('API search error:', error);
     return [];
   }
+}
 
-  const html = await response.text();
-  const results: SearchResult[] = [];
+// Fallback: scrape search (if API fails)
+async function performScrapedSearch(searchQuery: string, maxResults: number): Promise<SearchResult[]> {
+  const searchUrl = `https://indiankanoon.org/search/?formInput=${encodeURIComponent(searchQuery)}&pagenum=0`;
   
-  // Pattern 1: Result divs with separator
-  const resultPattern = /<div class="result"[^>]*>([\s\S]*?)<\/div>\s*<div class="result_separator">/g;
-  const titlePattern = /<a[^>]*href="([^"]*)"[^>]*class="result_title"[^>]*>([\s\S]*?)<\/a>/;
-  const snippetPattern = /<div class="result_text"[^>]*>([\s\S]*?)<\/div>/;
-  const datePattern = /(\d{1,2}\s+(?:January|February|March|April|May|June|July|August|September|October|November|December),?\s+\d{4})/i;
+  console.log(`Fallback scrape search: ${searchQuery}`);
   
-  let match;
-  while ((match = resultPattern.exec(html)) !== null && results.length < maxResults) {
-    const resultHtml = match[1];
-    
-    const titleMatch = titlePattern.exec(resultHtml);
-    if (!titleMatch) continue;
-    
-    const url = titleMatch[1].startsWith('http') 
-      ? titleMatch[1] 
-      : `https://indiankanoon.org${titleMatch[1]}`;
-    const title = titleMatch[2]
-      .replace(/<[^>]*>/g, '')
-      .replace(/\s+/g, ' ')
-      .trim();
-    
-    const snippetMatch = snippetPattern.exec(resultHtml);
-    const snippet = snippetMatch 
-      ? snippetMatch[1].replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim().slice(0, 300)
-      : '';
-    
-    const dateMatch = datePattern.exec(resultHtml);
-    const date = dateMatch ? dateMatch[1] : undefined;
-    
-    // Extract court info
-    let resultCourt: string | undefined;
-    if (resultHtml.includes('Supreme Court')) resultCourt = 'Supreme Court of India';
-    else if (resultHtml.includes('Rajasthan') && resultHtml.includes('Jaipur')) resultCourt = 'Rajasthan High Court - Jaipur';
-    else if (resultHtml.includes('Rajasthan') && resultHtml.includes('Jodhpur')) resultCourt = 'Rajasthan High Court - Jodhpur';
-    else if (resultHtml.includes('Rajasthan')) resultCourt = 'Rajasthan High Court';
-    else if (resultHtml.includes('Delhi')) resultCourt = 'Delhi High Court';
-    
-    // Extract judge names from title
-    const judges: string[] = [];
-    const judgePattern = /(?:Justice|J\.)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/g;
-    let judgeMatch;
-    while ((judgeMatch = judgePattern.exec(title)) !== null) {
-      judges.push(judgeMatch[1]);
-    }
-    
-    results.push({
-      title,
-      url,
-      snippet,
-      date,
-      court: resultCourt,
-      judges: judges.length > 0 ? judges : undefined,
+  try {
+    const response = await fetch(searchUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5',
+      }
     });
-  }
 
-  // Fallback: Look for links to doc pages
-  if (results.length === 0) {
-    const docLinkPattern = /<a[^>]*href="(\/doc\/\d+[^"]*)"[^>]*>([\s\S]*?)<\/a>/g;
-    let docMatch;
-    const seenUrls = new Set<string>();
+    if (!response.ok) {
+      console.error(`Scrape search failed: ${response.status}`);
+      return [];
+    }
+
+    const html = await response.text();
+    const results: SearchResult[] = [];
     
-    while ((docMatch = docLinkPattern.exec(html)) !== null && results.length < maxResults) {
-      const url = `https://indiankanoon.org${docMatch[1]}`;
-      if (seenUrls.has(url)) continue;
-      seenUrls.add(url);
+    // Pattern for result divs
+    const resultPattern = /<div class="result"[^>]*>([\s\S]*?)<\/div>\s*<div class="result_separator">/g;
+    const titlePattern = /<a[^>]*href="([^"]*)"[^>]*class="result_title"[^>]*>([\s\S]*?)<\/a>/;
+    const snippetPattern = /<div class="result_text"[^>]*>([\s\S]*?)<\/div>/;
+    const datePattern = /(\d{1,2}\s+(?:January|February|March|April|May|June|July|August|September|October|November|December),?\s+\d{4})/i;
+    
+    let match;
+    while ((match = resultPattern.exec(html)) !== null && results.length < maxResults) {
+      const resultHtml = match[1];
       
-      const title = docMatch[2]
+      const titleMatch = titlePattern.exec(resultHtml);
+      if (!titleMatch) continue;
+      
+      const url = titleMatch[1].startsWith('http') 
+        ? titleMatch[1] 
+        : `https://indiankanoon.org${titleMatch[1]}`;
+      const title = titleMatch[2]
         .replace(/<[^>]*>/g, '')
         .replace(/\s+/g, ' ')
         .trim();
       
-      if (title.length < 10) continue;
+      const snippetMatch = snippetPattern.exec(resultHtml);
+      const snippet = snippetMatch 
+        ? snippetMatch[1].replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim().slice(0, 300)
+        : '';
+      
+      const dateMatch = datePattern.exec(resultHtml);
+      const date = dateMatch ? dateMatch[1] : undefined;
+      
+      let resultCourt: string | undefined;
+      if (resultHtml.includes('Supreme Court')) resultCourt = 'Supreme Court of India';
+      else if (resultHtml.includes('Rajasthan') && resultHtml.includes('Jaipur')) resultCourt = 'Rajasthan High Court - Jaipur';
+      else if (resultHtml.includes('Rajasthan') && resultHtml.includes('Jodhpur')) resultCourt = 'Rajasthan High Court - Jodhpur';
+      else if (resultHtml.includes('Rajasthan')) resultCourt = 'Rajasthan High Court';
+      
+      // Extract doc ID from URL
+      const docIdMatch = url.match(/\/doc\/(\d+)/);
+      const docId = docIdMatch ? docIdMatch[1] : undefined;
       
       results.push({
         title,
         url,
-        snippet: '',
+        snippet,
+        date,
+        court: resultCourt,
+        docId,
       });
     }
+
+    return results;
+  } catch (error) {
+    console.error('Scrape search error:', error);
+    return [];
   }
-  
-  return results;
 }
 
 serve(async (req) => {
@@ -259,6 +320,8 @@ serve(async (req) => {
   }
 
   try {
+    const apiKey = Deno.env.get('INDIAN_KANOON_API_KEY');
+    
     const { 
       query,
       judgeName, 
@@ -272,6 +335,14 @@ serve(async (req) => {
       multiVector = true,
     } = await req.json();
     
+    // Select search function based on API key availability
+    const searchFn = apiKey 
+      ? (q: string, n: number) => performApiSearch(q, n, apiKey)
+      : performScrapedSearch;
+    
+    const searchMode = apiKey ? 'api' : 'scrape';
+    console.log(`Using ${searchMode} mode`);
+    
     // If legacy single query mode
     if (query && !multiVector) {
       let searchQuery = query;
@@ -280,13 +351,14 @@ serve(async (req) => {
         searchQuery = searchQuery ? `${searchQuery} author:${cleanJudgeName}` : `author:${cleanJudgeName}`;
       }
       
-      const results = await performSearch(searchQuery, maxResults);
+      const results = await searchFn(searchQuery, maxResults);
       
       return new Response(
         JSON.stringify({ 
           results,
           query: searchQuery,
           source: 'indiankanoon.org',
+          mode: searchMode,
           vectors: [],
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -315,7 +387,7 @@ serve(async (req) => {
     
     // Execute searches (limit to top 3 vectors to avoid rate limiting)
     const searchPromises = vectors.slice(0, 3).map(async (vector) => {
-      const results = await performSearch(vector.query, Math.ceil(maxResults / vectors.length));
+      const results = await searchFn(vector.query, Math.ceil(maxResults / vectors.length));
       return results.map(r => ({
         ...r,
         searchVector: vector.type,
@@ -344,6 +416,7 @@ serve(async (req) => {
         results: mergedResults.slice(0, maxResults),
         vectors: vectors.map(v => ({ type: v.type, query: v.query })),
         source: 'indiankanoon.org',
+        mode: searchMode,
         lastChecked: new Date().toISOString(),
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
