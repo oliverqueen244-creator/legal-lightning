@@ -3065,6 +3065,7 @@ export type Database = {
         }
         Returns: string
       }
+      normalize_lawyer_name: { Args: { name: string }; Returns: string }
       queue_judgment_check: {
         Args: { p_case_id: string; p_lawyer_id: string }
         Returns: Json

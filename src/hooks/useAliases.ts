@@ -4,6 +4,7 @@ import { useAuth } from './useAuth';
 import { useRateLimit } from './useRateLimit';
 import { toast } from 'sonner';
 import type { LawyerAlias } from '@/types/database';
+import { normalizeLawyerName, hasLawyerPrefix } from '@/lib/lawyerNameUtils';
 
 export function useAliases() {
   const { user } = useAuth();
@@ -31,11 +32,19 @@ export function useAliases() {
     mutationFn: async ({ aliasName, isPrimary = false }: { aliasName: string; isPrimary?: boolean }) => {
       if (!user?.id) throw new Error('Not authenticated');
       
-      // SAFETY: Minimum alias length to prevent false matches
+      // Normalize the alias name - strip prefixes like "Adv.", "Mr.", etc.
       const trimmedName = aliasName.trim();
-      if (trimmedName.length < 5) {
-        toast.error('Alias must be at least 5 characters to prevent false matches.');
+      const normalizedName = normalizeLawyerName(trimmedName);
+      
+      // SAFETY: Minimum alias length to prevent false matches (check normalized version)
+      if (normalizedName.length < 5) {
+        toast.error('Name must be at least 5 characters (excluding titles like Adv., Mr., etc.)');
         throw new Error('Alias too short');
+      }
+
+      // Warn user if prefix was stripped
+      if (hasLawyerPrefix(trimmedName) && normalizedName !== trimmedName.toUpperCase()) {
+        toast.info(`Prefix removed for better matching. Stored as: ${normalizedName}`);
       }
 
       // Rate limit check
@@ -45,11 +54,12 @@ export function useAliases() {
       }
 
       const result = await executeWithLimit(async () => {
+        // Store the normalized (uppercase, no prefix) version
         const { data, error } = await supabase
           .from('lawyer_aliases')
           .insert({
             profile_id: user.id,
-            alias_name: trimmedName,
+            alias_name: normalizedName,
             is_primary: isPrimary,
           })
           .select()
