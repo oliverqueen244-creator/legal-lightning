@@ -120,7 +120,7 @@ export function useDocumentSync() {
       }
 
       // Call the edge function to perform the sync
-      const response = await supabase.functions.invoke('check-case-judgment', {
+      const response = await supabase.functions.invoke('sync-case-documents', {
         body: { case_id: caseId },
         headers: {
           Authorization: `Bearer ${session.session.access_token}`,

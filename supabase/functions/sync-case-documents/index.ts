@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 /**
- * check-case-judgment (now: Sync Case Documents)
+ * sync-case-documents
  * 
  * Lawyer-scoped document sync for Rajasthan High Court cases.
  * Downloads ALL court documents from Case Status → Orders / Judgments table.
@@ -14,6 +14,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
  * - All guards must pass before CAPTCHA is consumed
  * - Uses atomic database functions for counters
  * - Deduplicates by PDF hash
+ * - Every failure path releases the lock
  */
 
 const corsHeaders = {
@@ -52,15 +53,6 @@ interface DocumentRow {
   pdf_url: string;
 }
 
-interface SyncResult {
-  success: boolean;
-  documents_found: number;
-  documents_synced: number;
-  documents_skipped: number;
-  error?: string;
-  next_sync_after?: string;
-}
-
 type DocSyncType = 'judgment' | 'interim_order' | 'order' | 'unknown';
 
 serve(async (req) => {
@@ -81,6 +73,11 @@ serve(async (req) => {
   }
 
   const supabase = createClient(supabaseUrl, supabaseKey);
+
+  // Track if lock was acquired (for cleanup)
+  let lockAcquired = false;
+  let caseId: string | null = null;
+  let lawyerId: string | null = null;
 
   try {
     // Get auth header for lawyer identification
@@ -103,17 +100,18 @@ serve(async (req) => {
       );
     }
 
-    const lawyerId = user.id;
-    const { case_id }: SyncRequest = await req.json();
+    lawyerId = user.id;
+    const body: SyncRequest = await req.json();
+    caseId = body.case_id;
 
-    if (!case_id) {
+    if (!caseId) {
       return new Response(
         JSON.stringify({ error: 'case_id is required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log(`[sync-case-documents] Lawyer ${lawyerId} syncing case ${case_id}`);
+    console.log(`[sync-case-documents] Lawyer ${lawyerId} syncing case ${caseId}`);
 
     // ═══════════════════════════════════════════════════════════════
     // STEP 1: Acquire atomic lock (prevents concurrent syncs)
@@ -121,7 +119,7 @@ serve(async (req) => {
     // ═══════════════════════════════════════════════════════════════
     const { data: lockResult, error: lockError } = await supabase
       .rpc('acquire_document_sync_lock', { 
-        p_case_id: case_id, 
+        p_case_id: caseId, 
         p_lawyer_id: lawyerId 
       });
 
@@ -155,6 +153,9 @@ serve(async (req) => {
       );
     }
 
+    // Lock acquired - mark for cleanup
+    lockAcquired = true;
+
     // Extract case data from lock result
     const caseData = lockResult.case_data;
     console.log(`[sync-case-documents] Lock acquired for case: ${caseData.case_type}/${caseData.case_number}/${caseData.case_year}`);
@@ -164,7 +165,7 @@ serve(async (req) => {
     // ═══════════════════════════════════════════════════════════════
     const benchConfig = ECOURTS_CONFIG.benches[caseData.bench as keyof typeof ECOURTS_CONFIG.benches];
     if (!benchConfig) {
-      await releaseLockOnFailure(supabase, case_id);
+      await releaseLockOnFailure(supabase, caseId);
       return new Response(
         JSON.stringify({ error: 'Invalid bench configuration' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -198,7 +199,8 @@ serve(async (req) => {
 
       // Check for IP blocking
       if (html.includes('Access Denied') || html.includes('blocked')) {
-        await releaseLockOnFailure(supabase, case_id);
+        await releaseLockOnFailure(supabase, caseId);
+        lockAcquired = false;
         return new Response(
           JSON.stringify({ error: 'Service temporarily unavailable', retry_after: 3600 }),
           { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -209,7 +211,8 @@ serve(async (req) => {
       const captchaMatch = html.match(/src=["']([^"']*captcha[^"']*)["']/i);
       if (!captchaMatch) {
         console.log('[sync-case-documents] No CAPTCHA detected - unusual, proceeding cautiously');
-        await releaseLockOnFailure(supabase, case_id);
+        await releaseLockOnFailure(supabase, caseId);
+        lockAcquired = false;
         return new Response(
           JSON.stringify({ error: 'eCourts page structure changed - no CAPTCHA found' }),
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -245,8 +248,9 @@ serve(async (req) => {
       
       if (submitResult.status !== 1) {
         // CAPTCHA submit failed - log and exit WITHOUT updating timestamps
-        await logCaptchaUsage(supabase, lawyerId, case_id, false, 0, `Submit failed: ${submitResult.request}`);
-        await releaseLockOnFailure(supabase, case_id);
+        await logCaptchaUsage(supabase, lawyerId, caseId, false, 0, `Submit failed: ${submitResult.request}`);
+        await releaseLockOnFailure(supabase, caseId);
+        lockAcquired = false;
         return new Response(
           JSON.stringify({ error: 'CAPTCHA submission failed', details: submitResult.request }),
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -280,8 +284,9 @@ serve(async (req) => {
       }
 
       if (!solution) {
-        await logCaptchaUsage(supabase, lawyerId, case_id, false, Date.now() - captchaStartTime, 'Timeout');
-        await releaseLockOnFailure(supabase, case_id);
+        await logCaptchaUsage(supabase, lawyerId, caseId, false, Date.now() - captchaStartTime, 'Timeout');
+        await releaseLockOnFailure(supabase, caseId);
+        lockAcquired = false;
         return new Response(
           JSON.stringify({ error: 'CAPTCHA solve timeout' }),
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -291,7 +296,7 @@ serve(async (req) => {
       // ═══════════════════════════════════════════════════════════════
       // STEP 4: Log CAPTCHA usage (AFTER successful solve)
       // ═══════════════════════════════════════════════════════════════
-      await logCaptchaUsage(supabase, lawyerId, case_id, true, captchaSolveTimeMs);
+      await logCaptchaUsage(supabase, lawyerId, caseId, true, captchaSolveTimeMs);
 
       // ═══════════════════════════════════════════════════════════════
       // STEP 5: Submit form with CAPTCHA solution
@@ -324,7 +329,8 @@ serve(async (req) => {
       // Check if CAPTCHA was wrong
       if (resultHtml.includes('Invalid Captcha') || resultHtml.includes('Wrong Captcha')) {
         console.log('[sync-case-documents] CAPTCHA was rejected by eCourts');
-        await releaseLockOnFailure(supabase, case_id);
+        await releaseLockOnFailure(supabase, caseId);
+        lockAcquired = false;
         return new Response(
           JSON.stringify({ error: 'CAPTCHA validation failed', retry: true }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -342,10 +348,11 @@ serve(async (req) => {
       if (documentsFound === 0) {
         // No documents found - success but nothing to sync
         await supabase.rpc('release_document_sync_lock', {
-          p_case_id: case_id,
+          p_case_id: caseId,
           p_success: true,
           p_documents_added: 0
         });
+        lockAcquired = false;
 
         const nextSync = new Date();
         nextSync.setDate(nextSync.getDate() + 7);
@@ -370,7 +377,7 @@ serve(async (req) => {
         try {
           const result = await downloadAndStoreDocument(
             supabase,
-            case_id,
+            caseId,
             lawyerId,
             doc
           );
@@ -389,13 +396,14 @@ serve(async (req) => {
       console.log(`[sync-case-documents] Sync complete: ${documentsSynced} stored, ${documentsSkipped} skipped`);
 
       // ═══════════════════════════════════════════════════════════════
-      // STEP 8: Release lock and update stats
+      // STEP 8: Release lock and update stats (SUCCESS)
       // ═══════════════════════════════════════════════════════════════
       await supabase.rpc('release_document_sync_lock', {
-        p_case_id: case_id,
+        p_case_id: caseId,
         p_success: true,
         p_documents_added: documentsSynced
       });
+      lockAcquired = false;
 
       const nextSync = new Date();
       nextSync.setDate(nextSync.getDate() + 7);
@@ -418,12 +426,16 @@ serve(async (req) => {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       console.error('[sync-case-documents] Error:', errorMessage);
 
-      // Log failed CAPTCHA attempt if it started
-      if (captchaStartTime && !captchaSolved) {
-        await logCaptchaUsage(supabase, lawyerId, case_id, false, Date.now() - captchaStartTime, errorMessage);
+      // Log failed CAPTCHA attempt if it started but didn't complete
+      if (captchaStartTime && !captchaSolved && lawyerId && caseId) {
+        await logCaptchaUsage(supabase, lawyerId, caseId, false, Date.now() - captchaStartTime, errorMessage);
       }
 
-      await releaseLockOnFailure(supabase, case_id);
+      // Release lock on any failure
+      if (lockAcquired && caseId) {
+        await releaseLockOnFailure(supabase, caseId);
+        lockAcquired = false;
+      }
 
       return new Response(
         JSON.stringify({ error: 'Document sync failed', details: errorMessage }),
@@ -433,6 +445,16 @@ serve(async (req) => {
 
   } catch (error) {
     console.error('[sync-case-documents] Unhandled error:', error);
+    
+    // Final cleanup - release lock if still held
+    if (lockAcquired && caseId) {
+      try {
+        await releaseLockOnFailure(supabase, caseId);
+      } catch (cleanupError) {
+        console.error('[sync-case-documents] Failed to release lock in cleanup:', cleanupError);
+      }
+    }
+    
     return new Response(
       JSON.stringify({ error: 'Internal server error' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -463,13 +485,15 @@ function resolveCaptchaUrl(captchaSrc: string): string {
 /**
  * Parse ALL documents from the Orders / Judgments table in the HTML.
  * Does NOT filter by type - trusts table rows + PDF presence.
+ * 
+ * RULES:
+ * - Iterate ALL table rows
+ * - If a row has a PDF link, include it
+ * - Do NOT filter by importance, size, or wording
+ * - Trust court classification
  */
 function parseAllDocumentsFromHtml(html: string): DocumentRow[] {
   const documents: DocumentRow[] = [];
-
-  // Look for the Orders/Judgments section
-  // The exact structure depends on eCourts HTML format
-  // Pattern: table rows with order type, date, and PDF link
 
   // Match table rows containing PDF links
   const rowPattern = /<tr[^>]*>[\s\S]*?<\/tr>/gi;
@@ -480,14 +504,25 @@ function parseAllDocumentsFromHtml(html: string): DocumentRow[] {
     const pdfMatch = row.match(/href=["']([^"']*\.pdf[^"']*)["']/i);
     if (!pdfMatch) continue;
 
-    // Extract the court label (first meaningful text in the row)
+    // Extract the court label with fallback (FIX 5)
+    let courtLabel = 'Unknown';
     const labelMatch = row.match(/<td[^>]*>([^<]+)<\/td>/i);
-    const courtLabel = labelMatch ? labelMatch[1].trim() : 'Unknown';
+    if (labelMatch && labelMatch[1].trim()) {
+      courtLabel = labelMatch[1].trim();
+    } else {
+      // Fallback: strip all HTML and use the text
+      const strippedText = row.replace(/<[^>]+>/g, ' ').trim();
+      if (strippedText && strippedText.length < 100) {
+        courtLabel = strippedText.split(/\s+/).slice(0, 5).join(' ');
+      }
+    }
 
     // Skip if it's a header row or navigation row
-    if (courtLabel.toLowerCase().includes('sr') || 
-        courtLabel.toLowerCase().includes('order type') ||
-        courtLabel.toLowerCase().includes('date')) {
+    const lowerLabel = courtLabel.toLowerCase();
+    if (lowerLabel.includes('sr') || 
+        lowerLabel.includes('order type') ||
+        lowerLabel.includes('date') ||
+        lowerLabel.includes('download')) {
       continue;
     }
 
@@ -510,8 +545,20 @@ function parseAllDocumentsFromHtml(html: string): DocumentRow[] {
     });
   }
 
-  // Fallback: also try to find any PDF links in the document if table parsing fails
+  // HARDENED FALLBACK (FIX 4): Only run if we're on Orders/Judgments page
+  // This prevents scraping non-case PDFs (disclaimers, help docs, etc.)
   if (documents.length === 0) {
+    // Safety check: only proceed if this looks like a case status page with orders
+    const isOrdersPage = html.includes('Orders') || 
+                          html.includes('Judgments') || 
+                          html.includes('Order Date') ||
+                          html.includes('order_date');
+    
+    if (!isOrdersPage) {
+      console.log('[sync-case-documents] Fallback skipped - page does not appear to contain orders');
+      return documents;
+    }
+
     const allPdfLinks = html.match(/href=["']([^"']*\.pdf[^"']*)["']/gi) || [];
     for (const link of allPdfLinks) {
       const urlMatch = link.match(/href=["']([^"']+)["']/i);
@@ -537,6 +584,11 @@ function parseAllDocumentsFromHtml(html: string): DocumentRow[] {
 
 /**
  * Classify document type based on court label
+ * Classification rules (for storage only, never filtering):
+ * - if label.includes('judgment') → judgment
+ * - else if label.includes('interim') → interim_order
+ * - else if label.includes('order') → order
+ * - else → unknown
  */
 function classifyDocumentType(courtLabel: string): DocSyncType {
   const label = courtLabel.toLowerCase();
@@ -570,6 +622,8 @@ function parseIndianDate(dateStr: string): string | null {
 
 /**
  * Download a PDF and store it immutably
+ * Storage path: lawyers/{lawyer_id}/cases/{case_id}/documents/{pdf_hash}.pdf
+ * upsert: false (immutable)
  */
 async function downloadAndStoreDocument(
   supabase: any,
@@ -589,13 +643,13 @@ async function downloadAndStoreDocument(
   const pdfBuffer = await pdfResponse.arrayBuffer();
   const pdfSize = pdfBuffer.byteLength;
 
-  // Hash the PDF for deduplication
+  // Hash the PDF for deduplication (SHA-256)
   const hashBuffer = await crypto.subtle.digest('SHA-256', pdfBuffer);
   const pdfHash = Array.from(new Uint8Array(hashBuffer))
     .map(b => b.toString(16).padStart(2, '0'))
     .join('');
 
-  // Check if this hash already exists for this case
+  // Check if this hash already exists for this case (deduplication)
   const { data: existing } = await supabase
     .from('synced_court_documents')
     .select('id')
@@ -677,7 +731,7 @@ async function logCaptchaUsage(
 }
 
 /**
- * Release lock on failure (don't update last_sync_at)
+ * Release lock on failure (don't update last_sync_at, do increment attempts)
  */
 async function releaseLockOnFailure(supabase: any, caseId: string) {
   await supabase.rpc('release_document_sync_lock', {
