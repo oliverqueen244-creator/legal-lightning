@@ -357,6 +357,60 @@ export type Database = {
         }
         Relationships: []
       }
+      captcha_queue: {
+        Row: {
+          captcha_image_base64: string | null
+          captcha_image_url: string | null
+          created_at: string
+          expires_at: string
+          id: string
+          job_id: string
+          solution: string | null
+          solved_at: string | null
+          solved_by: string | null
+          status: string
+        }
+        Insert: {
+          captcha_image_base64?: string | null
+          captcha_image_url?: string | null
+          created_at?: string
+          expires_at?: string
+          id?: string
+          job_id: string
+          solution?: string | null
+          solved_at?: string | null
+          solved_by?: string | null
+          status?: string
+        }
+        Update: {
+          captcha_image_base64?: string | null
+          captcha_image_url?: string | null
+          created_at?: string
+          expires_at?: string
+          id?: string
+          job_id?: string
+          solution?: string | null
+          solved_at?: string | null
+          solved_by?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "captcha_queue_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "order_fetch_jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "captcha_queue_solved_by_fkey"
+            columns: ["solved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       case_arguments: {
         Row: {
           created_at: string | null
@@ -861,6 +915,59 @@ export type Database = {
           whatsapp_escalation_enabled?: boolean
         }
         Relationships: []
+      }
+      court_orders: {
+        Row: {
+          bench: Database["public"]["Enums"]["rhc_bench"]
+          created_at: string
+          fetch_trigger: Database["public"]["Enums"]["order_fetch_trigger"]
+          fetched_at: string
+          id: string
+          order_date: string
+          order_type: string | null
+          pdf_hash: string | null
+          pdf_size_bytes: number | null
+          source_pdf_url: string | null
+          stored_pdf_path: string | null
+          tracked_case_id: string
+        }
+        Insert: {
+          bench: Database["public"]["Enums"]["rhc_bench"]
+          created_at?: string
+          fetch_trigger: Database["public"]["Enums"]["order_fetch_trigger"]
+          fetched_at?: string
+          id?: string
+          order_date: string
+          order_type?: string | null
+          pdf_hash?: string | null
+          pdf_size_bytes?: number | null
+          source_pdf_url?: string | null
+          stored_pdf_path?: string | null
+          tracked_case_id: string
+        }
+        Update: {
+          bench?: Database["public"]["Enums"]["rhc_bench"]
+          created_at?: string
+          fetch_trigger?: Database["public"]["Enums"]["order_fetch_trigger"]
+          fetched_at?: string
+          id?: string
+          order_date?: string
+          order_type?: string | null
+          pdf_hash?: string | null
+          pdf_size_bytes?: number | null
+          source_pdf_url?: string | null
+          stored_pdf_path?: string | null
+          tracked_case_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "court_orders_tracked_case_id_fkey"
+            columns: ["tracked_case_id"]
+            isOneToOne: false
+            referencedRelation: "tracked_cases"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       court_overrides: {
         Row: {
@@ -1774,6 +1881,84 @@ export type Database = {
           },
         ]
       }
+      order_fetch_jobs: {
+        Row: {
+          attempts: number
+          bench: Database["public"]["Enums"]["rhc_bench"] | null
+          captcha_required: boolean
+          completed_at: string | null
+          court_order_id: string | null
+          created_at: string
+          error_reason: string | null
+          id: string
+          job_type: string
+          last_attempt_at: string | null
+          max_attempts: number
+          next_attempt_at: string | null
+          orders_found: number | null
+          pdfs_downloaded: number | null
+          priority: number
+          started_at: string | null
+          status: Database["public"]["Enums"]["order_job_status"]
+          tracked_case_id: string | null
+        }
+        Insert: {
+          attempts?: number
+          bench?: Database["public"]["Enums"]["rhc_bench"] | null
+          captcha_required?: boolean
+          completed_at?: string | null
+          court_order_id?: string | null
+          created_at?: string
+          error_reason?: string | null
+          id?: string
+          job_type: string
+          last_attempt_at?: string | null
+          max_attempts?: number
+          next_attempt_at?: string | null
+          orders_found?: number | null
+          pdfs_downloaded?: number | null
+          priority?: number
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["order_job_status"]
+          tracked_case_id?: string | null
+        }
+        Update: {
+          attempts?: number
+          bench?: Database["public"]["Enums"]["rhc_bench"] | null
+          captcha_required?: boolean
+          completed_at?: string | null
+          court_order_id?: string | null
+          created_at?: string
+          error_reason?: string | null
+          id?: string
+          job_type?: string
+          last_attempt_at?: string | null
+          max_attempts?: number
+          next_attempt_at?: string | null
+          orders_found?: number | null
+          pdfs_downloaded?: number | null
+          priority?: number
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["order_job_status"]
+          tracked_case_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_fetch_jobs_court_order_id_fkey"
+            columns: ["court_order_id"]
+            isOneToOne: false
+            referencedRelation: "court_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_fetch_jobs_tracked_case_id_fkey"
+            columns: ["tracked_case_id"]
+            isOneToOne: false
+            referencedRelation: "tracked_cases"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       parser_confidence_runs: {
         Row: {
           batch_id: string | null
@@ -2275,6 +2460,77 @@ export type Database = {
         }
         Relationships: []
       }
+      tracked_cases: {
+        Row: {
+          bench: Database["public"]["Enums"]["rhc_bench"]
+          case_number: number
+          case_status: string | null
+          case_type: string
+          case_year: number
+          created_at: string
+          id: string
+          is_active: boolean
+          last_listed_date: string | null
+          last_orders_check_at: string | null
+          listed_today: boolean
+          orders_count: number
+          petitioner: string | null
+          petitioner_advocate: string | null
+          profile_id: string
+          respondent: string | null
+          respondent_advocate: string | null
+          updated_at: string
+        }
+        Insert: {
+          bench: Database["public"]["Enums"]["rhc_bench"]
+          case_number: number
+          case_status?: string | null
+          case_type: string
+          case_year: number
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          last_listed_date?: string | null
+          last_orders_check_at?: string | null
+          listed_today?: boolean
+          orders_count?: number
+          petitioner?: string | null
+          petitioner_advocate?: string | null
+          profile_id: string
+          respondent?: string | null
+          respondent_advocate?: string | null
+          updated_at?: string
+        }
+        Update: {
+          bench?: Database["public"]["Enums"]["rhc_bench"]
+          case_number?: number
+          case_status?: string | null
+          case_type?: string
+          case_year?: number
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          last_listed_date?: string | null
+          last_orders_check_at?: string | null
+          listed_today?: boolean
+          orders_count?: number
+          petitioner?: string | null
+          petitioner_advocate?: string | null
+          profile_id?: string
+          respondent?: string | null
+          respondent_advocate?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tracked_cases_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           created_at: string | null
@@ -2419,6 +2675,15 @@ export type Database = {
         Args: { _clerk_id: string; _lawyer_id: string }
         Returns: string
       }
+      get_next_pending_job: {
+        Args: { p_bench?: Database["public"]["Enums"]["rhc_bench"] }
+        Returns: {
+          bench: Database["public"]["Enums"]["rhc_bench"]
+          case_id: string
+          job_id: string
+          job_type: string
+        }[]
+      }
       get_user_role: {
         Args: { _user_id: string }
         Returns: Database["public"]["Enums"]["app_role"]
@@ -2498,6 +2763,10 @@ export type Database = {
         }
         Returns: string
       }
+      try_lock_case_for_job: {
+        Args: { p_case_id: string; p_job_type: string }
+        Returns: string
+      }
     }
     Enums: {
       app_role: "SENIOR" | "JUNIOR" | "CLERK" | "ADMIN"
@@ -2560,12 +2829,21 @@ export type Database = {
         | "CONDITIONAL"
         | "LOW_PROBABILITY"
         | "UNKNOWN"
+      order_fetch_trigger: "manual" | "backfill" | "post_listing" | "scheduled"
+      order_job_status:
+        | "pending"
+        | "running"
+        | "completed"
+        | "failed"
+        | "captcha_blocked"
+        | "manual_required"
       policy_scope: "GLOBAL" | "COURT" | "BENCH" | "UNKNOWN"
       priority_rule:
         | "SUPPLEMENTARY_FIRST"
         | "MAIN_ONLY"
         | "TIME_BOUND"
         | "UNSPECIFIED"
+      rhc_bench: "JAIPUR" | "JODHPUR"
       risk_type: "ux" | "trust" | "operational" | "legal" | "scale"
       source_granularity: "FULL_CAUSELIST" | "COURT_SECTION" | "LAWYER_FILTERED"
       time_condition: "IF_TIME_PERMITS" | "FIXED_ORDER" | "UNKNOWN"
@@ -2762,6 +3040,15 @@ export const Constants = {
         "LOW_PROBABILITY",
         "UNKNOWN",
       ],
+      order_fetch_trigger: ["manual", "backfill", "post_listing", "scheduled"],
+      order_job_status: [
+        "pending",
+        "running",
+        "completed",
+        "failed",
+        "captcha_blocked",
+        "manual_required",
+      ],
       policy_scope: ["GLOBAL", "COURT", "BENCH", "UNKNOWN"],
       priority_rule: [
         "SUPPLEMENTARY_FIRST",
@@ -2769,6 +3056,7 @@ export const Constants = {
         "TIME_BOUND",
         "UNSPECIFIED",
       ],
+      rhc_bench: ["JAIPUR", "JODHPUR"],
       risk_type: ["ux", "trust", "operational", "legal", "scale"],
       source_granularity: [
         "FULL_CAUSELIST",
