@@ -2926,6 +2926,14 @@ export type Database = {
         Args: { p_case_id: string; p_lawyer_id: string }
         Returns: Json
       }
+      admin_match_cases_for_profile: {
+        Args: {
+          p_alias_pattern: string
+          p_from_date?: string
+          p_profile_id: string
+        }
+        Returns: Json
+      }
       archive_old_causelists: { Args: never; Returns: number }
       can_check_judgment: {
         Args: { p_case_id: string; p_lawyer_id: string }
