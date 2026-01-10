@@ -1768,6 +1768,50 @@ export type Database = {
           },
         ]
       }
+      judgment_audit_log: {
+        Row: {
+          action: string
+          case_judgment_id: string
+          case_status_at_save: Database["public"]["Enums"]["case_proceeding_status"]
+          id: string
+          metadata: Json | null
+          save_method: string
+          saved_at: string
+          saved_by_user_id: string
+          tracked_case_id: string
+        }
+        Insert: {
+          action?: string
+          case_judgment_id: string
+          case_status_at_save: Database["public"]["Enums"]["case_proceeding_status"]
+          id?: string
+          metadata?: Json | null
+          save_method?: string
+          saved_at?: string
+          saved_by_user_id: string
+          tracked_case_id: string
+        }
+        Update: {
+          action?: string
+          case_judgment_id?: string
+          case_status_at_save?: Database["public"]["Enums"]["case_proceeding_status"]
+          id?: string
+          metadata?: Json | null
+          save_method?: string
+          saved_at?: string
+          saved_by_user_id?: string
+          tracked_case_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "judgment_audit_log_case_judgment_id_fkey"
+            columns: ["case_judgment_id"]
+            isOneToOne: false
+            referencedRelation: "case_judgments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       judgment_check_jobs: {
         Row: {
           attempts: number | null
@@ -2721,6 +2765,9 @@ export type Database = {
           orders_count: number
           petitioner: string | null
           petitioner_advocate: string | null
+          proceeding_status:
+            | Database["public"]["Enums"]["case_proceeding_status"]
+            | null
           profile_id: string
           respondent: string | null
           respondent_advocate: string | null
@@ -2755,6 +2802,9 @@ export type Database = {
           orders_count?: number
           petitioner?: string | null
           petitioner_advocate?: string | null
+          proceeding_status?:
+            | Database["public"]["Enums"]["case_proceeding_status"]
+            | null
           profile_id: string
           respondent?: string | null
           respondent_advocate?: string | null
@@ -2789,6 +2839,9 @@ export type Database = {
           orders_count?: number
           petitioner?: string | null
           petitioner_advocate?: string | null
+          proceeding_status?:
+            | Database["public"]["Enums"]["case_proceeding_status"]
+            | null
           profile_id?: string
           respondent?: string | null
           respondent_advocate?: string | null
@@ -2969,6 +3022,14 @@ export type Database = {
         Args: { _clerk_id: string; _lawyer_id: string }
         Returns: string
       }
+      get_judgment_eligibility: {
+        Args: { p_case_id: string }
+        Returns: {
+          current_status: string
+          is_eligible: boolean
+          reason: string
+        }[]
+      }
       get_next_pending_job: {
         Args: { p_bench?: Database["public"]["Enums"]["rhc_bench"] }
         Returns: {
@@ -3019,6 +3080,12 @@ export type Database = {
         Returns: boolean
       }
       is_fallback_disabled: { Args: { p_bench_code: string }; Returns: boolean }
+      is_judgment_eligible_status: {
+        Args: {
+          p_status: Database["public"]["Enums"]["case_proceeding_status"]
+        }
+        Returns: boolean
+      }
       is_lawyer_role: { Args: { _user_id: string }; Returns: boolean }
       log_delegated_action: {
         Args: {
@@ -3082,6 +3149,13 @@ export type Database = {
         Args: { p_case_id: string; p_job_type: string }
         Returns: string
       }
+      update_case_proceeding_status: {
+        Args: {
+          p_case_id: string
+          p_new_status: Database["public"]["Enums"]["case_proceeding_status"]
+        }
+        Returns: boolean
+      }
       validate_case_ownership: {
         Args: { p_case_id: string; p_lawyer_id: string }
         Returns: boolean
@@ -3100,6 +3174,17 @@ export type Database = {
       audit_status: "pass" | "conditional" | "fail"
       board_status: "hearing" | "passover" | "lunch" | "adjourned"
       case_context: "personal" | "chamber"
+      case_proceeding_status:
+        | "listed"
+        | "hearing"
+        | "running"
+        | "adjourned"
+        | "not_reached"
+        | "reserved_for_judgment"
+        | "judgment_pronounced"
+        | "disposed_without_judgment"
+        | "dismissed"
+        | "withdrawn"
       causelist_input_format: "PDF" | "HTML"
       causelist_source_type: "PDF" | "HTML_COMPLETE" | "HTML_SEARCH"
       chamber_role: "senior" | "junior" | "clerk"
@@ -3319,6 +3404,18 @@ export const Constants = {
       audit_status: ["pass", "conditional", "fail"],
       board_status: ["hearing", "passover", "lunch", "adjourned"],
       case_context: ["personal", "chamber"],
+      case_proceeding_status: [
+        "listed",
+        "hearing",
+        "running",
+        "adjourned",
+        "not_reached",
+        "reserved_for_judgment",
+        "judgment_pronounced",
+        "disposed_without_judgment",
+        "dismissed",
+        "withdrawn",
+      ],
       causelist_input_format: ["PDF", "HTML"],
       causelist_source_type: ["PDF", "HTML_COMPLETE", "HTML_SEARCH"],
       chamber_role: ["senior", "junior", "clerk"],
