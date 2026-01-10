@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Plus, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import type { LiveBoardCache } from '@/types/database';
+import { getBenchBadgeLabel, getBenchMenuLabel } from '@/lib/benchNames';
 
 interface CourtFormData {
   court_location: string;
@@ -123,8 +124,8 @@ export function CourtConfig() {
                   >
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="JODHPUR">Jodhpur</SelectItem>
-                      <SelectItem value="JAIPUR">Jaipur</SelectItem>
+                      <SelectItem value="JODHPUR">{getBenchMenuLabel('JODHPUR')}</SelectItem>
+                      <SelectItem value="JAIPUR">{getBenchMenuLabel('JAIPUR')}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -189,7 +190,7 @@ export function CourtConfig() {
             <TableBody>
               {liveBoards?.map((board) => (
                 <TableRow key={`${board.court_location}-${board.court_no}`}>
-                  <TableCell>{board.court_location}</TableCell>
+                  <TableCell>{getBenchBadgeLabel(board.court_location)}</TableCell>
                   <TableCell>{board.court_no}</TableCell>
                   <TableCell className="font-medium">{board.current_item}</TableCell>
                   <TableCell>{board.is_supplementary_running ? 'Yes' : 'No'}</TableCell>

@@ -3,7 +3,7 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { MapPin } from 'lucide-react';
 import { PortalHealthBadge } from '@/components/dashboard/CourtStatusCard';
-
+import { getBenchFullName } from '@/lib/benchNames';
 interface ProfileStepProps {
   data: {
     full_name: string;
@@ -91,7 +91,7 @@ export default function ProfileStep({ data, onChange }: ProfileStepProps) {
             <div className="flex items-center gap-2">
               <MapPin className="w-4 h-4 text-primary" />
               <div>
-                <p className="font-medium">Jaipur Bench</p>
+                <p className="font-medium">{getBenchFullName('JAIPUR')}</p>
               </div>
             </div>
           </Label>
@@ -112,7 +112,7 @@ export default function ProfileStep({ data, onChange }: ProfileStepProps) {
             <div className="flex items-center gap-2">
               <MapPin className="w-4 h-4 text-primary" />
               <div>
-                <p className="font-medium">Jodhpur Bench</p>
+                <p className="font-medium">{getBenchFullName('JODHPUR')}</p>
               </div>
             </div>
           </Label>

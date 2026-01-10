@@ -21,6 +21,7 @@ import { useLiveBoard } from '@/hooks/useLiveBoard';
 import { useDocket } from '@/hooks/useDocket';
 import { supabase } from '@/integrations/supabase/client';
 import { OperationsConsole } from '@/components/admin/OperationsConsole';
+import { getBenchFullName, getBenchBadgeLabel, getBenchMenuLabel } from '@/lib/benchNames';
 
 type Bench = 'JAIPUR' | 'JODHPUR';
 
@@ -117,7 +118,7 @@ export function Header() {
         .eq('id', profile.id);
     }
     
-    toast.success(`Switched to ${bench === 'BOTH' ? 'Both Benches' : bench + ' Bench'}`);
+    toast.success(`Switched to ${getBenchFullName(bench)}`);
   };
 
   // Format last sync time
@@ -166,11 +167,11 @@ export function Header() {
               <span className="text-sm font-medium text-foreground">
                 {selectedBench === 'BOTH' ? (
                   <>
-                    <Badge variant="gold" className="mr-1">JAIPUR</Badge>
-                    <Badge variant="gold">JODHPUR</Badge>
+                    <Badge variant="gold" className="mr-1">{getBenchBadgeLabel('JAIPUR')}</Badge>
+                    <Badge variant="gold">{getBenchBadgeLabel('JODHPUR')}</Badge>
                   </>
                 ) : (
-                  <Badge variant="gold">{selectedBench}</Badge>
+                  <Badge variant="gold">{getBenchBadgeLabel(selectedBench)}</Badge>
                 )}
               </span>
             </div>
@@ -191,7 +192,7 @@ export function Header() {
                   className={selectedBench === 'JAIPUR' ? 'bg-primary/10' : ''}
                 >
                   <MapPin className="h-4 w-4 mr-2" />
-                  Jaipur Bench
+                  {getBenchMenuLabel('JAIPUR')}
                   {selectedBench === 'JAIPUR' && (
                     <Badge variant="gold" className="ml-auto">Active</Badge>
                   )}
@@ -201,7 +202,7 @@ export function Header() {
                   className={selectedBench === 'JODHPUR' ? 'bg-primary/10' : ''}
                 >
                   <MapPin className="h-4 w-4 mr-2" />
-                  Jodhpur Bench
+                  {getBenchMenuLabel('JODHPUR')}
                   {selectedBench === 'JODHPUR' && (
                     <Badge variant="gold" className="ml-auto">Active</Badge>
                   )}
@@ -212,7 +213,7 @@ export function Header() {
                   className={selectedBench === 'BOTH' ? 'bg-primary/10' : ''}
                 >
                   <MapPin className="h-4 w-4 mr-2" />
-                  Both Benches
+                  {getBenchMenuLabel('BOTH')}
                   {selectedBench === 'BOTH' && (
                     <Badge variant="gold" className="ml-auto">Active</Badge>
                   )}
@@ -287,7 +288,7 @@ export function Header() {
                   Role: {role}
                 </DropdownMenuItem>
                 <DropdownMenuItem className="text-muted-foreground text-xs">
-                  Bench: {selectedBench}
+                  Bench: {getBenchBadgeLabel(selectedBench)}
                 </DropdownMenuItem>
                 {isAdmin && (
                   <>

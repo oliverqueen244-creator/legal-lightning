@@ -5,7 +5,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Users, Scale, Clock } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatDistanceToNow } from 'date-fns';
-
+import { getBenchBadgeLabel } from '@/lib/benchNames';
 interface CourtMetadataWidgetProps {
   bench?: string;
 }
@@ -94,7 +94,7 @@ export function CourtMetadataWidget({ bench }: CourtMetadataWidgetProps) {
           <div key={benchName} className="mb-3 last:mb-0">
             <div className="flex items-center gap-2 mb-2">
               <Badge variant="outline" className="text-xs">
-                {benchName}
+                {getBenchBadgeLabel(benchName)}
               </Badge>
               <span className="text-xs text-muted-foreground">
                 {benchCourts.length} courts

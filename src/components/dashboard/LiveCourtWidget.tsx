@@ -8,7 +8,7 @@ import { isCourtHours } from '@/hooks/useLiveBoard';
 import { useCourtOverrides, findOverrideForItem } from '@/hooks/useCourtOverrides';
 import { useEffectiveJudge } from '@/hooks/useEffectiveJudge';
 import { useRoleSemantics } from '@/hooks/useRoleSemantics';
-
+import { getBenchFullName } from '@/lib/benchNames';
 interface LiveCourtWidgetProps {
   courtRoom: string;
   currentItem: number;
@@ -24,7 +24,7 @@ export function LiveCourtWidget({
   currentItem,
   myItemNumber,
   status = 'hearing',
-  courtLocation = 'Jodhpur Bench',
+  courtLocation = 'JODHPUR',
   liveBoard,
   isSupplementary = false,
 }: LiveCourtWidgetProps) {
@@ -174,7 +174,7 @@ export function LiveCourtWidget({
               COURTROOM {courtRoom}
             </h2>
             <p className="text-sm text-muted-foreground">
-              {courtLocation}
+              {getBenchFullName(courtLocation)}
               {effectiveJudge.judgeName && isActive && courtHoursStatus.inSession && (
                 <span className="ml-1">
                   • {effectiveJudge.judgeName.replace(/^(MR\. JUSTICE |MRS\. JUSTICE |MS\. JUSTICE )/gi, 'J. ')}

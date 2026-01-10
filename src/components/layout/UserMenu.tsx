@@ -30,6 +30,7 @@ import { usePWAUpdate } from '@/hooks/usePWAUpdate';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
+import { getBenchFullName, getBenchBadgeLabel } from '@/lib/benchNames';
 
 /**
  * Role-Aware User Menu (Top Right Dropdown)
@@ -111,7 +112,7 @@ export function UserMenu() {
       return;
     }
 
-    toast.success(`Bench updated to ${bench === 'JAIPUR,JODHPUR' ? 'Both Benches' : bench}`);
+    toast.success(`Bench updated to ${getBenchFullName(bench)}`);
     
     // Invalidate and refetch relevant queries
     queryClient.invalidateQueries({ queryKey: ['profile'] });
@@ -178,24 +179,24 @@ export function UserMenu() {
               <MapPin className="mr-2 h-4 w-4" />
               Bench
               <Badge variant="outline" className="ml-auto text-xs">
-                {currentBench === 'JAIPUR,JODHPUR' ? 'Both' : currentBench}
+                {getBenchBadgeLabel(currentBench)}
               </Badge>
             </DropdownMenuSubTrigger>
             <DropdownMenuSubContent className="glass-card">
               <DropdownMenuItem onClick={() => handleBenchChange('JAIPUR')}>
                 {currentBench === 'JAIPUR' && <Check className="mr-2 h-4 w-4" />}
                 {currentBench !== 'JAIPUR' && <span className="mr-6" />}
-                Jaipur Bench
+                {getBenchFullName('JAIPUR')}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => handleBenchChange('JODHPUR')}>
                 {currentBench === 'JODHPUR' && <Check className="mr-2 h-4 w-4" />}
                 {currentBench !== 'JODHPUR' && <span className="mr-6" />}
-                Jodhpur Bench
+                {getBenchFullName('JODHPUR')}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => handleBenchChange('JAIPUR,JODHPUR')}>
                 {currentBench === 'JAIPUR,JODHPUR' && <Check className="mr-2 h-4 w-4" />}
                 {currentBench !== 'JAIPUR,JODHPUR' && <span className="mr-6" />}
-                Both Benches
+                {getBenchFullName('BOTH')}
               </DropdownMenuItem>
             </DropdownMenuSubContent>
           </DropdownMenuSub>

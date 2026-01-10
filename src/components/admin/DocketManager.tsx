@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Plus, Pencil, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import type { DocketItem } from '@/types/database';
+import { getBenchMenuLabel, getBenchBadgeLabel } from '@/lib/benchNames';
 
 interface DocketFormData {
   date: string;
@@ -191,8 +192,8 @@ export function DocketManager() {
                   >
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="JODHPUR">Jodhpur</SelectItem>
-                      <SelectItem value="JAIPUR">Jaipur</SelectItem>
+                      <SelectItem value="JODHPUR">{getBenchMenuLabel('JODHPUR')}</SelectItem>
+                      <SelectItem value="JAIPUR">{getBenchMenuLabel('JAIPUR')}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -272,7 +273,7 @@ export function DocketManager() {
                     <TableCell>{item.date}</TableCell>
                     <TableCell>{item.item_no}</TableCell>
                     <TableCell className="font-medium">{item.case_number}</TableCell>
-                    <TableCell>{item.court_location} #{item.court_room_no}</TableCell>
+                    <TableCell>{getBenchBadgeLabel(item.court_location)} #{item.court_room_no}</TableCell>
                     <TableCell>{item.list_type}</TableCell>
                     <TableCell className="text-right">
                       <Button variant="ghost" size="icon" onClick={() => handleEdit(item)} aria-label="Edit case">

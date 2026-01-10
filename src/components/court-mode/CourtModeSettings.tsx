@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useCourtMode } from '@/hooks/useCourtMode';
 import { useAuth } from '@/hooks/useAuth';
+import { getBenchMenuLabel } from '@/lib/benchNames';
 
 interface CourtModeSettingsProps {
   open: boolean;
@@ -103,9 +104,9 @@ export function CourtModeSettings({ open, onOpenChange }: CourtModeSettingsProps
                       <SelectValue placeholder="Select bench" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="JODHPUR">Jodhpur</SelectItem>
-                      <SelectItem value="JAIPUR">Jaipur</SelectItem>
-                      <SelectItem value="BOTH">Both Benches</SelectItem>
+                      <SelectItem value="JODHPUR">{getBenchMenuLabel('JODHPUR')}</SelectItem>
+                      <SelectItem value="JAIPUR">{getBenchMenuLabel('JAIPUR')}</SelectItem>
+                      <SelectItem value="BOTH">{getBenchMenuLabel('BOTH')}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
