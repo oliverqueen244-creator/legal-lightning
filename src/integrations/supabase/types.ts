@@ -2601,6 +2601,66 @@ export type Database = {
         }
         Relationships: []
       }
+      synced_court_documents: {
+        Row: {
+          court_label: string
+          created_at: string
+          doc_type: Database["public"]["Enums"]["doc_sync_type"]
+          fetched_at: string
+          id: string
+          lawyer_id: string
+          order_date: string | null
+          pdf_hash: string | null
+          pdf_size_bytes: number | null
+          source_pdf_url: string
+          stored_pdf_path: string | null
+          tracked_case_id: string
+        }
+        Insert: {
+          court_label: string
+          created_at?: string
+          doc_type?: Database["public"]["Enums"]["doc_sync_type"]
+          fetched_at?: string
+          id?: string
+          lawyer_id: string
+          order_date?: string | null
+          pdf_hash?: string | null
+          pdf_size_bytes?: number | null
+          source_pdf_url: string
+          stored_pdf_path?: string | null
+          tracked_case_id: string
+        }
+        Update: {
+          court_label?: string
+          created_at?: string
+          doc_type?: Database["public"]["Enums"]["doc_sync_type"]
+          fetched_at?: string
+          id?: string
+          lawyer_id?: string
+          order_date?: string | null
+          pdf_hash?: string | null
+          pdf_size_bytes?: number | null
+          source_pdf_url?: string
+          stored_pdf_path?: string | null
+          tracked_case_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "synced_court_documents_lawyer_id_fkey"
+            columns: ["lawyer_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "synced_court_documents_tracked_case_id_fkey"
+            columns: ["tracked_case_id"]
+            isOneToOne: false
+            referencedRelation: "tracked_cases"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       token_usage_daily: {
         Row: {
           budget_limit: number | null
@@ -2642,15 +2702,21 @@ export type Database = {
           case_type: string
           case_year: number
           created_at: string
+          document_sync_attempts: number | null
+          document_sync_status:
+            | Database["public"]["Enums"]["document_sync_status"]
+            | null
           id: string
           is_active: boolean
           judgment_check_attempts: number | null
           judgment_found_at: string | null
           judgment_status: Database["public"]["Enums"]["judgment_status"] | null
+          last_document_sync_at: string | null
           last_judgment_check_at: string | null
           last_listed_date: string | null
           last_orders_check_at: string | null
           listed_today: boolean
+          next_document_sync_after: string | null
           next_judgment_check_after: string | null
           orders_count: number
           petitioner: string | null
@@ -2658,6 +2724,7 @@ export type Database = {
           profile_id: string
           respondent: string | null
           respondent_advocate: string | null
+          total_documents_synced: number | null
           updated_at: string
         }
         Insert: {
@@ -2667,6 +2734,10 @@ export type Database = {
           case_type: string
           case_year: number
           created_at?: string
+          document_sync_attempts?: number | null
+          document_sync_status?:
+            | Database["public"]["Enums"]["document_sync_status"]
+            | null
           id?: string
           is_active?: boolean
           judgment_check_attempts?: number | null
@@ -2674,10 +2745,12 @@ export type Database = {
           judgment_status?:
             | Database["public"]["Enums"]["judgment_status"]
             | null
+          last_document_sync_at?: string | null
           last_judgment_check_at?: string | null
           last_listed_date?: string | null
           last_orders_check_at?: string | null
           listed_today?: boolean
+          next_document_sync_after?: string | null
           next_judgment_check_after?: string | null
           orders_count?: number
           petitioner?: string | null
@@ -2685,6 +2758,7 @@ export type Database = {
           profile_id: string
           respondent?: string | null
           respondent_advocate?: string | null
+          total_documents_synced?: number | null
           updated_at?: string
         }
         Update: {
@@ -2694,6 +2768,10 @@ export type Database = {
           case_type?: string
           case_year?: number
           created_at?: string
+          document_sync_attempts?: number | null
+          document_sync_status?:
+            | Database["public"]["Enums"]["document_sync_status"]
+            | null
           id?: string
           is_active?: boolean
           judgment_check_attempts?: number | null
@@ -2701,10 +2779,12 @@ export type Database = {
           judgment_status?:
             | Database["public"]["Enums"]["judgment_status"]
             | null
+          last_document_sync_at?: string | null
           last_judgment_check_at?: string | null
           last_listed_date?: string | null
           last_orders_check_at?: string | null
           listed_today?: boolean
+          next_document_sync_after?: string | null
           next_judgment_check_after?: string | null
           orders_count?: number
           petitioner?: string | null
@@ -2712,6 +2792,7 @@ export type Database = {
           profile_id?: string
           respondent?: string | null
           respondent_advocate?: string | null
+          total_documents_synced?: number | null
           updated_at?: string
         }
         Relationships: [
@@ -2841,8 +2922,16 @@ export type Database = {
       }
     }
     Functions: {
+      acquire_document_sync_lock: {
+        Args: { p_case_id: string; p_lawyer_id: string }
+        Returns: Json
+      }
       archive_old_causelists: { Args: never; Returns: number }
       can_check_judgment: {
+        Args: { p_case_id: string; p_lawyer_id: string }
+        Returns: Json
+      }
+      can_sync_documents: {
         Args: { p_case_id: string; p_lawyer_id: string }
         Returns: Json
       }
@@ -2900,6 +2989,14 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      increment_document_count: {
+        Args: { p_case_id: string; p_increment?: number }
+        Returns: number
+      }
+      increment_document_sync_attempt: {
+        Args: { p_case_id: string }
+        Returns: number
       }
       is_chamber_member: {
         Args: { _chamber_id: string; _user_id: string }
@@ -2964,6 +3061,14 @@ export type Database = {
         Args: { p_case_id: string; p_lawyer_id: string }
         Returns: Json
       }
+      release_document_sync_lock: {
+        Args: {
+          p_case_id: string
+          p_documents_added?: number
+          p_success: boolean
+        }
+        Returns: undefined
+      }
       try_lock_case_for_job: {
         Args: { p_case_id: string; p_job_type: string }
         Returns: string
@@ -2996,9 +3101,16 @@ export type Database = {
         | "add_notes"
         | "track_hearings"
         | "mark_presence"
+      doc_sync_type: "judgment" | "interim_order" | "order" | "unknown"
       document_format: "TYPED" | "SCANNED" | "HANDWRITTEN"
       document_language: "EN" | "HI" | "MIXED" | "UNKNOWN"
       document_legibility: "CLEAR" | "AVERAGE" | "POOR"
+      document_sync_status:
+        | "not_synced"
+        | "sync_queued"
+        | "syncing"
+        | "synced"
+        | "sync_failed"
       document_type:
         | "CAUSELIST_PDF"
         | "PETITION"
@@ -3209,9 +3321,17 @@ export const Constants = {
         "track_hearings",
         "mark_presence",
       ],
+      doc_sync_type: ["judgment", "interim_order", "order", "unknown"],
       document_format: ["TYPED", "SCANNED", "HANDWRITTEN"],
       document_language: ["EN", "HI", "MIXED", "UNKNOWN"],
       document_legibility: ["CLEAR", "AVERAGE", "POOR"],
+      document_sync_status: [
+        "not_synced",
+        "sync_queued",
+        "syncing",
+        "synced",
+        "sync_failed",
+      ],
       document_type: [
         "CAUSELIST_PDF",
         "PETITION",
