@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Scale, Calendar, FileText, Settings, Activity, FileCheck, Database, Gavel, Brain, ClipboardCheck, AlertTriangle, Gauge, Layers, Smartphone } from 'lucide-react';
+import { ArrowLeft, Scale, Calendar, FileText, Settings, Activity, FileCheck, Database, Gavel, Brain, ClipboardCheck, AlertTriangle, Gauge, Layers, Smartphone, Users } from 'lucide-react';
 import { AuthGuard } from '@/components/layout/AuthGuard';
 import { useAuth } from '@/hooks/useAuth';
 import { DocketManager } from '@/components/admin/DocketManager';
@@ -18,6 +18,7 @@ import { AdminErrorConsole } from '@/components/admin/errors';
 import { ConfidenceDashboard } from '@/components/admin/ConfidenceDashboard';
 import { FallbackDashboard } from '@/components/admin/FallbackDashboard';
 import { ForceUpdateControl } from '@/components/admin/ForceUpdateControl';
+import { UserCasesViewer } from '@/components/admin/UserCasesViewer';
 
 export default function Admin() {
   const navigate = useNavigate();
@@ -84,6 +85,10 @@ export default function Admin() {
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
             <div className="overflow-x-auto pb-2">
               <TabsList className="inline-flex h-auto w-max gap-1 p-1">
+              <TabsTrigger value="user-cases" className="flex items-center gap-2 px-3 py-2">
+                  <Users className="h-4 w-4" />
+                  <span className="hidden sm:inline">User Cases</span>
+                </TabsTrigger>
                 <TabsTrigger value="errors" className="flex items-center gap-2 px-3 py-2">
                   <AlertTriangle className="h-4 w-4" />
                   <span className="hidden sm:inline">Errors</span>
@@ -138,6 +143,10 @@ export default function Admin() {
                 </TabsTrigger>
               </TabsList>
             </div>
+
+            <TabsContent value="user-cases" className="space-y-4">
+              <UserCasesViewer />
+            </TabsContent>
 
             <TabsContent value="errors" className="space-y-4">
               <AdminErrorConsole />
