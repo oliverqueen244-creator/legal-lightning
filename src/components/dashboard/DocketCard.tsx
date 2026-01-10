@@ -6,8 +6,8 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { Scale, Clock, AlertTriangle, ChevronRight, SkipForward, Coffee, Ban, Zap, Play, Calendar, FileText, Upload, Database, User, Users } from 'lucide-react';
-import type { DocketItem, LiveBoardCache, BoardStatus, HearingLikelihood } from '@/types/database';
+import { Scale, Clock, AlertTriangle, ChevronRight, SkipForward, Coffee, Ban, Zap, Play, Calendar, FileText, Upload, Database, User, Users, Building2 } from 'lucide-react';
+import type { DocketItem, LiveBoardCache, BoardStatus, HearingLikelihood, CaseContext } from '@/types/database';
 import { cn } from '@/lib/utils';
 import type { AppRole } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
@@ -36,6 +36,8 @@ interface DocketCardProps {
     hearing_likelihood?: HearingLikelihood | null;
     likelihood_reason?: string | null;
     judge_names?: string | null;
+    case_context?: CaseContext;
+    chamber_id?: string | null;
   };
   liveBoard?: LiveBoardCache;
   userRole?: AppRole | null;
@@ -203,6 +205,13 @@ function DocketCardInner({ item, liveBoard, userRole, onForceActive, showDate, p
               )}
               {isSupplementary && (
                 <Badge variant="supplementary">{t('supplementary')}</Badge>
+              )}
+              {/* CP-4: Chamber context badge */}
+              {item.case_context === 'chamber' && (
+                <Badge variant="outline" className="flex items-center gap-1 text-xs bg-primary/10 text-primary border-primary/20">
+                  <Building2 className="h-3 w-3" aria-hidden="true" />
+                  {t('chamber_case', 'Chamber')}
+                </Badge>
               )}
               {/* Role Indicator Badge */}
               {matchedAs && (

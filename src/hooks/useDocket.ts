@@ -1,12 +1,19 @@
 import { useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import type { DocketItem } from '@/types/database';
+import type { DocketItem, CaseContext } from '@/types/database';
 import { useAuth } from './useAuth';
 
 // PHASE 0.3: Stale time to reduce refetch noise on mount/focus
 const DOCKET_STALE_TIME = 30_000; // 30 seconds
 
+/**
+ * Legacy docket hook - fetches all cases for the user (personal + chamber visible)
+ * 
+ * CP-4 Note: This hook now respects RLS policies which handle:
+ * - Personal cases where matched_profile_id = user
+ * - Chamber cases where user is a member/owner
+ */
 export function useDocket(date?: string) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -15,33 +22,35 @@ export function useDocket(date?: string) {
   const query = useQuery({
     queryKey: ['docket', user?.id, targetDate],
     queryFn: async () => {
-      // First try to get items matched to the current user
-      if (user?.id) {
-        const { data: matchedData, error: matchedError } = await supabase
-          .from('daily_court_docket')
-          .select('*, hearing_likelihood, likelihood_reason, likelihood_derived_at, judge_names, petitioner, respondent, petitioner_lawyer, respondent_lawyer')
-          .eq('date', targetDate)
-          .eq('matched_profile_id', user.id)
-          .order('list_type', { ascending: false })
-          .order('item_no', { ascending: true });
+      if (!user?.id) return [] as DocketItem[];
+      
+      // RLS now handles visibility - just fetch all visible cases for this date
+      const { data, error } = await supabase
+        .from('daily_court_docket')
+        .select('*, hearing_likelihood, likelihood_reason, likelihood_derived_at, judge_names, petitioner, respondent, petitioner_lawyer, respondent_lawyer, case_context, chamber_id')
+        .eq('date', targetDate)
+        .order('case_context', { ascending: true }) // personal first
+        .order('list_type', { ascending: false })
+        .order('item_no', { ascending: true });
 
-        if (!matchedError && matchedData && matchedData.length > 0) {
-          return matchedData as DocketItem[];
-        }
+      if (error) {
+        console.error('[useDocket] Query error:', error);
+        return [] as DocketItem[];
       }
-
-      // No demo mode - only show user's own matched cases
-      // Return empty array if no matches found
-      return [] as DocketItem[];
+      
+      return (data || []) as DocketItem[];
     },
     // PHASE 0.3: Don't refetch immediately on mount/focus
     staleTime: DOCKET_STALE_TIME,
     // PHASE 3.1: Add timeout for slow networks
     gcTime: 5 * 60 * 1000, // Keep in garbage collection for 5 min
+    enabled: !!user?.id,
   });
 
   // Subscribe to realtime changes - PHASE 1.2: Granular invalidation
   useEffect(() => {
+    if (!user?.id) return;
+    
     const channel = supabase
       .channel(`docket-changes-${targetDate}`)
       .on(
@@ -57,16 +66,16 @@ export function useDocket(date?: string) {
           const newRecord = payload.new as any;
           const oldRecord = payload.old as any;
           
-          if (user?.id) {
-            // Only invalidate if the change is for user's matched cases
-            if (
-              newRecord?.matched_profile_id === user.id ||
-              oldRecord?.matched_profile_id === user.id
-            ) {
-              queryClient.invalidateQueries({ 
-                queryKey: ['docket', user.id, targetDate] 
-              });
-            }
+          // Invalidate if user's case or any visible case changed
+          if (
+            newRecord?.matched_profile_id === user.id ||
+            oldRecord?.matched_profile_id === user.id ||
+            newRecord?.case_context === 'chamber' ||
+            oldRecord?.case_context === 'chamber'
+          ) {
+            queryClient.invalidateQueries({ 
+              queryKey: ['docket', user.id, targetDate] 
+            });
           }
         }
       )
@@ -86,7 +95,7 @@ export function useDocketItem(id: string) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('daily_court_docket')
-        .select('*')
+        .select('*, case_context, chamber_id')
         .eq('id', id)
         .maybeSingle();
 
@@ -96,4 +105,11 @@ export function useDocketItem(id: string) {
     enabled: !!id,
     staleTime: DOCKET_STALE_TIME,
   });
+}
+
+/**
+ * CP-4: Filter docket items by case context
+ */
+export function filterByContext(items: DocketItem[], context: CaseContext): DocketItem[] {
+  return items.filter(item => item.case_context === context);
 }
