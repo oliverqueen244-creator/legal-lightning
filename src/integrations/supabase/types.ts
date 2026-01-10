@@ -752,6 +752,7 @@ export type Database = {
           id: string
           lawyer_id: string
           revoked_at: string | null
+          scopes: Database["public"]["Enums"]["delegation_scope"][]
         }
         Insert: {
           chamber_id?: string | null
@@ -761,6 +762,7 @@ export type Database = {
           id?: string
           lawyer_id: string
           revoked_at?: string | null
+          scopes?: Database["public"]["Enums"]["delegation_scope"][]
         }
         Update: {
           chamber_id?: string | null
@@ -770,6 +772,7 @@ export type Database = {
           id?: string
           lawyer_id?: string
           revoked_at?: string | null
+          scopes?: Database["public"]["Enums"]["delegation_scope"][]
         }
         Relationships: [
           {
@@ -1108,6 +1111,67 @@ export type Database = {
           validation_type?: string
         }
         Relationships: []
+      }
+      delegated_actions: {
+        Row: {
+          action_details: Json | null
+          action_type: string
+          actor_id: string
+          chamber_id: string | null
+          delegation_id: string
+          id: string
+          on_behalf_of: string
+          performed_at: string
+          target_id: string
+          target_table: string
+        }
+        Insert: {
+          action_details?: Json | null
+          action_type: string
+          actor_id: string
+          chamber_id?: string | null
+          delegation_id: string
+          id?: string
+          on_behalf_of: string
+          performed_at?: string
+          target_id: string
+          target_table: string
+        }
+        Update: {
+          action_details?: Json | null
+          action_type?: string
+          actor_id?: string
+          chamber_id?: string | null
+          delegation_id?: string
+          id?: string
+          on_behalf_of?: string
+          performed_at?: string
+          target_id?: string
+          target_table?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "delegated_actions_chamber_id_fkey"
+            columns: ["chamber_id"]
+            isOneToOne: false
+            referencedRelation: "chambers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "delegated_actions_delegation_id_fkey"
+            columns: ["delegation_id"]
+            isOneToOne: false
+            referencedRelation: "clerk_delegations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "delegated_actions_on_behalf_of_fkey"
+            columns: ["on_behalf_of"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       docket_cleanup_log: {
         Row: {
@@ -2333,11 +2397,23 @@ export type Database = {
           run_date: string
         }[]
       }
+      get_active_delegation: {
+        Args: { _clerk_id: string; _lawyer_id: string }
+        Returns: string
+      }
       get_user_role: {
         Args: { _user_id: string }
         Returns: Database["public"]["Enums"]["app_role"]
       }
       has_active_subscription: { Args: { p_user_id: string }; Returns: boolean }
+      has_delegation_scope: {
+        Args: {
+          _clerk_id: string
+          _lawyer_id: string
+          _scope: Database["public"]["Enums"]["delegation_scope"]
+        }
+        Returns: boolean
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -2359,6 +2435,17 @@ export type Database = {
       }
       is_fallback_disabled: { Args: { p_bench_code: string }; Returns: boolean }
       is_lawyer_role: { Args: { _user_id: string }; Returns: boolean }
+      log_delegated_action: {
+        Args: {
+          _action_details?: Json
+          _action_type: string
+          _actor_id: string
+          _on_behalf_of: string
+          _target_id: string
+          _target_table: string
+        }
+        Returns: string
+      }
       log_error_event: {
         Args: {
           p_app_version?: string
@@ -2411,6 +2498,12 @@ export type Database = {
       causelist_source_type: "PDF" | "HTML_COMPLETE" | "HTML_SEARCH"
       chamber_role: "senior" | "junior" | "clerk"
       confidence_level: "excellent" | "good" | "degraded" | "risky" | "unsafe"
+      delegation_scope:
+        | "view_cases"
+        | "upload_documents"
+        | "add_notes"
+        | "track_hearings"
+        | "mark_presence"
       document_format: "TYPED" | "SCANNED" | "HANDWRITTEN"
       document_language: "EN" | "HI" | "MIXED" | "UNKNOWN"
       document_legibility: "CLEAR" | "AVERAGE" | "POOR"
@@ -2602,6 +2695,13 @@ export const Constants = {
       causelist_source_type: ["PDF", "HTML_COMPLETE", "HTML_SEARCH"],
       chamber_role: ["senior", "junior", "clerk"],
       confidence_level: ["excellent", "good", "degraded", "risky", "unsafe"],
+      delegation_scope: [
+        "view_cases",
+        "upload_documents",
+        "add_notes",
+        "track_hearings",
+        "mark_presence",
+      ],
       document_format: ["TYPED", "SCANNED", "HANDWRITTEN"],
       document_language: ["EN", "HI", "MIXED", "UNKNOWN"],
       document_legibility: ["CLEAR", "AVERAGE", "POOR"],
