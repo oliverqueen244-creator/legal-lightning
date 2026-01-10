@@ -8,6 +8,7 @@ import { PersistentLiveBoard } from './PersistentLiveBoard';
 import { UserMenu } from './UserMenu';
 import { LanguageToggle } from './LanguageToggle';
 import { OperationsConsole } from '@/components/admin/OperationsConsole';
+import { DelegationBadge } from '@/components/delegation';
 import { useLiveBoard } from '@/hooks/useLiveBoard';
 import { useDocket } from '@/hooks/useDocket';
 import { format } from 'date-fns';
@@ -80,6 +81,9 @@ export function AppHeader() {
 
           {/* Right: Critical Actions - One-Tap Rule */}
           <div className="flex items-center gap-2 sm:gap-3">
+            {/* CP-5: Delegation Badge - Shows "Assisting Adv. X" for clerks */}
+            <DelegationBadge variant="compact" className="hidden sm:flex" />
+
             {/* Language Toggle */}
             <LanguageToggle />
 

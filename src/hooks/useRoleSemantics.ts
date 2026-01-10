@@ -1,5 +1,5 @@
 /**
- * CORRECTNESS PLAN 3 + 4: Role-Aware Semantics Hook
+ * CORRECTNESS PLAN 3 + 4 + 5: Role-Aware Semantics Hook
  * 
  * Provides role-specific labels and checks for the UI.
  * Clerks see "Tracked case" instead of "Your case".
@@ -9,10 +9,15 @@
  * - Personal cases: "Your case"
  * - Chamber cases: "Chamber case"
  * - Clerk viewing any: "Tracked case"
+ * 
+ * CP-5 Addition: Delegation awareness
+ * - Clerks with delegation see "Assisting Adv. <Name>"
+ * - Scope-based action visibility
  */
 
 import { useAuth, AppRole } from './useAuth';
 import type { CaseContext } from '@/types/database';
+import type { DelegationScope } from './useDelegation';
 
 interface RoleSemantics {
   // Whether this user can claim case ownership
@@ -39,6 +44,8 @@ interface RoleSemantics {
   getCaseLabel: (caseContext: CaseContext) => string;
   // CP-4: Get context-aware running label
   getCaseRunningLabel: (caseContext: CaseContext) => string;
+  // CP-5: Check if action is allowed based on role (not scope - that requires delegation hook)
+  canPerformOwnershipAction: boolean;
 }
 
 export function useRoleSemantics(): RoleSemantics {
@@ -53,6 +60,9 @@ export function useRoleSemantics(): RoleSemantics {
   const canConfirmMatches = isLawyerRole;
   // CP-4: Only seniors/admins can create chamber cases
   const canCreateChamberCases = role === 'SENIOR' || role === 'ADMIN';
+  
+  // CP-5: Ownership actions are NEVER allowed for clerks (hard rule)
+  const canPerformOwnershipAction = isLawyerRole;
   
   // Role-aware labels (legacy - for personal context)
   const caseLabel = isClerkRole ? 'Tracked case' : 'Your case';
@@ -90,6 +100,7 @@ export function useRoleSemantics(): RoleSemantics {
     canForceActive,
     canConfirmMatches,
     canCreateChamberCases,
+    canPerformOwnershipAction,
     caseLabel,
     caseRunningLabel,
     caseApproachingLabel,
