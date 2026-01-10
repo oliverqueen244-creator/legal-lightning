@@ -411,6 +411,63 @@ export type Database = {
           },
         ]
       }
+      captcha_usage_log: {
+        Row: {
+          captcha_type: string | null
+          cost_credits: number | null
+          created_at: string | null
+          error_reason: string | null
+          id: string
+          lawyer_id: string
+          provider: string
+          solve_time_ms: number | null
+          solved_at: string | null
+          success: boolean
+          tracked_case_id: string | null
+        }
+        Insert: {
+          captcha_type?: string | null
+          cost_credits?: number | null
+          created_at?: string | null
+          error_reason?: string | null
+          id?: string
+          lawyer_id: string
+          provider?: string
+          solve_time_ms?: number | null
+          solved_at?: string | null
+          success: boolean
+          tracked_case_id?: string | null
+        }
+        Update: {
+          captcha_type?: string | null
+          cost_credits?: number | null
+          created_at?: string | null
+          error_reason?: string | null
+          id?: string
+          lawyer_id?: string
+          provider?: string
+          solve_time_ms?: number | null
+          solved_at?: string | null
+          success?: boolean
+          tracked_case_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "captcha_usage_log_lawyer_id_fkey"
+            columns: ["lawyer_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "captcha_usage_log_tracked_case_id_fkey"
+            columns: ["tracked_case_id"]
+            isOneToOne: false
+            referencedRelation: "tracked_cases"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       case_arguments: {
         Row: {
           created_at: string | null
@@ -521,6 +578,60 @@ export type Database = {
             columns: ["docket_id"]
             isOneToOne: false
             referencedRelation: "user_docket_view"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      case_judgments: {
+        Row: {
+          created_at: string | null
+          fetched_at: string | null
+          id: string
+          judgment_date: string
+          lawyer_id: string
+          pdf_hash: string | null
+          pdf_size_bytes: number | null
+          source_pdf_url: string | null
+          stored_pdf_path: string | null
+          tracked_case_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          fetched_at?: string | null
+          id?: string
+          judgment_date: string
+          lawyer_id: string
+          pdf_hash?: string | null
+          pdf_size_bytes?: number | null
+          source_pdf_url?: string | null
+          stored_pdf_path?: string | null
+          tracked_case_id: string
+        }
+        Update: {
+          created_at?: string | null
+          fetched_at?: string | null
+          id?: string
+          judgment_date?: string
+          lawyer_id?: string
+          pdf_hash?: string | null
+          pdf_size_bytes?: number | null
+          source_pdf_url?: string | null
+          stored_pdf_path?: string | null
+          tracked_case_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "case_judgments_lawyer_id_fkey"
+            columns: ["lawyer_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "case_judgments_tracked_case_id_fkey"
+            columns: ["tracked_case_id"]
+            isOneToOne: true
+            referencedRelation: "tracked_cases"
             referencedColumns: ["id"]
           },
         ]
@@ -1657,6 +1768,69 @@ export type Database = {
           },
         ]
       }
+      judgment_check_jobs: {
+        Row: {
+          attempts: number | null
+          captcha_required: boolean | null
+          completed_at: string | null
+          created_at: string | null
+          error_reason: string | null
+          id: string
+          last_attempt_at: string | null
+          lawyer_id: string
+          max_attempts: number | null
+          next_attempt_at: string | null
+          priority: number | null
+          status: string
+          tracked_case_id: string
+        }
+        Insert: {
+          attempts?: number | null
+          captcha_required?: boolean | null
+          completed_at?: string | null
+          created_at?: string | null
+          error_reason?: string | null
+          id?: string
+          last_attempt_at?: string | null
+          lawyer_id: string
+          max_attempts?: number | null
+          next_attempt_at?: string | null
+          priority?: number | null
+          status?: string
+          tracked_case_id: string
+        }
+        Update: {
+          attempts?: number | null
+          captcha_required?: boolean | null
+          completed_at?: string | null
+          created_at?: string | null
+          error_reason?: string | null
+          id?: string
+          last_attempt_at?: string | null
+          lawyer_id?: string
+          max_attempts?: number | null
+          next_attempt_at?: string | null
+          priority?: number | null
+          status?: string
+          tracked_case_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "judgment_check_jobs_lawyer_id_fkey"
+            columns: ["lawyer_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "judgment_check_jobs_tracked_case_id_fkey"
+            columns: ["tracked_case_id"]
+            isOneToOne: false
+            referencedRelation: "tracked_cases"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       lawyer_aliases: {
         Row: {
           alias_name: string
@@ -2470,9 +2644,14 @@ export type Database = {
           created_at: string
           id: string
           is_active: boolean
+          judgment_check_attempts: number | null
+          judgment_found_at: string | null
+          judgment_status: Database["public"]["Enums"]["judgment_status"] | null
+          last_judgment_check_at: string | null
           last_listed_date: string | null
           last_orders_check_at: string | null
           listed_today: boolean
+          next_judgment_check_after: string | null
           orders_count: number
           petitioner: string | null
           petitioner_advocate: string | null
@@ -2490,9 +2669,16 @@ export type Database = {
           created_at?: string
           id?: string
           is_active?: boolean
+          judgment_check_attempts?: number | null
+          judgment_found_at?: string | null
+          judgment_status?:
+            | Database["public"]["Enums"]["judgment_status"]
+            | null
+          last_judgment_check_at?: string | null
           last_listed_date?: string | null
           last_orders_check_at?: string | null
           listed_today?: boolean
+          next_judgment_check_after?: string | null
           orders_count?: number
           petitioner?: string | null
           petitioner_advocate?: string | null
@@ -2510,9 +2696,16 @@ export type Database = {
           created_at?: string
           id?: string
           is_active?: boolean
+          judgment_check_attempts?: number | null
+          judgment_found_at?: string | null
+          judgment_status?:
+            | Database["public"]["Enums"]["judgment_status"]
+            | null
+          last_judgment_check_at?: string | null
           last_listed_date?: string | null
           last_orders_check_at?: string | null
           listed_today?: boolean
+          next_judgment_check_after?: string | null
           orders_count?: number
           petitioner?: string | null
           petitioner_advocate?: string | null
@@ -2649,6 +2842,10 @@ export type Database = {
     }
     Functions: {
       archive_old_causelists: { Args: never; Returns: number }
+      can_check_judgment: {
+        Args: { p_case_id: string; p_lawyer_id: string }
+        Returns: Json
+      }
       can_view_chamber_cases: {
         Args: { _chamber_id: string; _user_id: string }
         Returns: boolean
@@ -2763,9 +2960,17 @@ export type Database = {
         }
         Returns: string
       }
+      queue_judgment_check: {
+        Args: { p_case_id: string; p_lawyer_id: string }
+        Returns: Json
+      }
       try_lock_case_for_job: {
         Args: { p_case_id: string; p_job_type: string }
         Returns: string
+      }
+      validate_case_ownership: {
+        Args: { p_case_id: string; p_lawyer_id: string }
+        Returns: boolean
       }
     }
     Enums: {
@@ -2829,6 +3034,12 @@ export type Database = {
         | "CONDITIONAL"
         | "LOW_PROBABILITY"
         | "UNKNOWN"
+      judgment_status:
+        | "not_checked"
+        | "check_queued"
+        | "checking"
+        | "not_found"
+        | "found"
       order_fetch_trigger: "manual" | "backfill" | "post_listing" | "scheduled"
       order_job_status:
         | "pending"
@@ -3039,6 +3250,13 @@ export const Constants = {
         "CONDITIONAL",
         "LOW_PROBABILITY",
         "UNKNOWN",
+      ],
+      judgment_status: [
+        "not_checked",
+        "check_queued",
+        "checking",
+        "not_found",
+        "found",
       ],
       order_fetch_trigger: ["manual", "backfill", "post_listing", "scheduled"],
       order_job_status: [
