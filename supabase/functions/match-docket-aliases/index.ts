@@ -9,6 +9,7 @@ interface MatchRequest {
   causelist_id?: string;
   date?: string;
   bench?: string;
+  debug_sample?: number; // If set, log debug info for first N cases
 }
 
 interface MatchResult {
@@ -39,22 +40,42 @@ function splitLawyerNames(lawyerText: string): string[] {
 }
 
 // Check if a single lawyer name matches the alias
-function matchSingleLawyer(lawyerName: string, alias: string): { matched: boolean; confidence: number } {
+// INSTRUMENTED for Phase 2 debugging
+function matchSingleLawyer(
+  lawyerName: string, 
+  alias: string, 
+  debug: boolean = false
+): { matched: boolean; confidence: number; debugInfo?: any } {
   const normalizedLawyer = normalizeName(lawyerName);
   const normalizedAlias = normalizeName(alias);
   
+  const debugInfo: any = debug ? {
+    rawLawyer: lawyerName,
+    rawAlias: alias,
+    normalizedLawyer,
+    normalizedAlias,
+    checks: [],
+  } : undefined;
+  
   // Skip very short aliases
   if (normalizedAlias.length < 4) {
-    return { matched: false, confidence: 0 };
+    if (debug) debugInfo.rejected = 'alias_too_short';
+    return { matched: false, confidence: 0, debugInfo };
   }
   
   // Exact match
   if (normalizedLawyer === normalizedAlias) {
-    return { matched: true, confidence: 0.95 };
+    if (debug) debugInfo.matchType = 'exact';
+    return { matched: true, confidence: 0.95, debugInfo };
   }
   
-  const aliasWords = normalizedAlias.split(' ');
-  const lawyerWords = normalizedLawyer.split(' ');
+  const aliasWords = normalizedAlias.split(' ').filter(w => w.length > 0);
+  const lawyerWords = normalizedLawyer.split(' ').filter(w => w.length > 0);
+  
+  if (debug) {
+    debugInfo.aliasTokens = aliasWords;
+    debugInfo.lawyerTokens = lawyerWords;
+  }
   
   // CRITICAL: First name must match exactly
   // This prevents "BRAJESH PUROHIT" from matching alias "Ramesh Purohit"
@@ -62,21 +83,40 @@ function matchSingleLawyer(lawyerName: string, alias: string): { matched: boolea
   const hasFirstNameMatch = lawyerWords.some(word => word === aliasFirstName);
   
   if (!hasFirstNameMatch) {
-    return { matched: false, confidence: 0 };
+    if (debug) debugInfo.rejected = `first_name_mismatch: alias_first="${aliasFirstName}" not in lawyer tokens`;
+    return { matched: false, confidence: 0, debugInfo };
   }
+  
+  if (debug) debugInfo.firstNameMatched = true;
   
   // Check if all alias words appear consecutively in the lawyer name
   // This is stricter than "in order anywhere"
   for (let startIdx = 0; startIdx <= lawyerWords.length - aliasWords.length; startIdx++) {
     let consecutiveMatch = true;
+    const comparisons: string[] = [];
+    
     for (let i = 0; i < aliasWords.length; i++) {
-      if (lawyerWords[startIdx + i] !== aliasWords[i]) {
+      const lawyerWord = lawyerWords[startIdx + i];
+      const aliasWord = aliasWords[i];
+      const matches = lawyerWord === aliasWord;
+      
+      if (debug) {
+        comparisons.push(`${lawyerWord}==${aliasWord}?${matches}`);
+      }
+      
+      if (!matches) {
         consecutiveMatch = false;
         break;
       }
     }
+    
+    if (debug) {
+      debugInfo.checks.push({ startIdx, comparisons, consecutiveMatch });
+    }
+    
     if (consecutiveMatch) {
-      return { matched: true, confidence: 0.95 };
+      if (debug) debugInfo.matchType = 'consecutive_tokens';
+      return { matched: true, confidence: 0.95, debugInfo };
     }
   }
   
@@ -87,15 +127,18 @@ function matchSingleLawyer(lawyerName: string, alias: string): { matched: boolea
   );
   
   if (allWordsFound) {
-    return { matched: true, confidence: 0.85 };
+    if (debug) debugInfo.matchType = 'all_words_found';
+    return { matched: true, confidence: 0.85, debugInfo };
   }
   
   // Check if lawyer name contains alias as substring (e.g., "Adv. Ramesh Purohit")
   if (normalizedLawyer.includes(normalizedAlias)) {
-    return { matched: true, confidence: 0.80 };
+    if (debug) debugInfo.matchType = 'substring';
+    return { matched: true, confidence: 0.80, debugInfo };
   }
   
-  return { matched: false, confidence: 0 };
+  if (debug) debugInfo.rejected = 'no_match_found';
+  return { matched: false, confidence: 0, debugInfo };
 }
 
 // Check if alias matches within lawyer text (splits by comma first)
@@ -211,14 +254,27 @@ Deno.serve(async (req) => {
 
     console.log(`[MATCH-DOCKET-ALIASES] Processing ${allUnmatchedCases.length} unmatched cases against ${profiles.length} profiles (${allAliases?.length || 0} aliases)`);
 
+    // For debug logging
+    const debugSample = body.debug_sample || 0;
+    const debugLogs: any[] = [];
+
     const matches: MatchResult[] = [];
     let updatedCount = 0;
+    let caseIndex = 0;
 
     for (const caseData of allUnmatchedCases) {
+      caseIndex++;
+      const isDebugCase = caseIndex <= debugSample;
       const petLawyer = caseData.petitioner_lawyer || '';
       const respLawyer = caseData.respondent_lawyer || '';
       
       let bestMatch: { profileId: string; alias: string; role: 'petitioner' | 'respondent'; confidence: number } | null = null;
+      const caseDebugInfo: any = isDebugCase ? {
+        caseNumber: caseData.case_number,
+        petitionerLawyer: petLawyer,
+        respondentLawyer: respLawyer,
+        aliasComparisons: [],
+      } : null;
 
       for (const profile of profiles) {
         // Use pre-fetched aliases instead of querying each time
@@ -228,43 +284,77 @@ Deno.serve(async (req) => {
         for (const alias_name of aliases) {
           // Check petitioner lawyer
           if (petLawyer) {
-            const petMatch = isAliasMatch(petLawyer, alias_name);
-            if (petMatch.matched && (!bestMatch || petMatch.confidence > bestMatch.confidence)) {
-              bestMatch = {
-                profileId: profile.id,
-                alias: alias_name,
-                role: 'petitioner',
-                confidence: petMatch.confidence
-              };
+            const individualLawyers = splitLawyerNames(petLawyer);
+            for (const lawyerName of individualLawyers) {
+              const result = matchSingleLawyer(lawyerName, alias_name, isDebugCase);
+              
+              if (isDebugCase && result.debugInfo) {
+                caseDebugInfo.aliasComparisons.push({
+                  side: 'petitioner',
+                  ...result.debugInfo,
+                });
+              }
+              
+              if (result.matched && (!bestMatch || result.confidence > bestMatch.confidence)) {
+                bestMatch = {
+                  profileId: profile.id,
+                  alias: alias_name,
+                  role: 'petitioner',
+                  confidence: result.confidence
+                };
+              }
             }
           }
 
           // Check respondent lawyer
           if (respLawyer) {
-            const respMatch = isAliasMatch(respLawyer, alias_name);
-            if (respMatch.matched && (!bestMatch || respMatch.confidence > bestMatch.confidence)) {
-              bestMatch = {
-                profileId: profile.id,
-                alias: alias_name,
-                role: 'respondent',
-                confidence: respMatch.confidence
-              };
+            const individualLawyers = splitLawyerNames(respLawyer);
+            for (const lawyerName of individualLawyers) {
+              const result = matchSingleLawyer(lawyerName, alias_name, isDebugCase);
+              
+              if (isDebugCase && result.debugInfo) {
+                caseDebugInfo.aliasComparisons.push({
+                  side: 'respondent',
+                  ...result.debugInfo,
+                });
+              }
+              
+              if (result.matched && (!bestMatch || result.confidence > bestMatch.confidence)) {
+                bestMatch = {
+                  profileId: profile.id,
+                  alias: alias_name,
+                  role: 'respondent',
+                  confidence: result.confidence
+                };
+              }
             }
           }
         }
       }
+      
+      if (isDebugCase) {
+        caseDebugInfo.matchFound = !!bestMatch;
+        if (bestMatch) {
+          caseDebugInfo.matchedAlias = bestMatch.alias;
+          caseDebugInfo.matchedRole = bestMatch.role;
+          caseDebugInfo.confidence = bestMatch.confidence;
+        }
+        debugLogs.push(caseDebugInfo);
+      }
 
       // Apply best match if found
       if (bestMatch) {
+        // SAFETY: Only update if still unmatched (idempotent)
         const { error: updateError } = await supabase
           .from('daily_court_docket')
           .update({
             matched_profile_id: bestMatch.profileId,
             matched_role: bestMatch.role,
-            match_method: 'post_process_alias',
+            match_method: 'alias_exact',
             match_confidence: bestMatch.confidence,
           })
-          .eq('id', caseData.id);
+          .eq('id', caseData.id)
+          .is('matched_profile_id', null); // CRITICAL: Never overwrite existing match
 
         if (!updateError) {
           updatedCount++;
@@ -283,12 +373,23 @@ Deno.serve(async (req) => {
 
     console.log(`[MATCH-DOCKET-ALIASES] Complete: ${updatedCount} cases matched out of ${allUnmatchedCases.length}`);
 
+    // Mandatory metrics output
+    const metricsTable = {
+      total_unmatched_cases_processed: allUnmatchedCases.length,
+      total_aliases: allAliases?.length || 0,
+      total_matches_created: updatedCount,
+      percent_matched: allUnmatchedCases.length > 0 
+        ? `${((updatedCount / allUnmatchedCases.length) * 100).toFixed(2)}%`
+        : '0%',
+    };
+    console.log(`[MATCH-DOCKET-ALIASES] METRICS:`, JSON.stringify(metricsTable));
+
     return new Response(
       JSON.stringify({
         success: true,
-        cases_processed: allUnmatchedCases.length,
-        matches_made: updatedCount,
+        metrics: metricsTable,
         matches: matches.slice(0, 50), // Return first 50 for debugging
+        debug_logs: debugLogs.slice(0, 10), // First 10 debug samples
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
