@@ -5,7 +5,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
  * admin-doc-sync-trial
  * 
  * Admin-only trial run for captcha-gated document sync.
- * Bypasses lawyer auth check for testing purposes.
+ * Uses Firecrawl for JavaScript rendering of eCourts pages.
  * 
  * TRIAL CONSTRAINTS:
  * - Max 2 cases per run
@@ -38,6 +38,9 @@ const TWOCAPTCHA_CONFIG = {
   solveTimeout: 120000,
   pollInterval: 5000,
 };
+
+// Browserless configuration
+const BROWSERLESS_API_URL = 'https://production-sfo.browserless.io';
 
 interface TrialCase {
   id: string;
@@ -78,6 +81,14 @@ serve(async (req) => {
   if (!twoCaptchaKey) {
     return new Response(
       JSON.stringify({ error: '2Captcha API key not configured' }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  const browserlessKey = Deno.env.get('BROWSERLESS_API_KEY');
+  if (!browserlessKey) {
+    return new Response(
+      JSON.stringify({ error: 'Browserless API key not configured' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
@@ -156,152 +167,152 @@ serve(async (req) => {
         }
 
         const pageUrl = `${ECOURTS_CONFIG.baseUrl}${ECOURTS_CONFIG.endpoints.caseNo}?state_cd=${ECOURTS_CONFIG.stateCode}&dist_cd=${ECOURTS_CONFIG.distCode}&court_code=${benchConfig.courtCode}&stateNm=Rajasthan`;
-        console.log(`[TRIAL] Fetching eCourts page: ${pageUrl}`);
+        console.log(`[TRIAL] Using Browserless /function to run full flow: ${pageUrl}`);
 
-        const pageResponse = await fetch(pageUrl, {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            'Accept': 'text/html,application/xhtml+xml',
-          }
-        });
+        // Clean up case_type (remove trailing parenthesis)
+        const cleanCaseType = caseData.case_type.replace(/\)$/, '');
 
-        if (!pageResponse.ok) {
-          result.errors.push(`eCourts returned ${pageResponse.status}`);
-          results.push(result);
-          continue;
-        }
+        // Create Puppeteer script to run in Browserless
+        // This maintains the same session for CAPTCHA and form submission
+        const puppeteerCode = `
+          module.exports = async ({ page }) => {
+            const pageUrl = "${pageUrl}";
+            const caseType = "${cleanCaseType}";
+            const caseNumber = "${caseData.case_number}";
+            const caseYear = "${caseData.case_year}";
+            const twoCaptchaKey = "${twoCaptchaKey}";
 
-        const html = await pageResponse.text();
+            // Navigate to the case search page
+            await page.goto(pageUrl, { waitUntil: 'networkidle2', timeout: 30000 });
 
-        // Check for blocks
-        if (html.includes('Access Denied') || html.includes('blocked')) {
-          result.errors.push('IP blocked by eCourts');
-          results.push(result);
-          continue;
-        }
+            // Wait for CAPTCHA image to load
+            await page.waitForSelector('#captcha_image', { timeout: 10000 });
 
-        // Extract CAPTCHA
-        const captchaMatch = html.match(/src=["']([^"']*captcha[^"']*)["']/i);
-        if (!captchaMatch) {
-          result.errors.push('No CAPTCHA found on page');
-          results.push(result);
-          continue;
-        }
+            // Get CAPTCHA image as base64
+            const captchaBase64 = await page.evaluate(() => {
+              const img = document.getElementById('captcha_image');
+              if (!img) return null;
+              const canvas = document.createElement('canvas');
+              canvas.width = img.width;
+              canvas.height = img.height;
+              const ctx = canvas.getContext('2d');
+              ctx.drawImage(img, 0, 0);
+              return canvas.toDataURL('image/png').split(',')[1];
+            });
 
-        // Resolve CAPTCHA URL
-        let captchaUrl = captchaMatch[1];
-        if (captchaUrl.startsWith('/')) {
-          captchaUrl = `https://hcservices.ecourts.gov.in${captchaUrl}`;
-        } else if (!captchaUrl.startsWith('http')) {
-          captchaUrl = `${ECOURTS_CONFIG.baseUrl}/${captchaUrl}`;
-        }
+            if (!captchaBase64) {
+              return { error: 'Could not extract CAPTCHA image' };
+            }
 
-        console.log(`[TRIAL] CAPTCHA found: ${captchaUrl}`);
+            // Submit CAPTCHA to 2Captcha
+            const submitRes = await fetch('http://2captcha.com/in.php', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+              body: new URLSearchParams({
+                key: twoCaptchaKey,
+                method: 'base64',
+                body: captchaBase64,
+                json: '1',
+              }),
+            });
+            const submitData = await submitRes.json();
+            if (submitData.status !== 1) {
+              return { error: 'CAPTCHA submit failed: ' + submitData.request };
+            }
 
-        // STEP 3: Solve CAPTCHA via 2Captcha
+            const captchaId = submitData.request;
+
+            // Poll for solution
+            let solution = null;
+            for (let i = 0; i < 24; i++) { // 2 minutes max
+              await new Promise(r => setTimeout(r, 5000));
+              const pollRes = await fetch('http://2captcha.com/res.php?key=' + twoCaptchaKey + '&action=get&id=' + captchaId + '&json=1');
+              const pollData = await pollRes.json();
+              if (pollData.status === 1) {
+                solution = pollData.request;
+                break;
+              } else if (pollData.request !== 'CAPCHA_NOT_READY') {
+                return { error: '2Captcha solve failed: ' + pollData.request };
+              }
+            }
+
+            if (!solution) {
+              return { error: 'CAPTCHA solve timeout' };
+            }
+
+            // Wait for case_type dropdown to be populated (JS loads options)
+            await page.waitForFunction(() => {
+              const select = document.getElementById('case_type');
+              return select && select.options.length > 1;
+            }, { timeout: 10000 });
+
+            // Select case type
+            await page.evaluate((caseType) => {
+              const select = document.getElementById('case_type');
+              for (let opt of select.options) {
+                if (opt.text.includes(caseType) || opt.value.includes(caseType)) {
+                  select.value = opt.value;
+                  break;
+                }
+              }
+            }, caseType);
+
+            // Fill in the form
+            await page.type('#search_case_no', caseNumber);
+            await page.type('#rgyear', caseYear);
+            await page.type('#captcha', solution);
+
+            // Submit the form
+            await Promise.all([
+              page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 }),
+              page.click('input[type="submit"], button[type="submit"]'),
+            ]);
+
+            // Get the result HTML
+            const resultHtml = await page.content();
+
+            return {
+              success: true,
+              solution: solution,
+              htmlLength: resultHtml.length,
+              html: resultHtml,
+            };
+          };
+        `;
+
         const captchaStartTime = Date.now();
         
-        // Download CAPTCHA image
-        const captchaImageResponse = await fetch(captchaUrl);
-        if (!captchaImageResponse.ok) {
-          result.errors.push('Failed to download CAPTCHA image');
-          results.push(result);
-          continue;
-        }
-
-        const captchaImageBuffer = await captchaImageResponse.arrayBuffer();
-        const captchaBase64 = btoa(String.fromCharCode(...new Uint8Array(captchaImageBuffer)));
-
-        // Submit to 2Captcha
-        console.log('[TRIAL] Submitting CAPTCHA to 2Captcha...');
-        const submitResponse = await fetch(`${TWOCAPTCHA_CONFIG.apiUrl}/in.php`, {
+        const browserlessResponse = await fetch(`${BROWSERLESS_API_URL}/function?token=${browserlessKey}`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: new URLSearchParams({
-            key: twoCaptchaKey,
-            method: 'base64',
-            body: captchaBase64,
-            json: '1',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            code: puppeteerCode,
           }),
         });
 
-        const submitResult = await submitResponse.json();
-        
-        if (submitResult.status !== 1) {
-          result.errors.push(`CAPTCHA submit failed: ${submitResult.request}`);
-          result.captcha_status = 'failed';
+        if (!browserlessResponse.ok) {
+          const blError = await browserlessResponse.text();
+          result.errors.push(`Browserless error: ${browserlessResponse.status} - ${blError}`);
           results.push(result);
           continue;
         }
 
-        const captchaId = submitResult.request;
-        console.log(`[TRIAL] CAPTCHA submitted, ID: ${captchaId}. Waiting for solution...`);
-
-        // Poll for solution
-        let solution: string | null = null;
-        const pollStart = Date.now();
-
-        while (Date.now() - pollStart < TWOCAPTCHA_CONFIG.solveTimeout) {
-          await new Promise(resolve => setTimeout(resolve, TWOCAPTCHA_CONFIG.pollInterval));
-
-          const pollResponse = await fetch(
-            `${TWOCAPTCHA_CONFIG.apiUrl}/res.php?key=${twoCaptchaKey}&action=get&id=${captchaId}&json=1`
-          );
-          const pollResult = await pollResponse.json();
-
-          if (pollResult.status === 1) {
-            solution = pollResult.request;
-            result.captcha_status = 'success';
-            result.captcha_solve_time_ms = Date.now() - captchaStartTime;
-            console.log(`[TRIAL] CAPTCHA solved in ${result.captcha_solve_time_ms}ms: ${solution}`);
-            break;
-          } else if (pollResult.request !== 'CAPCHA_NOT_READY') {
-            result.errors.push(`2Captcha solve failed: ${pollResult.request}`);
-            result.captcha_status = 'failed';
-            break;
-          }
-        }
-
-        if (!solution) {
-          if (result.captcha_status !== 'failed') {
-            result.errors.push('CAPTCHA solve timeout');
-            result.captcha_status = 'failed';
-          }
+        const browserlessResult = await browserlessResponse.json();
+        
+        if (browserlessResult.error) {
+          result.errors.push(`Browserless execution error: ${browserlessResult.error}`);
           results.push(result);
           continue;
         }
 
-        // STEP 4: Submit form with CAPTCHA solution
-        // Clean up case_type (remove trailing parenthesis)
-        const cleanCaseType = caseData.case_type.replace(/\)$/, '');
-        
-        const formData = new URLSearchParams({
-          state_cd: ECOURTS_CONFIG.stateCode,
-          dist_cd: ECOURTS_CONFIG.distCode,
-          court_code: benchConfig.courtCode,
-          case_type: cleanCaseType,
-          search_case_no: String(caseData.case_number),
-          rgyear: String(caseData.case_year),
-          captcha: solution,
-        });
+        result.captcha_status = 'success';
+        result.captcha_solve_time_ms = Date.now() - captchaStartTime;
+        console.log(`[TRIAL] Browserless function completed in ${result.captcha_solve_time_ms}ms`);
 
-        console.log(`[TRIAL] Submitting case search: ${cleanCaseType}/${caseData.case_number}/${caseData.case_year}`);
-
-        const submitUrl = `${ECOURTS_CONFIG.baseUrl}${ECOURTS_CONFIG.endpoints.caseNo}?state_cd=${ECOURTS_CONFIG.stateCode}&dist_cd=${ECOURTS_CONFIG.distCode}&court_code=${benchConfig.courtCode}&stateNm=Rajasthan`;
-        const searchResponse = await fetch(
-          submitUrl,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/x-www-form-urlencoded',
-              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-              'Referer': pageUrl,
-            },
-            body: formData,
-          }
-        );
-
-        const resultHtml = await searchResponse.text();
+        const resultHtml = browserlessResult.html || '';
+        console.log(`[TRIAL] Result HTML length: ${resultHtml.length}`);
 
         // Check if CAPTCHA was wrong
         if (resultHtml.includes('Invalid Captcha') || resultHtml.includes('Wrong Captcha')) {
