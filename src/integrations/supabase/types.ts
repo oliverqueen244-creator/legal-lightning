@@ -896,9 +896,11 @@ export type Database = {
       }
       daily_court_docket: {
         Row: {
+          case_context: Database["public"]["Enums"]["case_context"]
           case_fingerprint: string | null
           case_number: string | null
           case_title_raw: string | null
+          chamber_id: string | null
           confidence_source: string | null
           court_location: string | null
           court_room_no: string | null
@@ -931,9 +933,11 @@ export type Database = {
           structure_confidence: number | null
         }
         Insert: {
+          case_context?: Database["public"]["Enums"]["case_context"]
           case_fingerprint?: string | null
           case_number?: string | null
           case_title_raw?: string | null
+          chamber_id?: string | null
           confidence_source?: string | null
           court_location?: string | null
           court_room_no?: string | null
@@ -966,9 +970,11 @@ export type Database = {
           structure_confidence?: number | null
         }
         Update: {
+          case_context?: Database["public"]["Enums"]["case_context"]
           case_fingerprint?: string | null
           case_number?: string | null
           case_title_raw?: string | null
+          chamber_id?: string | null
           confidence_source?: string | null
           court_location?: string | null
           court_room_no?: string | null
@@ -1001,6 +1007,13 @@ export type Database = {
           structure_confidence?: number | null
         }
         Relationships: [
+          {
+            foreignKeyName: "daily_court_docket_chamber_id_fkey"
+            columns: ["chamber_id"]
+            isOneToOne: false
+            referencedRelation: "chambers"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "daily_court_docket_matched_profile_id_fkey"
             columns: ["matched_profile_id"]
@@ -2298,6 +2311,10 @@ export type Database = {
     }
     Functions: {
       archive_old_causelists: { Args: never; Returns: number }
+      can_view_chamber_cases: {
+        Args: { _chamber_id: string; _user_id: string }
+        Returns: boolean
+      }
       cleanup_old_scraper_logs: { Args: never; Returns: number }
       generate_case_fingerprint: {
         Args: {
@@ -2389,6 +2406,7 @@ export type Database = {
       audit_scope: "release" | "feature" | "full-system"
       audit_status: "pass" | "conditional" | "fail"
       board_status: "hearing" | "passover" | "lunch" | "adjourned"
+      case_context: "personal" | "chamber"
       causelist_input_format: "PDF" | "HTML"
       causelist_source_type: "PDF" | "HTML_COMPLETE" | "HTML_SEARCH"
       chamber_role: "senior" | "junior" | "clerk"
@@ -2579,6 +2597,7 @@ export const Constants = {
       audit_scope: ["release", "feature", "full-system"],
       audit_status: ["pass", "conditional", "fail"],
       board_status: ["hearing", "passover", "lunch", "adjourned"],
+      case_context: ["personal", "chamber"],
       causelist_input_format: ["PDF", "HTML"],
       causelist_source_type: ["PDF", "HTML_COMPLETE", "HTML_SEARCH"],
       chamber_role: ["senior", "junior", "clerk"],

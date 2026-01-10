@@ -17,8 +17,10 @@ export interface LawyerAlias {
   is_primary: boolean;
   created_at: string;
 }
-
 export type HearingLikelihood = 'LIKELY' | 'CONDITIONAL' | 'LOW_PROBABILITY' | 'UNKNOWN';
+
+// CP-4: Case context for office/chamber semantics
+export type CaseContext = 'personal' | 'chamber';
 
 export interface DocketItem {
   id: string;
@@ -42,6 +44,9 @@ export interface DocketItem {
   hearing_likelihood: HearingLikelihood | null;
   likelihood_reason: string | null;
   likelihood_derived_at: string | null;
+  // CP-4: Case context for office/chamber semantics
+  case_context: CaseContext;
+  chamber_id: string | null;
 }
 
 export interface ExecutionPolicy {
