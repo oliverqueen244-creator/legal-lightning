@@ -175,18 +175,17 @@ serve(async (req) => {
         // Use BrowserQL to run entire flow in a single session
         const captchaStartTime = Date.now();
 
-        // BrowserQL query to load page, take screenshot of CAPTCHA, and get form HTML
-        // Using screenshot to capture CAPTCHA image in same session (session-bound captcha)
+        // BrowserQL query: load page, take screenshot of CAPTCHA element, get form HTML
         const bqlQuery = `
-          mutation GetCaptchaWithScreenshot {
+          mutation GetCaptchaAndForm {
             goto(url: "${pageUrl}", waitUntil: networkIdle) {
               status
             }
-            captchaScreenshot: screenshot(selector: "#captcha_image", encoding: BASE64, fullPage: false) {
-              base64
-            }
             caseTypeSelect: querySelector(selector: "#case_type") {
               outerHTML
+            }
+            captchaScreenshot: screenshot(selector: "#captcha_image") {
+              base64
             }
           }
         `;
@@ -212,7 +211,7 @@ serve(async (req) => {
         const caseTypeHtml = bqlResult.data?.caseTypeSelect?.outerHTML || '';
 
         if (!captchaBase64 || captchaBase64.length < 100) {
-          result.errors.push(`CAPTCHA screenshot failed. Got: ${captchaBase64?.length || 0} chars`);
+          result.errors.push(`CAPTCHA screenshot failed. Got: ${captchaBase64?.length || 0} chars. Errors: ${JSON.stringify(bqlResult.errors || [])}`);
           results.push(result);
           continue;
         }
