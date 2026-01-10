@@ -56,6 +56,14 @@ export function useAuth() {
         
         console.log('[useAuth] Auth state change:', event, !!session);
         
+        // Handle token refresh events - don't reset loading
+        if (event === 'TOKEN_REFRESHED') {
+          console.log('[useAuth] Token refreshed successfully');
+          setSession(session);
+          setUser(session?.user ?? null);
+          return;
+        }
+        
         setSession(session);
         setUser(session?.user ?? null);
         
@@ -74,9 +82,42 @@ export function useAuth() {
     // THEN check for existing session
     const initializeAuth = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        // First, try to get existing session from localStorage
+        const { data: { session }, error } = await supabase.auth.getSession();
         
         if (!isMounted) return;
+        
+        // If no session but localStorage has auth data, try to recover
+        if (!session && !error) {
+          const storedSession = localStorage.getItem('sb-pwpnnixoscppfzjogcgj-auth-token');
+          if (storedSession) {
+            console.log('[useAuth] Attempting session recovery from localStorage');
+            try {
+              const parsed = JSON.parse(storedSession);
+              if (parsed?.access_token && parsed?.refresh_token) {
+                // Try to restore session
+                const { data: refreshed } = await supabase.auth.setSession({
+                  access_token: parsed.access_token,
+                  refresh_token: parsed.refresh_token,
+                });
+                if (refreshed?.session) {
+                  console.log('[useAuth] Session recovered successfully');
+                  setSession(refreshed.session);
+                  setUser(refreshed.session.user);
+                  await Promise.all([
+                    fetchProfile(refreshed.session.user.id),
+                    fetchRole(refreshed.session.user.id)
+                  ]);
+                  initialLoadDone = true;
+                  setLoading(false);
+                  return;
+                }
+              }
+            } catch (parseError) {
+              console.warn('[useAuth] Failed to parse stored session:', parseError);
+            }
+          }
+        }
         
         console.log('[useAuth] Initial session:', !!session);
         

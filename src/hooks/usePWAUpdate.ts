@@ -3,6 +3,7 @@ import { useRegisterSW } from 'virtual:pwa-register/react';
 import { usePWAUpdateSafety } from './usePWAUpdateSafety';
 import { useNetworkStatus } from './useNetworkStatus';
 import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
 
 /**
  * SAFE PWA AUTO-UPDATE — PHASE 3: SAFE UPDATE MANAGER
@@ -92,9 +93,13 @@ export function usePWAUpdate(): PWAUpdateState {
     });
 
     // RULE 1: If app is hidden AND all safety checks pass → Silent reload
+    // CRITICAL: Refresh auth token before reload to preserve session
     if (!isVisible && isSafeToReload) {
       console.log('[PWA] ✓ Silent reload - app hidden and safe');
-      updateServiceWorker(true);
+      // Ensure auth session is fresh before reload
+      supabase.auth.getSession().then(() => {
+        updateServiceWorker(true);
+      });
       return;
     }
 
@@ -171,10 +176,13 @@ export function usePWAUpdate(): PWAUpdateState {
     console.log('[PWA] Manual update requested - applying');
     toast.info('Applying update...', { duration: 2000 });
     
-    // Small delay to show the toast
-    setTimeout(() => {
-      updateServiceWorker(true);
-    }, 500);
+    // CRITICAL: Refresh auth token before reload to preserve session
+    supabase.auth.getSession().then(() => {
+      // Small delay to show the toast
+      setTimeout(() => {
+        updateServiceWorker(true);
+      }, 500);
+    });
     
     return true;
   }, [needRefresh, isSafeToReload, blockingReasons, updateServiceWorker]);
