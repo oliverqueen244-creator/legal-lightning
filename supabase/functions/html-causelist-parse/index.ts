@@ -309,10 +309,20 @@ const CASE_NUMBER_PATTERNS = [
   /\b(?:WP|CP|SA|FA|CA|MA|RA|TA|BA|CRA|SB|DB)\s*\(?\s*\w*\s*\)?\s*\d+\/\d{4}/i,
 ];
 
+// Extended cell data with HTML preservation for party extraction
+interface CellData {
+  text: string;      // Stripped text for matching/detection
+  html: string;      // Original HTML for party extraction
+}
+
+interface ExtendedRow {
+  cells: CellData[];
+}
+
 interface PartialCase {
   item_no: number;
   case_number: string;
-  raw_rows: string[][];
+  raw_rows: ExtendedRow[];  // Now uses extended rows with HTML
 }
 
 // Configuration for item number detection
@@ -327,12 +337,12 @@ const MAX_ITEM_NUMBER = 500; // Courts rarely have more than 500 items per court
  * @param cells - Array of cell text content
  * @returns The detected item number, or null if not found
  */
-function extractItemNumber(cells: string[]): number | null {
+function extractItemNumber(row: ExtendedRow): number | null {
   // POSITIONAL GUARD: Only check first 2 cells
-  const cellsToCheck = Math.min(2, cells.length);
+  const cellsToCheck = Math.min(2, row.cells.length);
   
   for (let i = 0; i < cellsToCheck; i++) {
-    const trimmed = cells[i].trim();
+    const trimmed = row.cells[i].text.trim();
     
     // Only match 1-3 digit numbers (optionally with trailing period)
     // This regex rejects 4+ digit numbers like years (2023) or case numbers (5400)
@@ -359,8 +369,8 @@ function extractItemNumber(cells: string[]): number | null {
  * Check if row text contains a case number (indicating start of new case).
  * Scans the combined text of all cells.
  */
-function rowHasCaseNumber(cells: string[]): boolean {
-  const combinedText = cells.join(' ');
+function rowHasCaseNumber(row: ExtendedRow): boolean {
+  const combinedText = row.cells.map(c => c.text).join(' ');
   for (const pattern of CASE_NUMBER_PATTERNS) {
     if (pattern.test(combinedText)) {
       return true;
@@ -372,8 +382,8 @@ function rowHasCaseNumber(cells: string[]): boolean {
 /**
  * Extract the case number from row cells.
  */
-function extractCaseNumber(cells: string[]): string | null {
-  const combinedText = cells.join(' ');
+function extractCaseNumber(row: ExtendedRow): string | null {
+  const combinedText = row.cells.map(c => c.text).join(' ');
   for (const pattern of CASE_NUMBER_PATTERNS) {
     const match = combinedText.match(pattern);
     if (match) {
@@ -386,8 +396,8 @@ function extractCaseNumber(cells: string[]): string | null {
 /**
  * Check if row is a header row that should be skipped.
  */
-function isHeaderRow(cells: string[]): boolean {
-  const rowText = cells.join(' ').toLowerCase();
+function isHeaderRow(row: ExtendedRow): boolean {
+  const rowText = row.cells.map(c => c.text).join(' ').toLowerCase();
   return (
     rowText.includes('sr. no') ||
     rowText.includes('serial') ||
@@ -412,7 +422,8 @@ function isHeaderRow(cells: string[]): boolean {
  * [0] Item No | [1] Case Number | [2] Case Title/Parties | [3] Pet. Lawyer | [4] Resp. Lawyer
  */
 function finalizeParsedCase(partial: PartialCase, courtNo: string): ParsedCase {
-  const allCells = partial.raw_rows.flat();
+  // Flatten all cells - extract TEXT for general matching, HTML for party extraction
+  const allCellTexts: string[] = partial.raw_rows.flatMap(row => row.cells.map(c => c.text));
   
   const parsedCase: ParsedCase = {
     court_no: courtNo,
@@ -429,7 +440,7 @@ function finalizeParsedCase(partial: PartialCase, courtNo: string): ParsedCase {
   };
   
   // =========================================================================
-  // STRUCTURAL CASE TITLE EXTRACTION
+  // STRUCTURAL CASE TITLE EXTRACTION (WITH HTML PRESERVATION)
   // =========================================================================
   // 
   // Use structural column position instead of heuristic detection.
@@ -442,10 +453,14 @@ function finalizeParsedCase(partial: PartialCase, courtNo: string): ParsedCase {
   // - Column 2/3: Case title (party names, multi-line)
   // - Column 3/4+: Lawyer names (contain "-P" or "-R" markers)
   
-  let caseTitleCell: string | null = null;
+  let caseTitleCellHtml: string | null = null;  // HTML version for party extraction
+  let caseTitleCellText: string | null = null;  // Text version for raw storage
   
   // Get the first row of this case (contains primary column structure)
-  const firstRow = partial.raw_rows[0] || [];
+  const firstRow = partial.raw_rows[0];
+  if (!firstRow || firstRow.cells.length === 0) {
+    return parsedCase; // Empty case - return early
+  }
   
   // =========================================================================
   // STRUCTURAL COLUMN DETECTION (STRICT MODE - NO FALLBACKS)
@@ -458,13 +473,13 @@ function finalizeParsedCase(partial: PartialCase, courtNo: string): ParsedCase {
   let caseTitleColIndex = -1;
   let structuralCertainty = false; // Flag: true only if case number column is positively identified
   
-  for (let i = 0; i < firstRow.length; i++) {
-    const cell = firstRow[i];
+  for (let i = 0; i < firstRow.cells.length; i++) {
+    const cellText = firstRow.cells[i].text;
     // Check if this cell contains the exact case number we parsed
-    if (cell.includes(partial.case_number)) {
+    if (cellText.includes(partial.case_number)) {
       caseNumberColIndex = i;
       // Case title is the immediate next column
-      if (i + 1 < firstRow.length) {
+      if (i + 1 < firstRow.cells.length) {
         caseTitleColIndex = i + 1;
         structuralCertainty = true;
       }
@@ -478,24 +493,33 @@ function finalizeParsedCase(partial: PartialCase, courtNo: string): ParsedCase {
   
   // Extract case title from the structural column across all rows of this case
   // Only proceed if we have structural certainty
+  // CRITICAL: Extract BOTH HTML (for party splitting) and TEXT (for storage)
   if (structuralCertainty && caseTitleColIndex >= 0) {
-    const titleParts: string[] = [];
+    const htmlParts: string[] = [];
+    const textParts: string[] = [];
     for (const row of partial.raw_rows) {
-      if (caseTitleColIndex < row.length) {
-        const cellContent = row[caseTitleColIndex].trim();
-        if (cellContent.length > 0) {
-          titleParts.push(cellContent);
+      if (caseTitleColIndex < row.cells.length) {
+        const cell = row.cells[caseTitleColIndex];
+        if (cell.html.length > 0) {
+          htmlParts.push(cell.html);
+        }
+        if (cell.text.length > 0) {
+          textParts.push(cell.text);
         }
       }
     }
-    if (titleParts.length > 0) {
-      caseTitleCell = titleParts.join('\n');
+    if (htmlParts.length > 0) {
+      caseTitleCellHtml = htmlParts.join('<br/>');  // Join with BR for multi-row titles
+    }
+    if (textParts.length > 0) {
+      caseTitleCellText = textParts.join(' ');
     }
   }
   
   // Store raw case title for auditability (even if we can't extract parties)
-  if (caseTitleCell) {
-    parsedCase.case_title_raw = caseTitleCell.substring(0, 2000).trim() || null;
+  // Use TEXT version for storage (stripped of HTML tags)
+  if (caseTitleCellText) {
+    parsedCase.case_title_raw = caseTitleCellText.substring(0, 2000).trim() || null;
   }
   
   // =========================================================================
@@ -507,7 +531,7 @@ function finalizeParsedCase(partial: PartialCase, courtNo: string): ParsedCase {
   // Party titles do not.
   
   const LAWYER_MARKER_PATTERN = /-\s*[PR]\b/i;
-  const isLawyerColumn = caseTitleCell && LAWYER_MARKER_PATTERN.test(caseTitleCell);
+  const isLawyerColumn = caseTitleCellText && LAWYER_MARKER_PATTERN.test(caseTitleCellText);
   
   if (isLawyerColumn) {
     // Clear case_title_raw since this is actually a lawyer column, not parties
@@ -518,18 +542,19 @@ function finalizeParsedCase(partial: PartialCase, courtNo: string): ParsedCase {
   
   // =========================================================================
   // PRIORITY A: Explicit delimiter (vs, v/s, versus, v.)
+  // Use TEXT version for delimiter detection
   // =========================================================================
   let partyExtractionDone = false;
   
   // Only attempt party extraction if:
   // 1. We have structural certainty (case number column positively identified)
   // 2. The case title cell does NOT contain lawyer markers
-  if (structuralCertainty && !isLawyerColumn && caseTitleCell) {
-    const cellLower = caseTitleCell.toLowerCase();
+  if (structuralCertainty && !isLawyerColumn && caseTitleCellText) {
+    const cellLower = caseTitleCellText.toLowerCase();
     if (cellLower.includes(' vs ') || cellLower.includes(' v/s ') || 
-        cellLower.includes(' versus ') || caseTitleCell.includes(' Vs. ') || 
-        caseTitleCell.includes(' VS ') || cellLower.includes(' v. ')) {
-      const parts = caseTitleCell.split(/\s+(?:vs\.?|v\/s|versus|VS|v\.)\s+/i);
+        cellLower.includes(' versus ') || caseTitleCellText.includes(' Vs. ') || 
+        caseTitleCellText.includes(' VS ') || cellLower.includes(' v. ')) {
+      const parts = caseTitleCellText.split(/\s+(?:vs\.?|v\/s|versus|VS|v\.)\s+/i);
       if (parts.length >= 2) {
         const petitioner = parts[0].trim().substring(0, 500);
         const respondent = parts.slice(1).join(' ').trim().substring(0, 500);
@@ -545,29 +570,41 @@ function finalizeParsedCase(partial: PartialCase, courtNo: string): ParsedCase {
   }
   
   // =========================================================================
-  // PRIORITY B: Multi-line case title fallback
+  // PRIORITY B: HTML <br/> based party extraction (RAJASTHAN HC FORMAT)
+  // =========================================================================
   // Applied only when: 
   // - No explicit delimiter found
   // - Structural certainty exists
   // - Case title cell does NOT contain lawyer markers
-  // - Case title has ≥2 non-empty lines
-  // =========================================================================
-  if (!partyExtractionDone && structuralCertainty && !isLawyerColumn && caseTitleCell) {
-    // Split by line breaks (CR/LF) and HTML block elements
-    const lines = caseTitleCell
-      .split(/\r?\n|<br\s*\/?>|<\/p>|<\/div>/gi)
-      .map(l => l.replace(/<[^>]+>/g, '').trim())
-      .filter(l => l.length > 0);
+  // - Case title HTML has <br/> tags (indicating multi-line structure)
+  //
+  // Rajasthan HC Format:
+  //   PETITIONER_NAME<br/>RESPONDENT_NAME<br/>(Department details)
+  //
+  // CRITICAL: This uses HTML version to preserve <br/> delimiters!
+  if (!partyExtractionDone && structuralCertainty && !isLawyerColumn && caseTitleCellHtml) {
+    // Split by <br>, <br/>, or <br /> tags
+    const lines = caseTitleCellHtml
+      .split(/<br\s*\/?>/gi)
+      .map((l: string) => l.replace(/<[^>]+>/g, '').trim())  // Strip any remaining HTML
+      .filter((l: string) => l.length > 0);
     
     if (lines.length >= 2) {
+      // First line = Petitioner
       const petitioner = lines[0].substring(0, 500);
-      const respondent = lines.slice(1).join(' ').trim().substring(0, 500);
+      
+      // Second line onwards = Respondent (join remaining, excluding parenthetical details)
+      // Filter out lines that are purely department codes like "(Railways-Central-P1)"
+      const respondentLines = lines.slice(1).filter((l: string) => !l.startsWith('('));
+      const respondent = respondentLines.join(' ').trim().substring(0, 500);
       
       // Final safety check: extracted values must not contain lawyer markers
       if (!LAWYER_MARKER_PATTERN.test(petitioner) && !LAWYER_MARKER_PATTERN.test(respondent)) {
-        parsedCase.petitioner = petitioner || null;
-        parsedCase.respondent = respondent || null;
-        partyExtractionDone = true;
+        if (petitioner && respondent) {
+          parsedCase.petitioner = petitioner || null;
+          parsedCase.respondent = respondent || null;
+          partyExtractionDone = true;
+        }
       }
     }
   }
@@ -576,22 +613,22 @@ function finalizeParsedCase(partial: PartialCase, courtNo: string): ParsedCase {
   // case_title_raw is already stored above for auditability
   
   // =========================================================================
-  // LAWYER EXTRACTION (unchanged from existing logic)
+  // LAWYER EXTRACTION (uses TEXT version for pattern matching)
   // =========================================================================
   const petLawyers: string[] = [];
   const respLawyers: string[] = [];
   
-  for (const cell of allCells) {
+  for (const cellText of allCellTexts) {
     // Petitioner lawyer patterns
-    const petLawyerMatches = cell.match(/([A-Z][A-Za-z\s\.]+)\s*[-–]\s*P(?:\b|$)/gi);
+    const petLawyerMatches = cellText.match(/([A-Z][A-Za-z\s\.]+)\s*[-–]\s*P(?:\b|$)/gi);
     if (petLawyerMatches) {
-      petLawyers.push(...petLawyerMatches.map(m => m.replace(/[-–]\s*P$/i, '').trim()));
+      petLawyers.push(...petLawyerMatches.map((m: string) => m.replace(/[-–]\s*P$/i, '').trim()));
     }
     
     // Respondent lawyer patterns  
-    const respLawyerMatches = cell.match(/([A-Z][A-Za-z\s\.]+)\s*[-–]\s*R(?:\b|$)/gi);
+    const respLawyerMatches = cellText.match(/([A-Z][A-Za-z\s\.]+)\s*[-–]\s*R(?:\b|$)/gi);
     if (respLawyerMatches) {
-      respLawyers.push(...respLawyerMatches.map(m => m.replace(/[-–]\s*R$/i, '').trim()));
+      respLawyers.push(...respLawyerMatches.map((m: string) => m.replace(/[-–]\s*R$/i, '').trim()));
     }
   }
   
@@ -603,14 +640,14 @@ function finalizeParsedCase(partial: PartialCase, courtNo: string): ParsedCase {
   }
   
   // =========================================================================
-  // STAGE EXTRACTION (unchanged)
+  // STAGE EXTRACTION (uses TEXT version)
   // =========================================================================
   const stageKeywords = ['fresh', 'hearing', 'admission', 'final', 'arguments', 'orders', 'misc', 'motion', 'regular'];
-  for (const cell of allCells) {
-    const cellLower = cell.toLowerCase();
+  for (const cellText of allCellTexts) {
+    const cellLower = cellText.toLowerCase();
     for (const stage of stageKeywords) {
       if (cellLower.includes(stage)) {
-        parsedCase.stage = cell.trim();
+        parsedCase.stage = cellText.trim();
         break;
       }
     }
@@ -618,11 +655,11 @@ function finalizeParsedCase(partial: PartialCase, courtNo: string): ParsedCase {
   }
   
   // =========================================================================
-  // NEXT DATE EXTRACTION (unchanged)
+  // NEXT DATE EXTRACTION (uses TEXT version)
   // =========================================================================
   const datePattern = /\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}/;
-  for (const cell of allCells) {
-    const dateMatch = cell.match(datePattern);
+  for (const cellText of allCellTexts) {
+    const dateMatch = cellText.match(datePattern);
     if (dateMatch) {
       parsedCase.next_date = dateMatch[0];
       break;
@@ -644,6 +681,8 @@ function finalizeParsedCase(partial: PartialCase, courtNo: string): ParsedCase {
  * 3. Only starts a new case when a case number is found
  * 4. Never skips rows due to missing item numbers
  */
+// Note: CellData and ExtendedRow interfaces are defined above near PartialCase
+
 function extractCasesFromSection(html: string, courtNo: string): ParsedCase[] {
   const cases: ParsedCase[] = [];
   
@@ -657,17 +696,19 @@ function extractCasesFromSection(html: string, courtNo: string): ParsedCase[] {
   let currentItemNumber: number | null = null;
   let currentCase: PartialCase | null = null;
   
-  // Collect all rows first
-  const rows: string[][] = [];
+  // Collect all rows first - NOW WITH HTML PRESERVATION
+  const rows: ExtendedRow[] = [];
   let rowMatch;
   
   while ((rowMatch = rowPattern.exec(html)) !== null) {
     const rowContent = rowMatch[1];
-    const cells: string[] = [];
+    const cells: CellData[] = [];
     
     let cellMatch;
     while ((cellMatch = cellPattern.exec(rowContent)) !== null) {
-      const cellText = cellMatch[1]
+      const rawHtml = cellMatch[1];
+      // Text version: Strip all tags for detection logic
+      const cellText = rawHtml
         .replace(/<[^>]+>/g, ' ')
         .replace(/&nbsp;/g, ' ')
         .replace(/&amp;/g, '&')
@@ -677,12 +718,21 @@ function extractCasesFromSection(html: string, courtNo: string): ParsedCase[] {
         .replace(/&#\d+;/g, ' ')
         .replace(/\s+/g, ' ')
         .trim();
-      cells.push(cellText);
+      // HTML version: Preserve structure for party extraction
+      const cellHtml = rawHtml
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&#\d+;/g, ' ')
+        .trim();
+      cells.push({ text: cellText, html: cellHtml });
     }
     cellPattern.lastIndex = 0;
     
     if (cells.length > 0) {
-      rows.push(cells);
+      rows.push({ cells });
     }
   }
   
@@ -691,18 +741,18 @@ function extractCasesFromSection(html: string, courtNo: string): ParsedCase[] {
   // =============================================
   // SEQUENTIAL STATEFUL PROCESSING
   // =============================================
-  for (const cells of rows) {
+  for (const row of rows) {
     // Skip rows with too few cells (likely structural/layout)
-    if (cells.length < 2) continue;
+    if (row.cells.length < 2) continue;
     
     // Skip obvious header rows
-    if (isHeaderRow(cells)) continue;
+    if (isHeaderRow(row)) continue;
     
     // -----------------------------------------
     // STEP 1: Detect item number if present
     // This updates our context state
     // -----------------------------------------
-    const maybeItemNo = extractItemNumber(cells);
+    const maybeItemNo = extractItemNumber(row);
     if (maybeItemNo !== null) {
       currentItemNumber = maybeItemNo;
     }
@@ -718,7 +768,7 @@ function extractCasesFromSection(html: string, courtNo: string): ParsedCase[] {
     // -----------------------------------------
     // STEP 3: Check if row starts a new case
     // -----------------------------------------
-    const hasCaseNumber = rowHasCaseNumber(cells);
+    const hasCaseNumber = rowHasCaseNumber(row);
     
     if (hasCaseNumber) {
       // Flush previous case if exists
@@ -727,11 +777,11 @@ function extractCasesFromSection(html: string, courtNo: string): ParsedCase[] {
       }
       
       // Start new case with current item context
-      const caseNumber = extractCaseNumber(cells);
+      const caseNumber = extractCaseNumber(row);
       currentCase = {
         item_no: currentItemNumber,
         case_number: caseNumber || 'UNKNOWN',
-        raw_rows: [cells],
+        raw_rows: [row],
       };
     } else {
       // -----------------------------------------
@@ -739,7 +789,7 @@ function extractCasesFromSection(html: string, courtNo: string): ParsedCase[] {
       // Attach to current case (this is the key fix!)
       // -----------------------------------------
       if (currentCase !== null) {
-        currentCase.raw_rows.push(cells);
+        currentCase.raw_rows.push(row);
       }
       // If no current case, this is likely a note/header - skip
     }
