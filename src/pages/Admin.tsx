@@ -82,60 +82,62 @@ export default function Admin() {
         {/* Main Content */}
         <main className="flex-1 container mx-auto px-4 py-6">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-            <TabsList className="grid w-full max-w-7xl grid-cols-13">
-              <TabsTrigger value="errors" className="flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4" />
-                <span className="hidden sm:inline">Errors</span>
-              </TabsTrigger>
-              <TabsTrigger value="confidence" className="flex items-center gap-2">
-                <Gauge className="h-4 w-4" />
-                <span className="hidden sm:inline">Confidence</span>
-              </TabsTrigger>
-              <TabsTrigger value="fallback" className="flex items-center gap-2">
-                <Layers className="h-4 w-4" />
-                <span className="hidden sm:inline">Fallback</span>
-              </TabsTrigger>
-              <TabsTrigger value="audit" className="flex items-center gap-2">
-                <ClipboardCheck className="h-4 w-4" />
-                <span className="hidden sm:inline">Audit</span>
-              </TabsTrigger>
-              <TabsTrigger value="scraper" className="flex items-center gap-2">
-                <Database className="h-4 w-4" />
-                <span className="hidden sm:inline">Scraper</span>
-              </TabsTrigger>
-              <TabsTrigger value="ai-jobs" className="flex items-center gap-2">
-                <Brain className="h-4 w-4" />
-                <span className="hidden sm:inline">AI Jobs</span>
-              </TabsTrigger>
-              <TabsTrigger value="docket" className="flex items-center gap-2">
-                <Calendar className="h-4 w-4" />
-                <span className="hidden sm:inline">Docket</span>
-              </TabsTrigger>
-              <TabsTrigger value="arguments" className="flex items-center gap-2">
-                <FileText className="h-4 w-4" />
-                <span className="hidden sm:inline">Arguments</span>
-              </TabsTrigger>
-              <TabsTrigger value="judgments" className="flex items-center gap-2">
-                <Gavel className="h-4 w-4" />
-                <span className="hidden sm:inline">Judgments</span>
-              </TabsTrigger>
-              <TabsTrigger value="courts" className="flex items-center gap-2">
-                <Settings className="h-4 w-4" />
-                <span className="hidden sm:inline">Courts</span>
-              </TabsTrigger>
-              <TabsTrigger value="sync" className="flex items-center gap-2">
-                <Activity className="h-4 w-4" />
-                <span className="hidden sm:inline">Sync</span>
-              </TabsTrigger>
-              <TabsTrigger value="validation" className="flex items-center gap-2">
-                <FileCheck className="h-4 w-4" />
-                <span className="hidden sm:inline">Validate</span>
-              </TabsTrigger>
-              <TabsTrigger value="pwa" className="flex items-center gap-2">
-                <Smartphone className="h-4 w-4" />
-                <span className="hidden sm:inline">PWA</span>
-              </TabsTrigger>
-            </TabsList>
+            <div className="overflow-x-auto pb-2">
+              <TabsList className="inline-flex h-auto w-max gap-1 p-1">
+                <TabsTrigger value="errors" className="flex items-center gap-2 px-3 py-2">
+                  <AlertTriangle className="h-4 w-4" />
+                  <span className="hidden sm:inline">Errors</span>
+                </TabsTrigger>
+                <TabsTrigger value="confidence" className="flex items-center gap-2 px-3 py-2">
+                  <Gauge className="h-4 w-4" />
+                  <span className="hidden sm:inline">Confidence</span>
+                </TabsTrigger>
+                <TabsTrigger value="fallback" className="flex items-center gap-2 px-3 py-2">
+                  <Layers className="h-4 w-4" />
+                  <span className="hidden sm:inline">Fallback</span>
+                </TabsTrigger>
+                <TabsTrigger value="audit" className="flex items-center gap-2 px-3 py-2">
+                  <ClipboardCheck className="h-4 w-4" />
+                  <span className="hidden sm:inline">Audit</span>
+                </TabsTrigger>
+                <TabsTrigger value="scraper" className="flex items-center gap-2 px-3 py-2">
+                  <Database className="h-4 w-4" />
+                  <span className="hidden sm:inline">Scraper</span>
+                </TabsTrigger>
+                <TabsTrigger value="ai-jobs" className="flex items-center gap-2 px-3 py-2">
+                  <Brain className="h-4 w-4" />
+                  <span className="hidden sm:inline">AI Jobs</span>
+                </TabsTrigger>
+                <TabsTrigger value="docket" className="flex items-center gap-2 px-3 py-2">
+                  <Calendar className="h-4 w-4" />
+                  <span className="hidden sm:inline">Docket</span>
+                </TabsTrigger>
+                <TabsTrigger value="arguments" className="flex items-center gap-2 px-3 py-2">
+                  <FileText className="h-4 w-4" />
+                  <span className="hidden sm:inline">Arguments</span>
+                </TabsTrigger>
+                <TabsTrigger value="judgments" className="flex items-center gap-2 px-3 py-2">
+                  <Gavel className="h-4 w-4" />
+                  <span className="hidden sm:inline">Judgments</span>
+                </TabsTrigger>
+                <TabsTrigger value="courts" className="flex items-center gap-2 px-3 py-2">
+                  <Settings className="h-4 w-4" />
+                  <span className="hidden sm:inline">Courts</span>
+                </TabsTrigger>
+                <TabsTrigger value="sync" className="flex items-center gap-2 px-3 py-2">
+                  <Activity className="h-4 w-4" />
+                  <span className="hidden sm:inline">Sync</span>
+                </TabsTrigger>
+                <TabsTrigger value="validation" className="flex items-center gap-2 px-3 py-2">
+                  <FileCheck className="h-4 w-4" />
+                  <span className="hidden sm:inline">Validate</span>
+                </TabsTrigger>
+                <TabsTrigger value="pwa" className="flex items-center gap-2 px-3 py-2">
+                  <Smartphone className="h-4 w-4" />
+                  <span className="hidden sm:inline">PWA</span>
+                </TabsTrigger>
+              </TabsList>
+            </div>
 
             <TabsContent value="errors" className="space-y-4">
               <AdminErrorConsole />
