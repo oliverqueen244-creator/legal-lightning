@@ -20,6 +20,7 @@ import { toast } from 'sonner';
 import { formatDistanceToNow } from 'date-fns';
 import { CauseListUploader } from './CauseListUploader';
 import { RecentCauselistsPanel } from './RecentCauselistsPanel';
+import { getBenchBadgeLabel } from '@/lib/benchNames';
 
 interface ScraperLog {
   id: string;
@@ -258,7 +259,7 @@ export function CauseListScraper() {
                     {getStatusIcon(log.status)}
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="font-medium">{log.bench}</span>
+                        <span className="font-medium">{getBenchBadgeLabel(log.bench)}</span>
                         <Badge variant="outline" className="text-xs">
                           {log.list_type || 'DAILY'}
                         </Badge>

@@ -4,7 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { Scale, User, Wifi, WifiOff } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
-
+import { getBenchBadgeLabel } from '@/lib/benchNames';
 interface CourtStatusCardProps {
   bench: string;
   courtNo: string;
@@ -81,7 +81,7 @@ export function CourtStatusCard({ bench, courtNo, currentItem, status }: CourtSt
                   Court No. {courtNo}
                 </span>
                 <Badge variant="outline" className="text-xs">
-                  {bench}
+                  {getBenchBadgeLabel(bench)}
                 </Badge>
                 {status && (
                   <Badge className={`text-xs ${statusColors[status] || ''}`}>
