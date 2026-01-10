@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Scale, Calendar, FileText, Settings, Activity, FileCheck, Database, Gavel, Brain, ClipboardCheck, AlertTriangle, Gauge, Layers } from 'lucide-react';
+import { ArrowLeft, Scale, Calendar, FileText, Settings, Activity, FileCheck, Database, Gavel, Brain, ClipboardCheck, AlertTriangle, Gauge, Layers, Smartphone } from 'lucide-react';
 import { AuthGuard } from '@/components/layout/AuthGuard';
 import { useAuth } from '@/hooks/useAuth';
 import { DocketManager } from '@/components/admin/DocketManager';
@@ -17,6 +17,7 @@ import { AuditConsole } from '@/components/admin/audit/AuditConsole';
 import { AdminErrorConsole } from '@/components/admin/errors';
 import { ConfidenceDashboard } from '@/components/admin/ConfidenceDashboard';
 import { FallbackDashboard } from '@/components/admin/FallbackDashboard';
+import { ForceUpdateControl } from '@/components/admin/ForceUpdateControl';
 
 export default function Admin() {
   const navigate = useNavigate();
@@ -81,7 +82,7 @@ export default function Admin() {
         {/* Main Content */}
         <main className="flex-1 container mx-auto px-4 py-6">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-            <TabsList className="grid w-full max-w-7xl grid-cols-12">
+            <TabsList className="grid w-full max-w-7xl grid-cols-13">
               <TabsTrigger value="errors" className="flex items-center gap-2">
                 <AlertTriangle className="h-4 w-4" />
                 <span className="hidden sm:inline">Errors</span>
@@ -129,6 +130,10 @@ export default function Admin() {
               <TabsTrigger value="validation" className="flex items-center gap-2">
                 <FileCheck className="h-4 w-4" />
                 <span className="hidden sm:inline">Validate</span>
+              </TabsTrigger>
+              <TabsTrigger value="pwa" className="flex items-center gap-2">
+                <Smartphone className="h-4 w-4" />
+                <span className="hidden sm:inline">PWA</span>
               </TabsTrigger>
             </TabsList>
 
@@ -178,6 +183,10 @@ export default function Admin() {
 
             <TabsContent value="validation" className="space-y-4">
               <DataValidationPanel />
+            </TabsContent>
+
+            <TabsContent value="pwa" className="space-y-4">
+              <ForceUpdateControl />
             </TabsContent>
           </Tabs>
         </main>

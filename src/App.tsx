@@ -22,13 +22,22 @@ import { CourtFocusOverlay } from "./components/court-focus";
 import { SplashScreen } from "./components/layout/SplashScreen";
 import { PWAUpdateManager } from "./components/pwa/PWAUpdateManager";
 import { ErrorBoundary } from "./components/layout/ErrorBoundary";
+import { useForceUpdate } from "./hooks/useForceUpdate";
 
 const queryClient = new QueryClient();
+
+// Component that runs the force update check
+function ForceUpdateChecker() {
+  useForceUpdate();
+  return null;
+}
 
 const App = () => (
   <ErrorBoundary>
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
+      {/* PWA Force Update Kill Switch - checks server version on every load */}
+      <ForceUpdateChecker />
       {/* FormDirtyProvider MUST wrap SyncConflictProvider for safety checks */}
       <FormDirtyProvider>
         <SyncConflictProvider>
