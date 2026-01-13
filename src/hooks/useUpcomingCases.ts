@@ -13,34 +13,21 @@ export function useUpcomingCases() {
   return useQuery({
     queryKey: ['upcoming-cases', user?.id],
     queryFn: async () => {
-      // Get cases with dates after today
-      if (user?.id) {
-        const { data: matchedData, error: matchedError } = await supabase
-          .from('daily_court_docket')
-          .select('*')
-          .gt('date', today)
-          .eq('matched_profile_id', user.id)
-          .order('date', { ascending: true })
-          .order('item_no', { ascending: true });
-
-        if (!matchedError && matchedData && matchedData.length > 0) {
-          return matchedData as DocketItem[];
-        }
-      }
-
-      // Fallback: get all upcoming items (demo mode)
+      if (!user?.id) return [] as DocketItem[];
+      
+      // Only get user's matched cases - no demo mode fallback
       const { data, error } = await supabase
         .from('daily_court_docket')
         .select('*')
         .gt('date', today)
+        .eq('matched_profile_id', user.id)
         .order('date', { ascending: true })
-        .order('item_no', { ascending: true })
-        .limit(50);
+        .order('item_no', { ascending: true });
 
       if (error) throw error;
-      return data as DocketItem[];
+      return (data || []) as DocketItem[];
     },
-    // PHASE 0.3: Reduce refetch noise
     staleTime: UPCOMING_STALE_TIME,
+    enabled: !!user?.id,
   });
 }

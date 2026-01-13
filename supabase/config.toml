@@ -71,3 +71,6 @@ verify_jwt = false
 
 [functions.match-docket-aliases]
 verify_jwt = false
+
+[functions.backfill-alias-matches]
+verify_jwt = false

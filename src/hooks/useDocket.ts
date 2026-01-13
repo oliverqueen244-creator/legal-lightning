@@ -24,11 +24,13 @@ export function useDocket(date?: string) {
     queryFn: async () => {
       if (!user?.id) return [] as DocketItem[];
       
-      // RLS now handles visibility - just fetch all visible cases for this date
+      // Explicitly filter by matched_profile_id to prevent seeing unmatched cases
+      // RLS provides secondary protection, but frontend filter is primary defense
       const { data, error } = await supabase
         .from('daily_court_docket')
         .select('*, hearing_likelihood, likelihood_reason, likelihood_derived_at, judge_names, petitioner, respondent, petitioner_lawyer, respondent_lawyer, case_context, chamber_id')
         .eq('date', targetDate)
+        .eq('matched_profile_id', user.id)
         .order('case_context', { ascending: true }) // personal first
         .order('list_type', { ascending: false })
         .order('item_no', { ascending: true });
