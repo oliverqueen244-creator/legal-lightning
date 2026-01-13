@@ -15,10 +15,12 @@ import { toast } from 'sonner';
 // CP-5: Delegation scopes - matches database enum
 export type DelegationScope = 
   | 'view_cases'
+  | 'edit_cases'        // NEW: Required for case updates
   | 'upload_documents'
   | 'add_notes'
   | 'track_hearings'
-  | 'mark_presence';
+  | 'mark_presence'
+  | 'manage_documents'; // NEW: For document management
 
 // Forbidden scopes that can NEVER be granted
 export const FORBIDDEN_SCOPES = [

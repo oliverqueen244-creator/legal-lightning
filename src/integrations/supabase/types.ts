@@ -3001,6 +3001,14 @@ export type Database = {
         Returns: boolean
       }
       cleanup_old_scraper_logs: { Args: never; Returns: number }
+      clerk_can_edit_case: {
+        Args: { _case_owner_id: string; _clerk_id: string }
+        Returns: boolean
+      }
+      clerk_can_view_case: {
+        Args: { _case_owner_id: string; _clerk_id: string }
+        Returns: boolean
+      }
       generate_case_fingerprint: {
         Args: {
           p_case_number: string
@@ -3075,6 +3083,7 @@ export type Database = {
         Args: { _chamber_id: string; _user_id: string }
         Returns: boolean
       }
+      is_clerk_role: { Args: { _user_id: string }; Returns: boolean }
       is_delegated_clerk: {
         Args: { _clerk_id: string; _lawyer_id: string }
         Returns: boolean
@@ -3195,6 +3204,8 @@ export type Database = {
         | "add_notes"
         | "track_hearings"
         | "mark_presence"
+        | "edit_cases"
+        | "manage_documents"
       doc_sync_type: "judgment" | "interim_order" | "order" | "unknown"
       document_format: "TYPED" | "SCANNED" | "HANDWRITTEN"
       document_language: "EN" | "HI" | "MIXED" | "UNKNOWN"
@@ -3426,6 +3437,8 @@ export const Constants = {
         "add_notes",
         "track_hearings",
         "mark_presence",
+        "edit_cases",
+        "manage_documents",
       ],
       doc_sync_type: ["judgment", "interim_order", "order", "unknown"],
       document_format: ["TYPED", "SCANNED", "HANDWRITTEN"],
