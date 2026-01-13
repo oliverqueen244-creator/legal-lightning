@@ -46,10 +46,20 @@ const SCOPE_CONFIG: Record<DelegationScope, { label: string; icon: React.ReactNo
     icon: <Eye className="h-4 w-4" />,
     description: 'Can see your case list and details',
   },
+  edit_cases: {
+    label: 'Edit Cases',
+    icon: <FileText className="h-4 w-4" />,
+    description: 'Can update case status and details',
+  },
   upload_documents: {
     label: 'Upload Documents',
     icon: <Upload className="h-4 w-4" />,
     description: 'Can upload case documents on your behalf',
+  },
+  manage_documents: {
+    label: 'Manage Documents',
+    icon: <FileText className="h-4 w-4" />,
+    description: 'Can organize and manage case documents',
   },
   add_notes: {
     label: 'Add Notes',
