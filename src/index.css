@@ -44,6 +44,11 @@
     --court-danger-light: 0 84% 60%;
     --court-success: 142 76% 36%;
     --court-warning: 38 92% 50%;
+    
+    /* Semantic urgency tokens (see docs/ui-semantics.md) */
+    /* --court-positive-urgency: "My case is running" - distinct from panic/danger */
+    /* Currently mapped to same visual as danger for beta; may diverge based on user feedback */
+    --court-positive-urgency: 0 72% 25%;
 
     /* Glassmorphism tokens */
     --glass: 0 0% 100% / 0.05;
@@ -147,8 +152,8 @@
 
   /* Panic state indicator - static high-contrast border, one-time pulse on state change */
   .panic-state {
-    border: 2px solid hsl(0 84% 60%);
-    box-shadow: 0 0 8px hsl(0 84% 60% / 0.4);
+    border: 2px solid hsl(var(--court-danger-light));
+    box-shadow: 0 0 8px hsl(var(--court-danger-light) / 0.4);
   }
   
   /* One-time panic pulse - only triggers once on state change */
@@ -158,19 +163,19 @@
 
   @keyframes panic-pulse-once {
     0% {
-      box-shadow: 0 0 0 0 hsl(0 84% 60% / 0.7);
+      box-shadow: 0 0 0 0 hsl(var(--court-danger-light) / 0.7);
     }
     50% {
-      box-shadow: 0 0 0 12px hsl(0 84% 60% / 0.3);
+      box-shadow: 0 0 0 12px hsl(var(--court-danger-light) / 0.3);
     }
     100% {
-      box-shadow: 0 0 0 0 hsl(0 84% 60% / 0);
+      box-shadow: 0 0 0 0 hsl(var(--court-danger-light) / 0);
     }
   }
 
   /* Gold glow for senior mode */
   .gold-glow {
-    box-shadow: 0 0 30px hsl(43 96% 56% / 0.4);
+    box-shadow: 0 0 30px hsl(var(--court-gold) / 0.4);
   }
 
   /* Whisper notification animation */
@@ -189,10 +194,10 @@
     }
   }
 
-  /* Status running - static high-contrast indicator */
+  /* Status running - uses semantic --court-positive-urgency token */
   .status-running {
     @apply relative;
-    background: linear-gradient(90deg, hsl(0 84% 60% / 0.15), hsl(0 84% 60% / 0.25), hsl(0 84% 60% / 0.15));
+    background: linear-gradient(90deg, hsl(var(--court-positive-urgency) / 0.15), hsl(var(--court-positive-urgency) / 0.25), hsl(var(--court-positive-urgency) / 0.15));
   }
 
   /* Court card hover effect */
@@ -202,7 +207,7 @@
 
   .court-card:hover {
     @apply scale-[1.02] bg-white/10;
-    box-shadow: 0 0 40px hsl(43 96% 56% / 0.15);
+    box-shadow: 0 0 40px hsl(var(--court-gold) / 0.15);
   }
 
   /* Ticker scrolling */
@@ -235,7 +240,7 @@
   /* Giant item number display */
   .giant-number {
     @apply font-display text-7xl md:text-8xl lg:text-9xl font-bold text-primary;
-    text-shadow: 0 0 60px hsl(43 96% 56% / 0.5);
+    text-shadow: 0 0 60px hsl(var(--court-gold) / 0.5);
   }
 
   /* Passover/skipped state */
@@ -258,7 +263,7 @@
   }
 
   .annotation-pen {
-    stroke: hsl(0 84% 60%);
+    stroke: hsl(var(--court-danger-light));
     stroke-width: 2;
     fill: none;
   }
@@ -289,17 +294,17 @@
   }
 
   .legal-scroll::-webkit-scrollbar-track {
-    background: hsl(217 33% 12%);
+    background: hsl(var(--court-slate-800));
     border-radius: 4px;
   }
 
   .legal-scroll::-webkit-scrollbar-thumb {
-    background: hsl(215 20% 30%);
+    background: hsl(var(--court-slate-700));
     border-radius: 4px;
   }
 
   .legal-scroll::-webkit-scrollbar-thumb:hover {
-    background: hsl(43 96% 56%);
+    background: hsl(var(--court-gold));
   }
 
   /* High contrast text utility */
