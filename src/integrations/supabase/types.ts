@@ -1198,6 +1198,12 @@ export type Database = {
           source_url: string | null
           status: string | null
           structure_confidence: number | null
+          vc_confidence: number | null
+          vc_extracted_at: string | null
+          vc_join_url: string | null
+          vc_meeting_id: string | null
+          vc_provider: Database["public"]["Enums"]["vc_provider"] | null
+          vc_source: string | null
         }
         Insert: {
           case_context?: Database["public"]["Enums"]["case_context"]
@@ -1235,6 +1241,12 @@ export type Database = {
           source_url?: string | null
           status?: string | null
           structure_confidence?: number | null
+          vc_confidence?: number | null
+          vc_extracted_at?: string | null
+          vc_join_url?: string | null
+          vc_meeting_id?: string | null
+          vc_provider?: Database["public"]["Enums"]["vc_provider"] | null
+          vc_source?: string | null
         }
         Update: {
           case_context?: Database["public"]["Enums"]["case_context"]
@@ -1272,6 +1284,12 @@ export type Database = {
           source_url?: string | null
           status?: string | null
           structure_confidence?: number | null
+          vc_confidence?: number | null
+          vc_extracted_at?: string | null
+          vc_join_url?: string | null
+          vc_meeting_id?: string | null
+          vc_provider?: Database["public"]["Enums"]["vc_provider"] | null
+          vc_source?: string | null
         }
         Relationships: [
           {
@@ -3016,6 +3034,68 @@ export type Database = {
         }
         Relationships: []
       }
+      vc_click_events: {
+        Row: {
+          click_date: string
+          clicked_at: string | null
+          court_location: string
+          court_room_no: string
+          docket_id: string | null
+          id: string
+          user_id: string | null
+          vc_meeting_id: string
+        }
+        Insert: {
+          click_date: string
+          clicked_at?: string | null
+          court_location: string
+          court_room_no: string
+          docket_id?: string | null
+          id?: string
+          user_id?: string | null
+          vc_meeting_id: string
+        }
+        Update: {
+          click_date?: string
+          clicked_at?: string | null
+          court_location?: string
+          court_room_no?: string
+          docket_id?: string | null
+          id?: string
+          user_id?: string | null
+          vc_meeting_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vc_click_events_docket_id_fkey"
+            columns: ["docket_id"]
+            isOneToOne: false
+            referencedRelation: "daily_court_docket"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vc_click_events_docket_id_fkey"
+            columns: ["docket_id"]
+            isOneToOne: false
+            referencedRelation: "user_docket_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vc_click_events_docket_id_fkey"
+            columns: ["docket_id"]
+            isOneToOne: false
+            referencedRelation: "v_clerk_ownership_violations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vc_click_events_docket_id_fkey"
+            columns: ["docket_id"]
+            isOneToOne: false
+            referencedRelation: "v_invalid_case_contexts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       fallback_summary_view: {
@@ -3526,6 +3606,7 @@ export type Database = {
       risk_type: "ux" | "trust" | "operational" | "legal" | "scale"
       source_granularity: "FULL_CAUSELIST" | "COURT_SECTION" | "LAWYER_FILTERED"
       time_condition: "IF_TIME_PERMITS" | "FIXED_ORDER" | "UNKNOWN"
+      vc_provider: "webex"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -3772,6 +3853,7 @@ export const Constants = {
         "LAWYER_FILTERED",
       ],
       time_condition: ["IF_TIME_PERMITS", "FIXED_ORDER", "UNKNOWN"],
+      vc_provider: ["webex"],
     },
   },
 } as const

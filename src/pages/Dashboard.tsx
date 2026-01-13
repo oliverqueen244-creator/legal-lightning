@@ -5,6 +5,7 @@ import { DocketCard } from '@/components/dashboard/DocketCard';
 import { LiveTicker } from '@/components/dashboard/LiveTicker';
 import { LiveCourtWidget } from '@/components/dashboard/LiveCourtWidget';
 import { CaseTimeEstimator } from '@/components/dashboard/CaseTimeEstimator';
+import { VirtualCourtButton } from '@/components/dashboard/VirtualCourtButton';
 import { LawyerSearchPanel } from '@/components/dashboard/LawyerSearchPanel';
 import { ScraperStatusWidget } from '@/components/dashboard/ScraperStatusWidget';
 import { CourtMetadataWidget } from '@/components/dashboard/CourtMetadataWidget';
@@ -496,6 +497,15 @@ export default function Dashboard() {
                     isSupplementary={activeTab === 'supplementary' || firstCase?.list_type === 'SUPPLEMENTARY'}
                   />
                 ) : null}
+
+                {/* Virtual Court Button - shows when VC data available */}
+                {primaryLiveBoard && (
+                  <VirtualCourtButton
+                    courtLocation={primaryLiveBoard.court_location}
+                    courtRoomNo={primaryLiveBoard.court_no}
+                    variant="default"
+                  />
+                )}
 
                 {/* Case Time Estimator - Shows estimated wait time for next case */}
                 {firstCase && primaryLiveBoard && (

@@ -43,6 +43,15 @@ interface PolicyClassification {
   court_no: string | null;
 }
 
+// Virtual Court (VC) data extracted at court level
+interface ExtractedVCData {
+  court_no: string;
+  vc_provider: 'webex';
+  vc_meeting_id: string;
+  vc_join_url: string;
+  vc_confidence: number;
+}
+
 interface DerivedPolicy {
   raw_causelist_id: string;
   policy_text: string;
@@ -74,6 +83,13 @@ interface DocketRecord {
   raw_causelist_id: string;
   source_url: string;
   case_title_raw: string | null;
+  // Virtual Court fields
+  vc_provider: 'webex' | null;
+  vc_meeting_id: string | null;
+  vc_join_url: string | null;
+  vc_source: string | null;
+  vc_extracted_at: string | null;
+  vc_confidence: number | null;
 }
 
 interface ParseRequest {
@@ -103,6 +119,148 @@ const NOTE_PATTERNS = [
   { pattern: /SUPPLEMENTARY\s+(?:LIST|CAUSE\s*LIST)[:\-]?\s*([^\n<]+)/gi, type: 'SUPPLEMENTARY_NOTE' },
   { pattern: /(?:subject\s+to|if\s+time\s+permits|time\s+permitting)[^\.]*\./gi, type: 'TIME_CONDITION' },
 ];
+
+// =============================================================================
+// VIRTUAL COURT (VC) EXTRACTION
+// Extracts Webex meeting IDs from causelist at court level
+// =============================================================================
+
+/**
+ * Webex URL and Meeting ID patterns:
+ * - Full URLs: https://meet.webex.com/join/1234567890
+ * - signin URLs: https://signin.webex.com/join?MTID=1234567890
+ * - Meeting ID text: "Meeting ID: 1234567890"
+ * - VC Number: "VC No. 1234567890"
+ * - Webex Number: "Webex: 1234567890" 
+ */
+const WEBEX_PATTERNS = [
+  // Full Webex URLs
+  { 
+    pattern: /https?:\/\/(?:meet|signin)\.webex\.com\/(?:join|joinmeeting)[\/?](?:MTID=)?(\d{9,15})/gi,
+    confidence: 95 
+  },
+  // Webex meet URLs with meeting number
+  { 
+    pattern: /webex\.com\/meet\/[\w-]+\/(\d{9,15})/gi,
+    confidence: 90 
+  },
+  // "Meeting ID" or "Meeting Number" followed by digits
+  { 
+    pattern: /Meeting\s*(?:ID|No\.?|Number)\s*[:=]?\s*(\d{9,15})/gi,
+    confidence: 85 
+  },
+  // "VC Number" or "VC No" patterns (common in Indian courts)
+  { 
+    pattern: /VC\s*(?:No\.?|Number|ID)\s*[:=]?\s*(\d{9,15})/gi,
+    confidence: 80 
+  },
+  // "Webex" followed by number
+  { 
+    pattern: /Webex\s*[:=]?\s*(\d{9,15})/gi,
+    confidence: 75 
+  },
+  // Virtual Court link patterns
+  { 
+    pattern: /Virtual\s*Court\s*(?:Link|URL|Meeting)?\s*[:=]?\s*(?:https?:\/\/)?[\w.]+\/(\d{9,15})/gi,
+    confidence: 70 
+  },
+  // Generic 10-digit meeting ID near VC/Virtual/Webex keywords (lower confidence)
+  { 
+    pattern: /(?:Virtual|VC|Video\s*Conference|Webex)[^\d]{0,30}(\d{10,11})/gi,
+    confidence: 60 
+  },
+];
+
+/**
+ * Extract Virtual Court data from a court section of HTML.
+ * Returns the highest-confidence match found.
+ */
+function extractVCFromCourtSection(courtSection: string, courtNo: string): ExtractedVCData | null {
+  // Remove HTML tags but preserve text
+  const textContent = courtSection
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/\s+/g, ' ');
+  
+  let bestMatch: ExtractedVCData | null = null;
+  let bestConfidence = 0;
+  
+  for (const { pattern, confidence } of WEBEX_PATTERNS) {
+    // Reset pattern state for each search
+    const regex = new RegExp(pattern.source, pattern.flags);
+    const matches = textContent.matchAll(regex);
+    
+    for (const match of matches) {
+      const rawMeetingId = match[1];
+      
+      // Normalize meeting ID - strip non-digits
+      const meetingId = rawMeetingId.replace(/\D/g, '');
+      
+      // Validate meeting ID length (Webex IDs are typically 9-11 digits)
+      if (meetingId.length < 9 || meetingId.length > 15) continue;
+      
+      // Check if this is a better match
+      if (confidence > bestConfidence) {
+        bestConfidence = confidence;
+        bestMatch = {
+          court_no: courtNo,
+          vc_provider: 'webex',
+          vc_meeting_id: meetingId,
+          vc_join_url: `https://signin.webex.com/joinmeeting?MTID=${meetingId}`,
+          vc_confidence: confidence,
+        };
+      }
+    }
+  }
+  
+  // If we found a full URL in the original content, use it instead of constructed
+  if (bestMatch) {
+    const urlMatch = courtSection.match(/https?:\/\/(?:meet|signin)\.webex\.com\/[^\s<"']+/i);
+    if (urlMatch) {
+      bestMatch.vc_join_url = urlMatch[0].trim();
+      bestMatch.vc_confidence = Math.min(bestMatch.vc_confidence + 5, 100);
+    }
+  }
+  
+  return bestMatch;
+}
+
+/**
+ * Extract VC data for all courts in an HTML causelist.
+ * Returns a map of court_no -> VC data.
+ */
+function extractVCDataFromHtml(html: string, courtMarkers: { index: number; courtNo: string }[]): Map<string, ExtractedVCData> {
+  const vcDataByCourtNo = new Map<string, ExtractedVCData>();
+  
+  // Also check for GLOBAL VC (applies to all courts) in header/preamble
+  const preambleEnd = courtMarkers.length > 0 ? courtMarkers[0].index : 5000;
+  const preamble = html.substring(0, preambleEnd);
+  const globalVC = extractVCFromCourtSection(preamble, 'GLOBAL');
+  
+  if (globalVC) {
+    console.log(`[VC-EXTRACT] Found GLOBAL VC: ${globalVC.vc_meeting_id} (confidence: ${globalVC.vc_confidence})`);
+  }
+  
+  // Extract VC per court section
+  for (let i = 0; i < courtMarkers.length; i++) {
+    const startIdx = courtMarkers[i].index;
+    const endIdx = i < courtMarkers.length - 1 ? courtMarkers[i + 1].index : html.length;
+    const courtSection = html.substring(startIdx, endIdx);
+    const courtNo = courtMarkers[i].courtNo;
+    
+    const courtVC = extractVCFromCourtSection(courtSection, courtNo);
+    
+    if (courtVC) {
+      vcDataByCourtNo.set(courtNo, courtVC);
+      console.log(`[VC-EXTRACT] Court ${courtNo}: ${courtVC.vc_meeting_id} (confidence: ${courtVC.vc_confidence})`);
+    } else if (globalVC) {
+      // Use global VC if no court-specific VC found
+      vcDataByCourtNo.set(courtNo, { ...globalVC, court_no: courtNo });
+    }
+  }
+  
+  return vcDataByCourtNo;
+}
 
 // =============================================================================
 // PHASE 1: PARSING FUNCTIONS (In-Memory Only)
@@ -265,7 +423,12 @@ function normalizeCourtNo(courtText: string): string {
 }
 
 // Extract all case rows from HTML - PURE FUNCTION, NO DB
-function parseHtmlCauselist(html: string): { cases: ParsedCase[]; courts: string[] } {
+// Also returns court markers for VC extraction
+function parseHtmlCauselist(html: string): { 
+  cases: ParsedCase[]; 
+  courts: string[];
+  courtMarkers: { index: number; courtNo: string }[];
+} {
   const cases: ParsedCase[] = [];
   const courtsFound = new Set<string>();
   
@@ -295,7 +458,7 @@ function parseHtmlCauselist(html: string): { cases: ParsedCase[]; courts: string
     }
   }
   
-  return { cases, courts: [...courtsFound] };
+  return { cases, courts: [...courtsFound], courtMarkers };
 }
 
 // Case number patterns for detecting if a row starts a new case
@@ -1221,8 +1384,12 @@ Deno.serve(async (req) => {
     console.log('[PHASE-1] Parsing HTML content in memory...');
     const phase1Start = Date.now();
     
-    const { cases, courts } = parseHtmlCauselist(htmlContent);
+    const { cases, courts, courtMarkers } = parseHtmlCauselist(htmlContent);
     const extractedNotes = extractNotesFromHtml(htmlContent);
+    
+    // Extract Virtual Court (VC) data from causelist
+    const vcDataByCourtNo = extractVCDataFromHtml(htmlContent, courtMarkers);
+    console.log(`[PHASE-1] VC extraction: ${vcDataByCourtNo.size} courts with VC data`);
     
     console.log(`[PHASE-1] Complete: ${cases.length} cases, ${courts.length} courts, ${extractedNotes.length} notes (${Date.now() - phase1Start}ms)`);
 
@@ -1281,6 +1448,10 @@ Deno.serve(async (req) => {
         || judgesByCourtNo.get(courtNo)
         || null;
       
+      // Get VC data for this court
+      const vcData = vcDataByCourtNo.get(courtNo);
+      const now = new Date().toISOString();
+      
       return {
         court_location: bench,
         court_room_no: courtNo,
@@ -1301,6 +1472,13 @@ Deno.serve(async (req) => {
         raw_causelist_id: causelist_id,
         source_url: `html:${causelist_id}`,
         case_title_raw: caseData.case_title_raw,
+        // Virtual Court data (extracted at court level, applied to all cases)
+        vc_provider: vcData?.vc_provider || null,
+        vc_meeting_id: vcData?.vc_meeting_id || null,
+        vc_join_url: vcData?.vc_join_url || null,
+        vc_source: vcData ? 'causelist' : null,
+        vc_extracted_at: vcData ? now : null,
+        vc_confidence: vcData?.vc_confidence || null,
       };
     });
     
