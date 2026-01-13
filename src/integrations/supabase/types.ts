@@ -508,6 +508,20 @@ export type Database = {
             referencedRelation: "user_docket_view"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "case_arguments_docket_id_fkey"
+            columns: ["docket_id"]
+            isOneToOne: false
+            referencedRelation: "v_clerk_ownership_violations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "case_arguments_docket_id_fkey"
+            columns: ["docket_id"]
+            isOneToOne: false
+            referencedRelation: "v_invalid_case_contexts"
+            referencedColumns: ["id"]
+          },
         ]
       }
       case_documents: {
@@ -578,6 +592,20 @@ export type Database = {
             columns: ["docket_id"]
             isOneToOne: false
             referencedRelation: "user_docket_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "case_documents_docket_id_fkey"
+            columns: ["docket_id"]
+            isOneToOne: false
+            referencedRelation: "v_clerk_ownership_violations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "case_documents_docket_id_fkey"
+            columns: ["docket_id"]
+            isOneToOne: false
+            referencedRelation: "v_invalid_case_contexts"
             referencedColumns: ["id"]
           },
         ]
@@ -1690,6 +1718,20 @@ export type Database = {
             referencedRelation: "user_docket_view"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "judge_observations_source_docket_id_fkey"
+            columns: ["source_docket_id"]
+            isOneToOne: false
+            referencedRelation: "v_clerk_ownership_violations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "judge_observations_source_docket_id_fkey"
+            columns: ["source_docket_id"]
+            isOneToOne: false
+            referencedRelation: "v_invalid_case_contexts"
+            referencedColumns: ["id"]
+          },
         ]
       }
       judgment_attachments: {
@@ -1764,6 +1806,20 @@ export type Database = {
             columns: ["docket_id"]
             isOneToOne: false
             referencedRelation: "user_docket_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "judgment_attachments_docket_id_fkey"
+            columns: ["docket_id"]
+            isOneToOne: false
+            referencedRelation: "v_clerk_ownership_violations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "judgment_attachments_docket_id_fkey"
+            columns: ["docket_id"]
+            isOneToOne: false
+            referencedRelation: "v_invalid_case_contexts"
             referencedColumns: ["id"]
           },
         ]
@@ -1987,6 +2043,20 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "live_courtroom_feed_docket_id_fkey"
+            columns: ["docket_id"]
+            isOneToOne: false
+            referencedRelation: "v_clerk_ownership_violations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "live_courtroom_feed_docket_id_fkey"
+            columns: ["docket_id"]
+            isOneToOne: false
+            referencedRelation: "v_invalid_case_contexts"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "live_courtroom_feed_sender_id_fkey"
             columns: ["sender_id"]
             isOneToOne: false
@@ -2095,6 +2165,20 @@ export type Database = {
             columns: ["docket_id"]
             isOneToOne: false
             referencedRelation: "user_docket_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_docket_id_fkey"
+            columns: ["docket_id"]
+            isOneToOne: false
+            referencedRelation: "v_clerk_ownership_violations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_docket_id_fkey"
+            columns: ["docket_id"]
+            isOneToOne: false
+            referencedRelation: "v_invalid_case_contexts"
             referencedColumns: ["id"]
           },
         ]
@@ -2343,6 +2427,20 @@ export type Database = {
             referencedRelation: "user_docket_view"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "post_court_notes_docket_id_fkey"
+            columns: ["docket_id"]
+            isOneToOne: false
+            referencedRelation: "v_clerk_ownership_violations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "post_court_notes_docket_id_fkey"
+            columns: ["docket_id"]
+            isOneToOne: false
+            referencedRelation: "v_invalid_case_contexts"
+            referencedColumns: ["id"]
+          },
         ]
       }
       profile_scan_log: {
@@ -2567,6 +2665,45 @@ export type Database = {
           list_type?: string | null
           run_at?: string | null
           status?: string
+        }
+        Relationships: []
+      }
+      security_events: {
+        Row: {
+          attempted_action: string
+          created_at: string | null
+          event_type: string
+          id: string
+          reason: string
+          request_metadata: Json | null
+          target_id: string | null
+          target_table: string | null
+          user_id: string | null
+          user_role: string | null
+        }
+        Insert: {
+          attempted_action: string
+          created_at?: string | null
+          event_type: string
+          id?: string
+          reason: string
+          request_metadata?: Json | null
+          target_id?: string | null
+          target_table?: string | null
+          user_id?: string | null
+          user_role?: string | null
+        }
+        Update: {
+          attempted_action?: string
+          created_at?: string | null
+          event_type?: string
+          id?: string
+          reason?: string
+          request_metadata?: Json | null
+          target_id?: string | null
+          target_table?: string | null
+          user_id?: string | null
+          user_role?: string | null
         }
         Relationships: []
       }
@@ -2973,6 +3110,109 @@ export type Database = {
           },
         ]
       }
+      v_clerk_ownership_violations: {
+        Row: {
+          case_number: string | null
+          date: string | null
+          id: string | null
+          matched_profile_id: string | null
+          role: Database["public"]["Enums"]["app_role"] | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "daily_court_docket_matched_profile_id_fkey"
+            columns: ["matched_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      v_delegation_scope_violations: {
+        Row: {
+          action_type: string | null
+          actor_id: string | null
+          id: string | null
+          performed_at: string | null
+          target_table: string | null
+        }
+        Relationships: []
+      }
+      v_invalid_case_contexts: {
+        Row: {
+          case_context: Database["public"]["Enums"]["case_context"] | null
+          case_number: string | null
+          chamber_id: string | null
+          date: string | null
+          id: string | null
+          matched_profile_id: string | null
+        }
+        Insert: {
+          case_context?: Database["public"]["Enums"]["case_context"] | null
+          case_number?: string | null
+          chamber_id?: string | null
+          date?: string | null
+          id?: string | null
+          matched_profile_id?: string | null
+        }
+        Update: {
+          case_context?: Database["public"]["Enums"]["case_context"] | null
+          case_number?: string | null
+          chamber_id?: string | null
+          date?: string | null
+          id?: string | null
+          matched_profile_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "daily_court_docket_chamber_id_fkey"
+            columns: ["chamber_id"]
+            isOneToOne: false
+            referencedRelation: "chambers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "daily_court_docket_matched_profile_id_fkey"
+            columns: ["matched_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      v_unattributed_mutations: {
+        Row: {
+          attempted_action: string | null
+          created_at: string | null
+          id: string | null
+          reason: string | null
+          target_id: string | null
+          target_table: string | null
+          user_id: string | null
+          user_role: string | null
+        }
+        Insert: {
+          attempted_action?: string | null
+          created_at?: string | null
+          id?: string | null
+          reason?: string | null
+          target_id?: string | null
+          target_table?: string | null
+          user_id?: string | null
+          user_role?: string | null
+        }
+        Update: {
+          attempted_action?: string | null
+          created_at?: string | null
+          id?: string | null
+          reason?: string | null
+          target_id?: string | null
+          target_table?: string | null
+          user_id?: string | null
+          user_role?: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       acquire_document_sync_lock: {
@@ -3138,6 +3378,17 @@ export type Database = {
           p_fallback_level: string
           p_parse_duration_ms?: number
           p_triggered_reason: string
+        }
+        Returns: string
+      }
+      log_security_event: {
+        Args: {
+          p_attempted_action: string
+          p_event_type: string
+          p_metadata?: Json
+          p_reason: string
+          p_target_id: string
+          p_target_table: string
         }
         Returns: string
       }

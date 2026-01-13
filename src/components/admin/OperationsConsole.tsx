@@ -17,11 +17,13 @@ import {
   Activity,
   HardDrive,
   CreditCard,
-  ShieldAlert
+  ShieldAlert,
+  Eye
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 import { useQuery } from '@tanstack/react-query';
+import { BetaObservabilityPanel } from './BetaObservabilityPanel';
 
 interface OperationsConsoleProps {
   isOpen: boolean;
@@ -52,7 +54,7 @@ interface AIJobSummary {
  */
 export function OperationsConsole({ isOpen, onClose }: OperationsConsoleProps) {
   const { isAdmin } = useAuth();
-  const [activeTab, setActiveTab] = useState('health');
+  const [activeTab, setActiveTab] = useState('observability');
 
   // System Health Query
   const { data: health, refetch: refetchHealth, isLoading: healthLoading } = useQuery({
@@ -215,7 +217,11 @@ export function OperationsConsole({ isOpen, onClose }: OperationsConsoleProps) {
 
         <CardContent className="p-0">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="w-full rounded-none border-b border-border bg-muted/30 h-12">
+            <TabsList className="w-full rounded-none border-b border-border bg-muted/30 h-12 flex-wrap">
+              <TabsTrigger value="observability" className="flex-1">
+                <Eye className="h-4 w-4 mr-2" />
+                Beta Observability
+              </TabsTrigger>
               <TabsTrigger value="health" className="flex-1">
                 <Activity className="h-4 w-4 mr-2" />
                 System Health
@@ -233,6 +239,11 @@ export function OperationsConsole({ isOpen, onClose }: OperationsConsoleProps) {
                 Subscriptions
               </TabsTrigger>
             </TabsList>
+
+            {/* Beta Observability Tab - CP-4/CP-5 Live Monitoring */}
+            <TabsContent value="observability" className="p-4">
+              <BetaObservabilityPanel />
+            </TabsContent>
 
             {/* System Health Tab */}
             <TabsContent value="health" className="p-4 space-y-4">
