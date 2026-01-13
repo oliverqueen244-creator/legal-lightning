@@ -80,6 +80,7 @@ export default {
           "danger-light": "hsl(var(--court-danger-light))",
           success: "hsl(var(--court-success))",
           warning: "hsl(var(--court-warning))",
+          "positive-urgency": "hsl(var(--court-positive-urgency))",
         },
         glass: {
           DEFAULT: "hsl(var(--glass))",
