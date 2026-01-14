@@ -2,48 +2,137 @@
  * Morning Brief PDF Export
  * 
  * Generates a legal-size PDF of the morning brief.
+ * Uses the SAME format as Case Export for consistency.
  * 
  * EXPORT CONTRACT:
  * This export is intentionally black & white.
  * Do NOT add color, badges, or visual emphasis.
  * Court-print safe by design.
+ * No Virtual Court links or meeting IDs are included.
  */
 
 import { format } from 'date-fns';
 import type { MorningBrief, MorningBriefCase } from '@/hooks/useMorningBrief';
+import { 
+  EXPORT_FOOTER, 
+  NOTES_DISCLAIMER,
+  PDF_MARGINS 
+} from '@/types/export';
 
 // Legal size page dimensions
 const PAGE_WIDTH = '215.9mm';
 const PAGE_HEIGHT = '355.6mm';
-const MARGINS = { top: 15, right: 12, bottom: 15, left: 12 };
+
+// Normalize opposing counsel value
+// If petitioner → opposing is respondent_lawyer
+// If respondent → opposing is petitioner_lawyer
+// Gov cases → "State Counsel / PP"
+// Empty → "—"
+function normalizeOpposingCounsel(
+  matchedAs: 'petitioner' | 'respondent' | null,
+  petitionerLawyer: string | null,
+  respondentLawyer: string | null,
+  respondent: string | null
+): string {
+  // If matched as petitioner, opposing counsel is respondent's lawyer
+  // If matched as respondent, opposing counsel is petitioner's lawyer
+  const opposingRaw = matchedAs === 'petitioner' 
+    ? respondentLawyer 
+    : matchedAs === 'respondent'
+      ? petitionerLawyer
+      : null;
+  
+  if (opposingRaw?.trim()) {
+    return opposingRaw.trim();
+  }
+  
+  // Check if government case (common respondents)
+  const govPatterns = [
+    /state\s+of/i,
+    /union\s+of\s+india/i,
+    /government/i,
+    /municipal/i,
+    /nagar\s*(palika|nigam)/i,
+  ];
+  
+  const isGovCase = respondent && govPatterns.some(p => p.test(respondent));
+  if (isGovCase) {
+    return 'State Counsel / PP';
+  }
+  
+  return '—';
+}
+
+// Derive listing status from brief case data
+function deriveListingStatus(briefCase: MorningBriefCase): 'Normal' | 'Late Listed' {
+  return briefCase.risks.late_listed ? 'Late Listed' : 'Normal';
+}
+
+// Group cases by court/judge
+interface BriefGroup {
+  courtNo: string;
+  judgeName: string;
+  cases: MorningBriefCase[];
+}
+
+function groupCasesByCourtJudge(cases: MorningBriefCase[]): BriefGroup[] {
+  const groupMap = new Map<string, BriefGroup>();
+  
+  for (const c of cases) {
+    const key = `${c.court_room_no}::${c.judge_names || 'Unknown'}`;
+    
+    if (!groupMap.has(key)) {
+      groupMap.set(key, {
+        courtNo: c.court_room_no || 'Unknown',
+        judgeName: c.judge_names || 'Unknown',
+        cases: [],
+      });
+    }
+    
+    groupMap.get(key)!.cases.push(c);
+  }
+  
+  // Sort groups by court number
+  return Array.from(groupMap.values()).sort((a, b) => 
+    a.courtNo.localeCompare(b.courtNo, undefined, { numeric: true })
+  );
+}
 
 /**
  * Generate and print a legal-size PDF of the morning brief
+ * Matches Case Export format exactly
  */
 export function generateBriefPDF(brief: MorningBrief, lawyerName: string): void {
   const today = format(new Date(), 'dd MMM yyyy');
+  const groups = groupCasesByCourtJudge(brief.cases);
   
-  const html = `
+  // EXPORT CONTRACT:
+  // This export is intentionally black & white.
+  // Do NOT add color, badges, or visual emphasis.
+  // Court-print safe by design.
+  
+  let html = `
 <!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>Morning Brief - ${lawyerName} - ${today}</title>
+  <title>Morning Brief - ${escapeHtml(lawyerName)} - ${today}</title>
   <style>
     @page {
       size: ${PAGE_WIDTH} ${PAGE_HEIGHT};
-      margin: ${MARGINS.top}mm ${MARGINS.right}mm ${MARGINS.bottom}mm ${MARGINS.left}mm;
+      margin: ${PDF_MARGINS.top}mm ${PDF_MARGINS.right}mm ${PDF_MARGINS.bottom}mm ${PDF_MARGINS.left}mm;
     }
     
     * {
+      box-sizing: border-box;
       margin: 0;
       padding: 0;
-      box-sizing: border-box;
     }
     
+    /* BLACK & WHITE ONLY - No colors, gradients, or colored elements */
     body {
       font-family: 'Times New Roman', Times, serif;
-      font-size: 11pt;
+      font-size: 10pt;
       line-height: 1.4;
       color: #000;
       background: #fff;
@@ -51,80 +140,96 @@ export function generateBriefPDF(brief: MorningBrief, lawyerName: string): void 
     
     .header {
       text-align: center;
+      margin-bottom: 20px;
       border-bottom: 2px solid #000;
-      padding-bottom: 8pt;
-      margin-bottom: 12pt;
+      padding-bottom: 10px;
     }
     
     .header h1 {
-      font-size: 16pt;
+      font-size: 14pt;
       font-weight: bold;
-      text-transform: uppercase;
-      letter-spacing: 1pt;
-      margin-bottom: 4pt;
+      margin-bottom: 5px;
     }
     
     .header .subtitle {
       font-size: 10pt;
-      color: #333;
     }
     
-    .summary {
-      display: flex;
-      justify-content: space-between;
-      border: 1px solid #000;
-      padding: 8pt;
-      margin-bottom: 12pt;
-    }
-    
-    .summary-item {
-      text-align: center;
-    }
-    
-    .summary-item .number {
-      font-size: 18pt;
+    .header .date-scope {
+      font-size: 10pt;
       font-weight: bold;
+      margin-top: 5px;
     }
     
-    .summary-item .label {
-      font-size: 8pt;
-      text-transform: uppercase;
+    .group-header {
+      margin-top: 15px;
+      margin-bottom: 10px;
+      padding: 8px;
+      border: 1px solid #000;
+      border-left: 3px solid #000;
+      page-break-inside: avoid;
+    }
+    
+    .group-header .court {
+      font-weight: bold;
+      font-size: 11pt;
+    }
+    
+    .group-header .judge {
+      font-size: 10pt;
     }
     
     table {
       width: 100%;
       border-collapse: collapse;
-      margin-top: 8pt;
+      margin-bottom: 15px;
     }
     
-    th, td {
-      border: 1px solid #000;
-      padding: 6pt 4pt;
-      text-align: left;
-      vertical-align: top;
-      font-size: 10pt;
+    thead {
+      display: table-header-group;
     }
     
+    /* BLACK & WHITE: Header uses bold text on white, not colored background */
     th {
-      background: #f0f0f0;
+      background-color: #fff;
+      color: #000;
+      padding: 6px 4px;
+      text-align: left;
+      font-size: 9pt;
       font-weight: bold;
-      text-transform: uppercase;
-      font-size: 8pt;
+      border: 1px solid #000;
+      border-bottom: 2px solid #000;
+    }
+    
+    td {
+      padding: 5px 4px;
+      border: 1px solid #000;
+      vertical-align: top;
+      font-size: 9pt;
+      word-wrap: break-word;
     }
     
     tr {
       page-break-inside: avoid;
     }
     
-    .col-item { width: 6%; text-align: center; }
-    .col-case { width: 18%; font-family: 'Courier New', monospace; font-size: 9pt; }
-    .col-court { width: 10%; }
-    .col-parties { width: 22%; }
-    .col-readiness { width: 8%; text-align: center; }
-    .col-suggestion { width: 10%; }
-    .col-notes { 
-      width: 26%; 
-      min-height: 48px;
+    /* No alternating colors - all white */
+    
+    /* Column widths - matching Case Export layout */
+    .col-caseno { width: 15%; font-family: 'Courier New', monospace; }
+    .col-petitioner { width: 13%; }
+    .col-respondent { width: 13%; }
+    .col-opposing { width: 12%; }
+    .col-role { width: 7%; }
+    .col-listing { width: 6%; }
+    .col-outcome { width: 7%; }
+    .col-notes { width: 27%; }
+    
+    /* Lawyer Notes: 2-3 lines of writable space with dotted ruling */
+    .notes-cell {
+      white-space: pre-wrap;
+      min-height: 48px; /* ~3 lines at 16px line-height */
+      height: 48px;
       background-image: repeating-linear-gradient(
         to bottom,
         transparent,
@@ -132,20 +237,33 @@ export function generateBriefPDF(brief: MorningBrief, lawyerName: string): void 
         #ccc 15px,
         #ccc 16px
       );
+      background-size: 100% 16px;
     }
     
-    .footer {
-      margin-top: 16pt;
-      padding-top: 8pt;
-      border-top: 1px solid #000;
+    .party-cell {
       font-size: 8pt;
-      color: #666;
-      text-align: center;
+      word-wrap: break-word;
+    }
+    
+    .caseno-cell {
+      font-family: 'Courier New', monospace;
+      font-size: 8pt;
     }
     
     .disclaimer {
+      margin-top: 20px;
+      padding: 10px;
+      border: 1px solid #000;
+      font-size: 8pt;
       font-style: italic;
-      margin-bottom: 4pt;
+    }
+    
+    .page-footer {
+      text-align: center;
+      font-size: 8pt;
+      margin-top: 30px;
+      padding-top: 10px;
+      border-top: 1px solid #000;
     }
     
     @media print {
@@ -155,53 +273,54 @@ export function generateBriefPDF(brief: MorningBrief, lawyerName: string): void 
 </head>
 <body>
   <div class="header">
-    <h1>Morning Brief</h1>
-    <div class="subtitle">${lawyerName} • Date: ${today} • Generated at ${format(new Date(brief.generated_at), 'HH:mm')}</div>
+    <h1>Morning Brief — ${escapeHtml(lawyerName)}</h1>
+    <div class="subtitle">Generated on ${today} | Total Cases: ${brief.total_cases}</div>
+    <div class="date-scope">Date: ${today}</div>
   </div>
-  
-  <div class="summary">
-    <div class="summary-item">
-      <div class="number">${brief.total_cases}</div>
-      <div class="label">Total Cases</div>
-    </div>
-    <div class="summary-item">
-      <div class="number">${brief.summary.attend_count}</div>
-      <div class="label">Attend</div>
-    </div>
-    <div class="summary-item">
-      <div class="number">${brief.summary.delegate_count}</div>
-      <div class="label">Delegate</div>
-    </div>
-    <div class="summary-item">
-      <div class="number">${brief.summary.monitor_count}</div>
-      <div class="label">Monitor</div>
-    </div>
-    <div class="summary-item">
-      <div class="number">${brief.summary.high_risk_count}</div>
-      <div class="label">High Risk</div>
-    </div>
+`;
+
+  // Generate each group
+  for (const group of groups) {
+    html += `
+  <div class="group-header">
+    <div class="court">Court No.: ${escapeHtml(group.courtNo)}</div>
+    <div class="judge">Presiding Judge: ${escapeHtml(group.judgeName)}</div>
   </div>
   
   <table>
     <thead>
       <tr>
-        <th class="col-item">#</th>
-        <th class="col-case">Case No.</th>
-        <th class="col-court">Court</th>
-        <th class="col-parties">Parties</th>
-        <th class="col-readiness">Ready</th>
-        <th class="col-suggestion">Action</th>
-        <th class="col-notes">Notes</th>
+        <th class="col-caseno">Case No.</th>
+        <th class="col-petitioner">Petitioner</th>
+        <th class="col-respondent">Respondent</th>
+        <th class="col-opposing">Opp. Counsel</th>
+        <th class="col-role">Role</th>
+        <th class="col-listing">Listing</th>
+        <th class="col-outcome">Outcome</th>
+        <th class="col-notes">Lawyer Notes</th>
       </tr>
     </thead>
     <tbody>
-      ${brief.cases.map((c) => generateCaseRow(c)).join('')}
+`;
+
+    for (const c of group.cases) {
+      html += generateCaseRow(c);
+    }
+
+    html += `
     </tbody>
   </table>
+`;
+  }
+
+  // Add disclaimer and footer (matching Case Export)
+  html += `
+  <div class="disclaimer">
+    ${NOTES_DISCLAIMER}
+  </div>
   
-  <div class="footer">
-    <div class="disclaimer">System-generated assistance. Verify against official court records.</div>
-    <div>Exported from NyayHub • ${today}</div>
+  <div class="page-footer">
+    ${EXPORT_FOOTER}
   </div>
 </body>
 </html>
@@ -221,44 +340,50 @@ export function generateBriefPDF(brief: MorningBrief, lawyerName: string): void 
 }
 
 function generateCaseRow(c: MorningBriefCase): string {
-  const petitioner = c.petitioner || '—';
-  const respondent = c.respondent || '—';
-  const parties = `${truncate(petitioner, 30)} v. ${truncate(respondent, 30)}`;
+  const petitionerDisplay = c.petitioner?.trim() || '—';
+  const respondentDisplay = c.respondent?.trim() || '—';
   
-  const risks: string[] = [];
-  if (c.risks.missing_documents) risks.push('No docs');
-  if (c.risks.pending_review) risks.push('Pending');
-  if (c.risks.low_readiness) risks.push('Low prep');
-  if (c.risks.late_listed) risks.push('Late');
+  // Derive opposing counsel from the brief case data
+  const opposingCounsel = normalizeOpposingCounsel(
+    c.matched_as,
+    c.petitioner_lawyer,
+    c.respondent_lawyer,
+    c.respondent
+  );
   
-  const riskText = risks.length > 0 ? ` [${risks.join(', ')}]` : '';
+  // Role from matched_as
+  const role = c.matched_as === 'petitioner' 
+    ? 'Petitioner' 
+    : c.matched_as === 'respondent' 
+      ? 'Respondent' 
+      : '—';
+  
+  // Listing status
+  const listingStatus = deriveListingStatus(c);
+  
+  // Outcome - not available in morning brief (it's for today), show "—"
+  const outcome = '—';
   
   return `
-    <tr>
-      <td class="col-item">${c.item_no}</td>
-      <td class="col-case">${escapeHtml(c.case_number)}</td>
-      <td class="col-court">${c.court_room_no}<br/>${c.court_location}</td>
-      <td class="col-parties">${escapeHtml(parties)}${riskText}</td>
-      <td class="col-readiness">${c.readiness.total}%</td>
-      <td class="col-suggestion">${capitalize(c.suggestion)}</td>
-      <td class="col-notes"></td>
-    </tr>
-  `;
-}
-
-function truncate(str: string, maxLen: number): string {
-  if (str.length <= maxLen) return str;
-  return str.substring(0, maxLen - 1) + '…';
+      <tr>
+        <td class="col-caseno caseno-cell">${escapeHtml(c.case_number)}</td>
+        <td class="col-petitioner party-cell">${escapeHtml(petitionerDisplay)}</td>
+        <td class="col-respondent party-cell">${escapeHtml(respondentDisplay)}</td>
+        <td class="col-opposing party-cell">${escapeHtml(opposingCounsel)}</td>
+        <td class="col-role">${role}</td>
+        <td class="col-listing">${listingStatus}</td>
+        <td class="col-outcome">${outcome}</td>
+        <td class="col-notes notes-cell"> </td>
+      </tr>
+`;
 }
 
 function escapeHtml(str: string): string {
+  if (!str) return '';
   return str
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-
-function capitalize(str: string): string {
-  return str.charAt(0).toUpperCase() + str.slice(1);
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
 }

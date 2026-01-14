@@ -24,6 +24,8 @@ export interface MorningBriefCase {
   date: string;
   petitioner: string | null;
   respondent: string | null;
+  petitioner_lawyer: string | null;
+  respondent_lawyer: string | null;
   status: string;
   judge_names: string | null;
   matched_as: 'petitioner' | 'respondent' | null;
@@ -391,6 +393,8 @@ export function useMorningBrief() {
           date: docket.date,
           petitioner: docket.petitioner,
           respondent: docket.respondent,
+          petitioner_lawyer: docket.petitioner_lawyer,
+          respondent_lawyer: docket.respondent_lawyer,
           status: docket.status || 'pending',
           judge_names: docket.judge_names,
           matched_as,
