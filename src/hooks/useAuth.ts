@@ -3,7 +3,7 @@ import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import type { Profile } from '@/types/database';
 
-export type AppRole = 'SENIOR' | 'JUNIOR' | 'CLERK' | 'ADMIN';
+export type AppRole = 'SENIOR' | 'JUNIOR' | 'CLERK' | 'ADMIN' | 'INTERN';
 
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null);

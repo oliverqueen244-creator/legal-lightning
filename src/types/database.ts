@@ -1,6 +1,6 @@
 export interface Profile {
   id: string;
-  role: 'SENIOR' | 'JUNIOR' | 'CLERK' | string | null;
+  role: 'SENIOR' | 'JUNIOR' | 'CLERK' | 'ADMIN' | 'INTERN' | string | null;
   full_name: string | null;
   whatsapp_number: string | null;
   bar_registration_number: string | null;
