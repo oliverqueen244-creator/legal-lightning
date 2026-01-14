@@ -56,6 +56,11 @@ function getMonthName(month: number): string {
   return months[month - 1] || '';
 }
 
+// Format party name with null-safe fallback
+function formatPartyName(name: string | null): string {
+  return name?.trim() || '—';
+}
+
 // Generate CSV content
 export function generateCSV(data: ExportData): string {
   const lines: string[] = [];
@@ -70,6 +75,8 @@ export function generateCSV(data: ExportData): string {
         escapeCSV(caseItem.caseNo),
         escapeCSV(caseItem.caseType),
         caseItem.year.toString(),
+        escapeCSV(formatPartyName(caseItem.petitioner)),
+        escapeCSV(formatPartyName(caseItem.respondent)),
         caseItem.advocateRole,
         escapeCSV(caseItem.outcome || ''),
         escapeCSV(caseItem.dateRange),
@@ -112,6 +119,8 @@ export function generateExcel(data: ExportData): Blob {
         caseItem.caseNo,
         caseItem.caseType,
         caseItem.year.toString(),
+        formatPartyName(caseItem.petitioner),
+        formatPartyName(caseItem.respondent),
         caseItem.advocateRole,
         caseItem.outcome || '',
         caseItem.dateRange,
@@ -241,17 +250,25 @@ export function generatePDFContent(data: ExportData, pageSize: 'a4' | 'legal'): 
       background-color: #fafafa;
     }
     
-    .col-caseno { width: 20%; }
-    .col-type { width: 10%; }
-    .col-year { width: 6%; }
-    .col-role { width: 10%; }
-    .col-outcome { width: 10%; }
-    .col-dates { width: 20%; }
-    .col-notes { width: 24%; }
+    .col-caseno { width: 14%; }
+    .col-type { width: 8%; }
+    .col-year { width: 5%; }
+    .col-petitioner { width: 14%; }
+    .col-respondent { width: 14%; }
+    .col-role { width: 8%; }
+    .col-outcome { width: 8%; }
+    .col-dates { width: 12%; }
+    .col-notes { width: 17%; min-height: 45px; }
     
     .notes-cell {
       white-space: pre-wrap;
       max-height: none;
+      min-height: 45px; /* 2-3 lines of space for handwritten notes */
+    }
+    
+    .party-cell {
+      font-size: 8pt;
+      word-wrap: break-word;
     }
     
     .footer {
@@ -305,9 +322,11 @@ export function generatePDFContent(data: ExportData, pageSize: 'a4' | 'legal'): 
     <thead>
       <tr>
         <th class="col-caseno">Case No.</th>
-        <th class="col-type">Case Type</th>
+        <th class="col-type">Type</th>
         <th class="col-year">Year</th>
-        <th class="col-role">Advocate Role</th>
+        <th class="col-petitioner">Petitioner</th>
+        <th class="col-respondent">Respondent</th>
+        <th class="col-role">Role</th>
         <th class="col-outcome">Outcome</th>
         <th class="col-dates">Date Range</th>
         <th class="col-notes">Lawyer Notes</th>
@@ -317,15 +336,20 @@ export function generatePDFContent(data: ExportData, pageSize: 'a4' | 'legal'): 
 `;
     
     for (const caseItem of group.cases) {
+      const petitionerDisplay = caseItem.petitioner?.trim() || '—';
+      const respondentDisplay = caseItem.respondent?.trim() || '—';
+      
       html += `
       <tr>
         <td class="col-caseno">${escapeHTML(caseItem.caseNo)}</td>
         <td class="col-type">${escapeHTML(caseItem.caseType)}</td>
         <td class="col-year">${caseItem.year}</td>
+        <td class="col-petitioner party-cell">${escapeHTML(petitionerDisplay)}</td>
+        <td class="col-respondent party-cell">${escapeHTML(respondentDisplay)}</td>
         <td class="col-role">${caseItem.advocateRole}</td>
         <td class="col-outcome">${escapeHTML(caseItem.outcome || '—')}</td>
         <td class="col-dates">${escapeHTML(caseItem.dateRange)}</td>
-        <td class="col-notes notes-cell">${escapeHTML(caseItem.lawyerNotes) || '—'}</td>
+        <td class="col-notes notes-cell">${escapeHTML(caseItem.lawyerNotes) || ' '}</td>
       </tr>
 `;
     }
