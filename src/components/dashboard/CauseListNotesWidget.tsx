@@ -4,6 +4,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AlertTriangle, FileText, Info, Megaphone } from 'lucide-react';
+import { VCBetaWarning } from './VCBetaWarning';
 
 interface CauseListNotesWidgetProps {
   date?: string;
@@ -123,6 +124,11 @@ export function CauseListNotesWidget({ date, bench }: CauseListNotesWidgetProps)
         <p className="text-[9px] text-muted-foreground text-center">
           ⚠️ Notes affect case scheduling but do not guarantee hearing. Actual proceedings may vary.
         </p>
+      </div>
+
+      {/* Beta Warning with fallback VC Meeting IDs */}
+      <div className="px-3 pb-3">
+        <VCBetaWarning />
       </div>
     </div>
   );

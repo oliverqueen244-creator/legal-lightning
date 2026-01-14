@@ -13,7 +13,7 @@ import { Video, Loader2, AlertTriangle } from 'lucide-react';
 import { useVirtualCourt } from '@/hooks/useVirtualCourt';
 import { useInternPermissions } from '@/hooks/useInternPermissions';
 import { cn } from '@/lib/utils';
-
+import { VCBetaBadge } from './VCBetaWarning';
 interface CaseVirtualCourtButtonProps {
   courtLocation: string | null | undefined;
   courtRoomNo: string | null | undefined;
@@ -104,6 +104,7 @@ export function CaseVirtualCourtButton({
             >
               <Video className="h-4 w-4 mr-1.5" />
               {compact ? 'VC' : vcData.isValid ? 'Join Virtual Court' : 'VC Not Verified'}
+              {compact && <VCBetaBadge className="ml-1" />}
             </Button>
           </TooltipTrigger>
           <TooltipContent side="top" className="max-w-xs">
