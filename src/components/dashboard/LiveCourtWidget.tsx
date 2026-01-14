@@ -233,18 +233,18 @@ export function LiveCourtWidget({
 
       {/* Giant Item Number or Not In Session Message */}
       {/* FIX 2: De-absolutized messaging - context added */}
+      {/* DECLUTTER: Reduced visual weight of Moon icon and "not in session" text */}
       <div className="text-center py-8 relative z-10">
         {!courtHoursStatus.inSession ? (
           <>
-            <Moon className="h-16 w-16 text-muted-foreground mx-auto mb-3 opacity-50" />
-            <p className="text-muted-foreground text-lg">Courts not in session</p>
-            <p className="text-sm text-muted-foreground mt-1">As per last update · {courtHoursStatus.reason}</p>
+            <Moon className="h-12 w-12 text-muted-foreground/40 mx-auto mb-2" />
+            <p className="text-muted-foreground/70 text-sm">Courts not in session</p>
+            <p className="text-[10px] text-muted-foreground/50 mt-1">{courtHoursStatus.reason}</p>
           </>
         ) : !isActive ? (
           <>
-            <Ban className="h-16 w-16 text-muted-foreground mx-auto mb-3 opacity-50" />
-            <p className="text-muted-foreground text-lg">Court not sitting today</p>
-            <p className="text-sm text-muted-foreground mt-1">As per last update</p>
+            <Ban className="h-12 w-12 text-muted-foreground/40 mx-auto mb-2" />
+            <p className="text-muted-foreground/70 text-sm">Court not sitting today</p>
           </>
         ) : (
           <>

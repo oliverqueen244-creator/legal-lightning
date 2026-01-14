@@ -185,11 +185,11 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Main Content */}
-        <main className="container mx-auto px-4 py-6">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Main Content - DECLUTTER: Normalized vertical rhythm with consistent spacing */}
+        <main className="container mx-auto px-4 py-8">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             {/* Left: Cause List with Tabs */}
-            <div className="lg:col-span-2 space-y-4">
+            <div className="lg:col-span-2 space-y-6">
               {/* COURT-SAFETY: Data freshness indicator - always visible */}
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
@@ -339,13 +339,12 @@ export default function Dashboard() {
                 )}
 
                 <TabsContent value="brief" className="mt-0 space-y-6">
-                  {isSenior && (
-                    <div className="mb-4 p-3 rounded-lg bg-primary/5 border border-primary/20">
-                      <p className="text-sm text-muted-foreground">
-                        <span className="font-medium text-foreground">As of last sync:</span> {dailyItems.length} cases scheduled, {supplementaryItems.length} supplementary
-                      </p>
-                    </div>
-                  )}
+                {/* DECLUTTER: Status strip - demoted to subtle inline text, no border/background */}
+                {isSenior && (
+                  <p className="text-xs text-muted-foreground mb-4">
+                    <span className="opacity-70">As of last sync:</span> {dailyItems.length} cases scheduled, {supplementaryItems.length} supplementary
+                  </p>
+                )}
                   <MorningBriefPanel
                     brief={morningBrief}
                     isLoading={briefLoading}
@@ -499,9 +498,9 @@ export default function Dashboard() {
               </Tabs>
             </div>
 
-            {/* Right: Live Court Widget & Ticker */}
-            <div className="lg:col-span-1 space-y-6">
-              <div className="sticky top-24 space-y-6">
+            {/* Right: Live Court Widget & Ticker - DECLUTTER: Normalized spacing */}
+            <div className="lg:col-span-1 space-y-5">
+              <div className="sticky top-24 space-y-5">
                 {/* Live Court Widget - Giant Status Display */}
                 {liveBoardLoading ? (
                   <Skeleton className="h-80 w-full rounded-lg" />

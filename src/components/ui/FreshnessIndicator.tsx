@@ -75,40 +75,47 @@ export function FreshnessIndicator({
 
   const status = getFreshnessStatus(secondsSince, isOnline);
 
+  // DECLUTTER: Only primary "Connected" stays visually prominent (green)
+  // All other freshness indicators: reduced opacity, no pill styling, smaller font, neutral color
   const statusConfig: Record<FreshnessStatus, {
     icon: typeof Wifi;
     color: string;
     bgColor: string;
     dotColor: string;
     label: string;
+    isPrimary: boolean;
   }> = {
     live: {
       icon: Wifi,
-      color: 'text-green-500',
-      bgColor: 'bg-green-500/10',
-      dotColor: 'bg-green-500',
+      color: 'text-court-success',
+      bgColor: 'bg-court-success/10',
+      dotColor: 'bg-court-success',
       label: 'Connected',  // P1-1: "Live" → "Connected" to avoid implying real-time guarantee
+      isPrimary: true,
     },
     recent: {
       icon: Clock,
-      color: 'text-green-400',
-      bgColor: 'bg-green-500/10',
-      dotColor: 'bg-green-400',
+      color: 'text-muted-foreground',
+      bgColor: 'bg-transparent',
+      dotColor: 'bg-muted-foreground/50',
       label: 'Updated',
+      isPrimary: false,
     },
     stale: {
       icon: AlertTriangle,
-      color: 'text-yellow-500',
-      bgColor: 'bg-yellow-500/10',
-      dotColor: 'bg-yellow-500',
+      color: 'text-muted-foreground',
+      bgColor: 'bg-transparent',
+      dotColor: 'bg-yellow-500/50',
       label: 'Stale',
+      isPrimary: false,
     },
     'very-stale': {
       icon: AlertTriangle,
-      color: 'text-destructive',
-      bgColor: 'bg-destructive/10',
-      dotColor: 'bg-destructive',
+      color: 'text-destructive/70',
+      bgColor: 'bg-transparent',
+      dotColor: 'bg-destructive/50',
       label: 'Very stale',
+      isPrimary: false,
     },
     offline: {
       icon: WifiOff,
@@ -116,13 +123,15 @@ export function FreshnessIndicator({
       bgColor: 'bg-destructive/10',
       dotColor: 'bg-destructive',
       label: 'Offline',
+      isPrimary: true, // Keep offline prominent as it's critical
     },
     unknown: {
       icon: Clock,
-      color: 'text-muted-foreground',
-      bgColor: 'bg-muted',
-      dotColor: 'bg-muted-foreground',
-      label: 'Freshness unavailable',
+      color: 'text-muted-foreground/60',
+      bgColor: 'bg-transparent',
+      dotColor: 'bg-muted-foreground/30',
+      label: '',
+      isPrimary: false,
     },
   };
 
@@ -132,34 +141,43 @@ export function FreshnessIndicator({
   const iconSize = size === 'sm' ? 'h-3 w-3' : 'h-4 w-4';
   const dotSize = size === 'sm' ? 'h-1.5 w-1.5' : 'h-2 w-2';
 
+  // DECLUTTER: Non-primary indicators are smaller and less visually prominent
+  const effectiveSizeClasses = config.isPrimary 
+    ? sizeClasses 
+    : 'text-[10px] px-1.5 py-0.5';
+
   return (
     <div
       role="status"
       aria-live="polite"
       aria-label={`Data freshness: ${config.label}, ${formatTimeSince(secondsSince)}`}
       className={cn(
-        'inline-flex items-center gap-1.5 rounded-full font-medium transition-colors',
+        'inline-flex items-center gap-1 transition-colors',
+        config.isPrimary ? 'rounded-full font-medium' : 'rounded font-normal opacity-80',
         config.bgColor,
         config.color,
-        sizeClasses,
+        effectiveSizeClasses,
         className
       )}
     >
-      {/* Pulsing dot for live status */}
-      <span className={cn(
-        'rounded-full shrink-0',
-        dotSize,
-        config.dotColor,
-        status === 'live' && 'animate-pulse'
-      )} />
+      {/* Pulsing dot for live status only */}
+      {config.isPrimary && (
+        <span className={cn(
+          'rounded-full shrink-0',
+          dotSize,
+          config.dotColor,
+          status === 'live' && 'animate-pulse'
+        )} />
+      )}
       
-      {showLabel && (
+      {showLabel && config.label && (
         <span className="shrink-0">{config.label}</span>
       )}
       
-      <span className="opacity-80">|</span>
+      {/* DECLUTTER: Removed separator for non-primary states */}
+      {config.isPrimary && showLabel && <span className="opacity-50">|</span>}
       
-      <span>{formatTimeSince(secondsSince)}</span>
+      <span className={cn(!config.isPrimary && 'opacity-70')}>{formatTimeSince(secondsSince)}</span>
       
       {onRefresh && (
         <button

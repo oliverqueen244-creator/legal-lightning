@@ -119,12 +119,10 @@ export function CauseListNotesWidget({ date, bench }: CauseListNotesWidgetProps)
         </div>
       </ScrollArea>
       
-      {/* Non-promissory disclaimer */}
-      <div className="px-3 py-2 bg-muted/30 border-t border-border/30">
-        <p className="text-[9px] text-muted-foreground text-center">
-          ⚠️ Notes affect case scheduling but do not guarantee hearing. Actual proceedings may vary.
-        </p>
-      </div>
+      {/* DECLUTTER: Demoted disclaimer - smaller, italic, no background */}
+      <p className="px-3 py-2 text-[9px] text-muted-foreground/60 text-center italic">
+        Notes affect case scheduling but do not guarantee hearing. Actual proceedings may vary.
+      </p>
 
       {/* Beta Warning with fallback VC Meeting IDs */}
       <div className="px-3 pb-3">

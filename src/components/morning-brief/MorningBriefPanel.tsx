@@ -2,7 +2,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Separator } from '@/components/ui/separator';
 import { AiDisclaimer } from '@/components/ui/AiDisclaimer';
 import { FreshnessIndicator } from '@/components/ui/FreshnessIndicator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -226,78 +225,77 @@ export function MorningBriefPanel({ brief, isLoading, onRefresh }: MorningBriefP
 
   return (
     <TooltipProvider>
-    <Card className="glass-card border-none bg-transparent shadow-none">
-      <CardHeader className="pb-4 px-0">
-        <CardTitle className="flex items-center justify-between font-display tracking-wide">
-          <div className="flex items-center gap-2 text-xl">
-            <Sun className="h-5 w-5 text-primary" />
-            Today's Brief
-          </div>
-          {/* COURT-SAFETY: Freshness indicator - always visible */}
-          <FreshnessIndicator
-            lastUpdated={brief.generated_at}
-            onRefresh={onRefresh}
-            size="sm"
-          />
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-6 px-0">
-        {/* AI Disclaimer - MANDATORY, NOT DISMISSIBLE */}
-        <AiDisclaimer />
-        {/* Summary stats - larger, clearer - labels prefixed with "Suggested:" */}
-        <div className="grid grid-cols-4 gap-3">
-          <div className="text-center p-3 rounded-lg bg-muted/50">
-            <p className="text-3xl font-bold text-foreground">{brief.total_cases}</p>
-            <p className="text-xs text-muted-foreground mt-1">Total</p>
-          </div>
-          <div className="text-center p-3 rounded-lg bg-court-danger/5 border border-court-danger/20">
-            <p className="text-3xl font-bold text-court-danger-light">{brief.summary.attend_count}</p>
-            <p className="text-xs text-muted-foreground mt-1">Sugg. Attend</p>
-          </div>
-          <div className="text-center p-3 rounded-lg bg-court-success/5 border border-court-success/20">
-            <p className="text-3xl font-bold text-court-success">{brief.summary.delegate_count}</p>
-            <p className="text-xs text-muted-foreground mt-1">Sugg. Delegate</p>
-          </div>
-          <div className="text-center p-3 rounded-lg bg-muted/30 border border-border/50">
-            <p className="text-3xl font-bold text-muted-foreground">{brief.summary.monitor_count}</p>
-            <p className="text-xs text-muted-foreground mt-1">Sugg. Monitor</p>
-          </div>
+    {/* DECLUTTER: Today's Brief as section header, not boxed module - removed Card wrapper */}
+    <div className="space-y-5">
+      {/* Section header with subtle divider instead of box */}
+      <div className="flex items-center justify-between pb-3 border-b border-border/30">
+        <div className="flex items-center gap-2">
+          <Sun className="h-5 w-5 text-primary" />
+          <h2 className="font-display text-xl tracking-wide text-foreground">Today's Brief</h2>
         </div>
+        {/* DECLUTTER: Freshness indicator - demoted, smaller, less prominent */}
+        <FreshnessIndicator
+          lastUpdated={brief.generated_at}
+          onRefresh={onRefresh}
+          size="sm"
+          showLabel={false}
+        />
+      </div>
 
-        {/* High risk alert */}
-        {brief.summary.high_risk_count > 0 && (
-          <div className="flex items-center gap-2 p-3 rounded-lg bg-court-danger/10 border border-court-danger/30">
-            <AlertTriangle className="h-5 w-5 text-court-danger-light flex-shrink-0" />
-            <p className="text-sm text-court-danger-light">
-              <strong>{brief.summary.high_risk_count}</strong> case{brief.summary.high_risk_count !== 1 ? 's' : ''} need{brief.summary.high_risk_count === 1 ? 's' : ''} immediate attention
-            </p>
-          </div>
-        )}
+      {/* AI Disclaimer - MANDATORY, NOT DISMISSIBLE - now subtle */}
+      <AiDisclaimer />
+      
+      {/* DECLUTTER: Summary stats - removed borders/backgrounds from cards, cleaner flow */}
+      <div className="grid grid-cols-4 gap-3">
+        <div className="text-center py-2">
+          <p className="text-3xl font-bold text-foreground">{brief.total_cases}</p>
+          <p className="text-[10px] text-muted-foreground mt-0.5 uppercase tracking-wide">Total</p>
+        </div>
+        <div className="text-center py-2">
+          <p className="text-3xl font-bold text-court-danger-light">{brief.summary.attend_count}</p>
+          <p className="text-[10px] text-muted-foreground mt-0.5 uppercase tracking-wide">Attend</p>
+        </div>
+        <div className="text-center py-2">
+          <p className="text-3xl font-bold text-court-success">{brief.summary.delegate_count}</p>
+          <p className="text-[10px] text-muted-foreground mt-0.5 uppercase tracking-wide">Delegate</p>
+        </div>
+        <div className="text-center py-2">
+          <p className="text-3xl font-bold text-muted-foreground">{brief.summary.monitor_count}</p>
+          <p className="text-[10px] text-muted-foreground mt-0.5 uppercase tracking-wide">Monitor</p>
+        </div>
+      </div>
 
-        <Separator />
+      {/* DECLUTTER: High risk alert - softened to status strip, reduced height/padding, no icon */}
+      {brief.summary.high_risk_count > 0 && (
+        <div className="flex items-center justify-center gap-1.5 py-1.5 px-3 rounded text-xs text-court-danger-light bg-court-danger/5">
+          <span className="font-semibold">{brief.summary.high_risk_count}</span>
+          <span className="opacity-80">case{brief.summary.high_risk_count !== 1 ? 's' : ''} need{brief.summary.high_risk_count === 1 ? 's' : ''} attention</span>
+        </div>
+      )}
 
-        {/* Case list */}
-        <ScrollArea className="h-[400px] legal-scroll pr-4">
-          <div className="space-y-3">
-            {brief.cases.map((caseItem) => (
-              <CaseCard key={caseItem.id} caseItem={caseItem} />
-            ))}
-          </div>
-        </ScrollArea>
+      {/* DECLUTTER: Removed Separator, relying on whitespace for structure */}
+      
+      {/* Case list */}
+      <ScrollArea className="h-[400px] legal-scroll pr-4">
+        <div className="space-y-3">
+          {brief.cases.map((caseItem) => (
+            <CaseCard key={caseItem.id} caseItem={caseItem} />
+          ))}
+        </div>
+      </ScrollArea>
 
-        {/* Refresh button */}
-        {onRefresh && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-full"
-            onClick={onRefresh}
-          >
-            Refresh Brief
-          </Button>
-        )}
-      </CardContent>
-    </Card>
+      {/* Refresh button */}
+      {onRefresh && (
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-full"
+          onClick={onRefresh}
+        >
+          Refresh Brief
+        </Button>
+      )}
+    </div>
     </TooltipProvider>
   );
 }
