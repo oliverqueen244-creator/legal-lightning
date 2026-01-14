@@ -28,6 +28,34 @@ export function validateNotes(cases: ExportCase[]): { valid: boolean; errors: st
   return { valid: errors.length === 0, errors };
 }
 
+// Format date scope for display
+function formatDateScope(data: ExportData): string {
+  if (!data.dateScope) return '';
+  
+  if (data.dateScope.mode === 'today') {
+    return `Export scope: ${data.exportDate} (Today)`;
+  }
+  
+  if (data.dateScope.start && data.dateScope.end) {
+    const formatDate = (dateStr: string) => {
+      try {
+        const [year, month, day] = dateStr.split('-');
+        return `${day} ${getMonthName(parseInt(month))} ${year}`;
+      } catch {
+        return dateStr;
+      }
+    };
+    return `Export scope: ${formatDate(data.dateScope.start)} → ${formatDate(data.dateScope.end)}`;
+  }
+  
+  return '';
+}
+
+function getMonthName(month: number): string {
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return months[month - 1] || '';
+}
+
 // Generate CSV content
 export function generateCSV(data: ExportData): string {
   const lines: string[] = [];
@@ -51,8 +79,9 @@ export function generateCSV(data: ExportData): string {
     }
   }
   
-  // Add disclaimer at end
+  // Add date scope and disclaimers at end
   lines.push('');
+  lines.push(`"${formatDateScope(data)}"`);
   lines.push(`"${NOTES_DISCLAIMER}"`);
   lines.push(`"${EXPORT_FOOTER}"`);
   
@@ -92,8 +121,9 @@ export function generateExcel(data: ExportData): Blob {
     }
   }
   
-  // Add disclaimer at end
+  // Add date scope and disclaimers at end
   lines.push('');
+  lines.push(formatDateScope(data));
   lines.push(NOTES_DISCLAIMER);
   lines.push(EXPORT_FOOTER);
   
@@ -105,6 +135,7 @@ export function generateExcel(data: ExportData): Blob {
 export function generatePDFContent(data: ExportData, pageSize: 'a4' | 'legal'): string {
   const pageWidth = pageSize === 'a4' ? '210mm' : '215.9mm';
   const pageHeight = pageSize === 'a4' ? '297mm' : '355.6mm';
+  const dateScopeText = formatDateScope(data);
   
   let html = `
 <!DOCTYPE html>
@@ -147,6 +178,12 @@ export function generatePDFContent(data: ExportData, pageSize: 'a4' | 'legal'): 
     .header .subtitle {
       font-size: 10pt;
       color: #444;
+    }
+    
+    .header .date-scope {
+      font-size: 9pt;
+      color: #666;
+      margin-top: 3px;
     }
     
     .group-header {
@@ -252,6 +289,7 @@ export function generatePDFContent(data: ExportData, pageSize: 'a4' | 'legal'): 
   <div class="header">
     <h1>Case Record - ${escapeHTML(data.lawyerName)}</h1>
     <div class="subtitle">Generated on ${data.exportDate} | Total Cases: ${data.totalCases}</div>
+    ${dateScopeText ? `<div class="date-scope">${escapeHTML(dateScopeText)}</div>` : ''}
   </div>
 `;
 

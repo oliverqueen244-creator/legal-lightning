@@ -2020,6 +2020,33 @@ export type Database = {
           },
         ]
       }
+      lawyer_case_notes: {
+        Row: {
+          case_fingerprint: string
+          created_at: string
+          id: string
+          lawyer_id: string
+          notes: string
+          updated_at: string
+        }
+        Insert: {
+          case_fingerprint: string
+          created_at?: string
+          id?: string
+          lawyer_id: string
+          notes?: string
+          updated_at?: string
+        }
+        Update: {
+          case_fingerprint?: string
+          created_at?: string
+          id?: string
+          lawyer_id?: string
+          notes?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       live_board_cache: {
         Row: {
           court_location: string
