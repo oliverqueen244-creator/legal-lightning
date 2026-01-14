@@ -59,6 +59,7 @@ export interface MorningBriefCase {
 
 export interface MorningBrief {
   generated_at: string;
+  briefDate: string; // The date this brief is for
   total_cases: number;
   cases: MorningBriefCase[];
   lawyerName: string; // Name of the lawyer for this brief
@@ -272,15 +273,16 @@ async function fetchBatchedCaseData(
 }
 
 // Main Morning Brief hook - PHASE 2.1: N+1 FIX
-export function useMorningBrief() {
+export function useMorningBrief(selectedDate?: string) {
   const { user } = useAuth();
+  
+  // Use provided date or default to today
+  const targetDate = selectedDate || new Date().toISOString().split('T')[0];
 
   return useQuery({
-    queryKey: ['morning-brief', user?.id],
+    queryKey: ['morning-brief', user?.id, targetDate],
     queryFn: async (): Promise<MorningBrief> => {
       if (!user) throw new Error('Not authenticated');
-
-      const today = new Date().toISOString().split('T')[0];
 
       // Fetch user's profile and aliases in parallel
       const [profileResult, aliasResult] = await Promise.all([
@@ -298,11 +300,11 @@ export function useMorningBrief() {
       const lawyerName = profileResult.data?.full_name || 'Advocate';
       const aliasNames = aliasResult.data?.map((a) => a.alias_name.toLowerCase()) || [];
 
-      // Fetch today's docket for the user
+      // Fetch docket for the target date
       const { data: docketItems, error: docketError } = await supabase
         .from('daily_court_docket')
         .select('*')
-        .eq('date', today)
+        .eq('date', targetDate)
         .eq('matched_profile_id', user.id)
         .order('item_no', { ascending: true });
 
@@ -311,12 +313,12 @@ export function useMorningBrief() {
       // If no matched cases, try to find by aliases
       let cases = docketItems || [];
       if (cases.length === 0 && aliasNames.length > 0) {
-        const { data: allTodayCases } = await supabase
+        const { data: allDateCases } = await supabase
           .from('daily_court_docket')
           .select('*')
-          .eq('date', today);
+          .eq('date', targetDate);
 
-        cases = (allTodayCases || []).filter((c) => {
+        cases = (allDateCases || []).filter((c) => {
           const petLawyer = c.petitioner_lawyer?.toLowerCase() || '';
           const resLawyer = c.respondent_lawyer?.toLowerCase() || '';
           return aliasNames.some(
@@ -431,6 +433,7 @@ export function useMorningBrief() {
 
       return {
         generated_at: new Date().toISOString(),
+        briefDate: targetDate,
         total_cases: briefCases.length,
         cases: briefCases,
         lawyerName,

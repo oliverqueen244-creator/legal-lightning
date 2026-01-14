@@ -68,7 +68,7 @@ export default function Dashboard() {
   
   const { data: docket, isLoading: docketLoading, refetch, dataUpdatedAt: docketUpdatedAt, isFetching: docketFetching } = useDocket(formattedDate);
   const { data: liveBoards, isLoading: liveBoardLoading, dataUpdatedAt: liveBoardUpdatedAt, isFetching: liveBoardFetching, refetch: refetchLiveBoard } = useLiveBoard();
-  const { data: morningBrief, isLoading: briefLoading, refetch: refetchBrief, dataUpdatedAt: briefUpdatedAt, isFetching: briefFetching } = useMorningBrief();
+  const { data: morningBrief, isLoading: briefLoading, refetch: refetchBrief, dataUpdatedAt: briefUpdatedAt, isFetching: briefFetching } = useMorningBrief(formattedDate);
   const { data: pendingCaptures } = usePendingCaptures();
   const { data: upcomingCases, isLoading: upcomingLoading, dataUpdatedAt: upcomingUpdatedAt, isFetching: upcomingFetching, refetch: refetchUpcoming } = useUpcomingCases();
   const { isCourtModeEnabled } = useCourtMode();
