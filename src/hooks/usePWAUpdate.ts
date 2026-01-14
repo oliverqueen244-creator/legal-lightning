@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback, useState } from 'react';
 import { useRegisterSW } from 'virtual:pwa-register/react';
 import { usePWAUpdateSafety } from './usePWAUpdateSafety';
 import { useNetworkStatus } from './useNetworkStatus';
+import { usePendingSync } from './usePendingSync';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -19,6 +20,10 @@ import { supabase } from '@/integrations/supabase/client';
  * 1. If app is hidden AND isSafeToReload === true → Silent reload
  * 2. If app is visible AND isSafeToReload === true → Defer until next route change or hidden
  * 3. If isSafeToReload === false → DO NOT reload, show toast
+ * 
+ * PRE-RELOAD SYNC (Phase 3):
+ * - Before any reload, attempt to sync pending mutations
+ * - Only proceed after successful sync OR explicit user confirmation
  * 
  * NEVER reload if user would lose data or notice disruption.
  */
@@ -41,12 +46,14 @@ export interface PWAUpdateState {
 export function usePWAUpdate(): PWAUpdateState {
   const { isSafeToReload, blockingReasons, isVisible } = usePWAUpdateSafety();
   const { isOnline } = useNetworkStatus();
+  const { pendingCount, syncPendingMutations, isSyncing } = usePendingSync();
   
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [isChecking, setIsChecking] = useState(false);
   
   const updatePendingRef = useRef(false);
   const lastCheckRef = useRef<number>(0);
+  const syncAttemptedRef = useRef(false);
 
   // Register service worker with update callbacks
   const {
@@ -90,16 +97,34 @@ export function usePWAUpdate(): PWAUpdateState {
       isVisible,
       isSafeToReload,
       blockingReasons,
+      pendingCount,
+      isSyncing,
     });
 
-    // RULE 1: If app is hidden AND all safety checks pass → Silent reload
+    // RULE 1: If app is hidden AND all safety checks pass → Sync then silent reload
     // CRITICAL: Refresh auth token before reload to preserve session
     if (!isVisible && isSafeToReload) {
       console.log('[PWA] ✓ Silent reload - app hidden and safe');
-      // Ensure auth session is fresh before reload
-      supabase.auth.getSession().then(() => {
+      
+      // PRE-RELOAD SYNC: Attempt to sync any remaining mutations
+      const performReload = async () => {
+        if (isOnline && pendingCount > 0 && !syncAttemptedRef.current) {
+          syncAttemptedRef.current = true;
+          console.log('[PWA] Pre-reload sync attempt...');
+          try {
+            await syncPendingMutations();
+            console.log('[PWA] Pre-reload sync complete');
+          } catch (err) {
+            console.warn('[PWA] Pre-reload sync failed, proceeding anyway:', err);
+          }
+        }
+        
+        // Ensure auth session is fresh before reload
+        await supabase.auth.getSession();
         updateServiceWorker(true);
-      });
+      };
+      
+      performReload();
       return;
     }
 
@@ -119,12 +144,13 @@ export function usePWAUpdate(): PWAUpdateState {
         duration: 5000,
       });
     }
-  }, [needRefresh, isVisible, isSafeToReload, blockingReasons, updateServiceWorker]);
+  }, [needRefresh, isVisible, isSafeToReload, blockingReasons, updateServiceWorker, pendingCount, isSyncing, isOnline, syncPendingMutations]);
 
-  // Reset toast flag when update is applied or no longer needed
+  // Reset refs when update is applied or no longer needed
   useEffect(() => {
     if (!needRefresh) {
       toastShownRef.current = false;
+      syncAttemptedRef.current = false;
     }
   }, [needRefresh]);
 

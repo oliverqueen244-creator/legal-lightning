@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -7,9 +7,16 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Progress } from '@/components/ui/progress';
 import { Upload, ChevronDown, ChevronUp, FileText, Check, X } from 'lucide-react';
 import { useDocumentUpload } from '@/hooks/useDocumentManagement';
+import { useFormDirtyState } from '@/contexts/FormDirtyContext';
 import type { DocumentType, DocumentLanguage, DocumentFormat, DocumentLegibility, DocumentUploadMetadata } from '@/types/documents';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+
+/**
+ * SAFE PWA AUTO-UPDATE — Form Dirty Tracking Integration
+ * 
+ * This panel tracks dirty state to prevent PWA updates during file selection.
+ */
 
 interface WarRoomUploadPanelProps {
   docketId: string;
@@ -55,6 +62,18 @@ export function WarRoomUploadPanel({ docketId }: WarRoomUploadPanelProps) {
   });
 
   const { uploadDocument, uploading, progress } = useDocumentUpload(docketId);
+  
+  // SAFE PWA UPDATE: Track form dirty state
+  const { setDirty, setClean } = useFormDirtyState(`warroom-upload-${docketId}`);
+  
+  // Mark dirty when file is selected
+  useEffect(() => {
+    if (selectedFile) {
+      setDirty();
+    } else {
+      setClean();
+    }
+  }, [selectedFile, setDirty, setClean]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -96,8 +115,9 @@ export function WarRoomUploadPanel({ docketId }: WarRoomUploadPanelProps) {
       toast.success('Document uploaded successfully', {
         description: 'It will be reviewed before becoming available.',
       });
-      // Reset form
+      // Reset form and mark clean
       setSelectedFile(null);
+      setClean(); // SAFE PWA UPDATE: Mark clean on successful upload
       setIsOpen(false);
       setMetadata({
         document_type: 'PETITION',
@@ -112,6 +132,7 @@ export function WarRoomUploadPanel({ docketId }: WarRoomUploadPanelProps) {
 
   const handleClear = () => {
     setSelectedFile(null);
+    setClean(); // SAFE PWA UPDATE: Mark clean on explicit clear
   };
 
   return (

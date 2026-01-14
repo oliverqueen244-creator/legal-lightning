@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -13,6 +13,7 @@ import { Upload, FileText, CheckCircle, AlertCircle, WifiOff } from 'lucide-reac
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
+import { useFormDirtyState } from '@/contexts/FormDirtyContext';
 import {
   DocumentType,
   DocumentLanguage,
@@ -31,6 +32,16 @@ interface DocumentUploadFormProps {
   uploading?: boolean;
 }
 
+/**
+ * SAFE PWA AUTO-UPDATE — Form Dirty Tracking Integration
+ * 
+ * This form tracks dirty state to prevent PWA updates during:
+ * - File selection (before upload)
+ * - Metadata configuration
+ * 
+ * Marked clean only on successful upload or explicit clear.
+ */
+
 export function DocumentUploadForm({ docketId, onUpload, uploading }: DocumentUploadFormProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -44,6 +55,18 @@ export function DocumentUploadForm({ docketId, onUpload, uploading }: DocumentUp
   
   // P0 FIX: Offline guard for document uploads
   const { isOnline } = useNetworkStatus();
+  
+  // SAFE PWA UPDATE: Track form dirty state
+  const { setDirty, setClean } = useFormDirtyState(`doc-upload-${docketId}`);
+  
+  // Mark dirty when file is selected, clean when cleared or uploaded
+  useEffect(() => {
+    if (selectedFile) {
+      setDirty();
+    } else {
+      setClean();
+    }
+  }, [selectedFile, setDirty, setClean]);
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -98,6 +121,7 @@ export function DocumentUploadForm({ docketId, onUpload, uploading }: DocumentUp
     try {
       await onUpload(selectedFile, metadata);
       setSelectedFile(null);
+      setClean(); // SAFE PWA UPDATE: Mark clean on successful upload
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
@@ -116,6 +140,7 @@ export function DocumentUploadForm({ docketId, onUpload, uploading }: DocumentUp
 
   const handleClearFile = () => {
     setSelectedFile(null);
+    setClean(); // SAFE PWA UPDATE: Mark clean on explicit clear
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
