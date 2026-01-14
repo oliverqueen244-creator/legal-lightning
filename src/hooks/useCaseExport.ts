@@ -12,7 +12,6 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { format, parseISO, startOfDay } from 'date-fns';
-import { resolveCaseType, extractCaseTypeAbbr } from '@/lib/caseTypeMapping';
 import type { ExportCase, ExportGroup, ExportData, AdvocateRole, ExportDateMode } from '@/types/export';
 
 interface UseCaseExportOptions {
@@ -22,14 +21,6 @@ interface UseCaseExportOptions {
   targetUserId?: string; // For admin audit access
 }
 
-function extractYear(caseNumber: string): number {
-  // Pattern: CRL.M.PET. 10766/2025 -> 2025
-  const match = caseNumber.match(/\/(\d{4})/);
-  if (match) {
-    return parseInt(match[1], 10);
-  }
-  return new Date().getFullYear();
-}
 
 function formatDateRange(firstDate: string, lastDate: string): string {
   const formatDate = (dateStr: string) => {
@@ -46,16 +37,6 @@ function formatDateRange(firstDate: string, lastDate: string): string {
   return `${formatDate(firstDate)} → ${formatDate(lastDate)}`;
 }
 
-function getCaseTypeShort(caseNumber: string): string {
-  const abbr = extractCaseTypeAbbr(caseNumber);
-  if (abbr) {
-    // Use abbreviation directly for short display
-    return abbr.replace(/\./g, ' ').trim();
-  }
-  // Fallback: extract first part before number
-  const match = caseNumber.match(/^([A-Za-z.\s]+)/);
-  return match ? match[1].trim() : 'Unknown';
-}
 
 export function useCaseExport(options: UseCaseExportOptions) {
   const { user, role, isAuthenticated } = useAuth();
@@ -91,6 +72,8 @@ export function useCaseExport(options: UseCaseExportOptions) {
     case_fingerprint: string | null;
     petitioner: string | null;
     respondent: string | null;
+    petitioner_lawyer: string | null;
+    respondent_lawyer: string | null;
   };
   
   const { data: caseData, isLoading, error, refetch } = useQuery<DocketRow[]>({
@@ -105,7 +88,7 @@ export function useCaseExport(options: UseCaseExportOptions) {
       }
       
       // Build query to get matched cases for this user within date scope
-      // Include petitioner and respondent for party name display
+      // Include petitioner/respondent for party names and lawyer fields for opposing counsel
       let query = supabase
         .from('daily_court_docket')
         .select(`
@@ -118,7 +101,9 @@ export function useCaseExport(options: UseCaseExportOptions) {
           date,
           case_fingerprint,
           petitioner,
-          respondent
+          respondent,
+          petitioner_lawyer,
+          respondent_lawyer
         `)
         .eq('matched_profile_id', userId)
         .not('case_fingerprint', 'is', null)
@@ -171,11 +156,20 @@ export function useCaseExport(options: UseCaseExportOptions) {
       dates: string[];
       petitioner: string | null;
       respondent: string | null;
+      opposingCounsel: string | null;
     }>();
     
     for (const row of caseData) {
       const fingerprint = row.case_fingerprint;
       if (!fingerprint) continue;
+      
+      // Determine opposing counsel based on user's role
+      // If user is Petitioner, opposing counsel = respondent_lawyer
+      // If user is Respondent, opposing counsel = petitioner_lawyer
+      const userRole = row.matched_role;
+      const opposingCounsel = userRole === 'petitioner' 
+        ? row.respondent_lawyer 
+        : row.petitioner_lawyer;
       
       const existing = caseMap.get(fingerprint);
       if (existing) {
@@ -191,6 +185,10 @@ export function useCaseExport(options: UseCaseExportOptions) {
         if (!existing.respondent && row.respondent) {
           existing.respondent = row.respondent;
         }
+        // Keep first non-null opposing counsel
+        if (!existing.opposingCounsel && opposingCounsel) {
+          existing.opposingCounsel = opposingCounsel;
+        }
       } else {
         caseMap.set(fingerprint, {
           fingerprint,
@@ -202,6 +200,7 @@ export function useCaseExport(options: UseCaseExportOptions) {
           dates: [row.date],
           petitioner: row.petitioner,
           respondent: row.respondent,
+          opposingCounsel: opposingCounsel,
         });
       }
     }
@@ -216,13 +215,12 @@ export function useCaseExport(options: UseCaseExportOptions) {
       cases.push({
         id: fingerprint,
         caseNo: caseData.caseNumber,
-        caseType: getCaseTypeShort(caseData.caseNumber),
-        year: extractYear(caseData.caseNumber),
         advocateRole: caseData.role,
         outcome: caseData.outcome,
         dateRange: formatDateRange(firstDate, lastDate),
         petitioner: caseData.petitioner,
         respondent: caseData.respondent,
+        opposingCounsel: caseData.opposingCounsel,
         lawyerNotes: '', // Will be filled from stored notes (future-compatible)
         courtNo: caseData.courtNo,
         judgeName: caseData.judgeName,
@@ -257,12 +255,16 @@ export function useCaseExport(options: UseCaseExportOptions) {
           end: effectiveEnd 
         };
     
+    // Determine if multi-date export (for conditional Date Range column)
+    const isMultiDate = dateMode === 'range' && effectiveStart !== effectiveEnd;
+    
     return {
       lawyerName: profile?.full_name || 'Unknown Lawyer',
       exportDate: format(new Date(), 'dd MMM yyyy'),
       groups,
       totalCases: cases.length,
       dateScope,
+      isMultiDate,
     };
   })() : null;
   
