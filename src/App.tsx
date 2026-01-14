@@ -17,18 +17,40 @@ import Install from "./pages/Install";
 import { GlobalOfflineBanner } from "./components/layout/GlobalOfflineBanner";
 import { SyncConflictProvider } from "./contexts/SyncConflictContext";
 import { FormDirtyProvider } from "./contexts/FormDirtyContext";
-import { InstallDiscoveryBanner, PostInstallConfirmation } from "./components/pwa";
+import { InstallDiscoveryBanner, PostInstallConfirmation, ForceUpdateBlockedDialog } from "./components/pwa";
 import { CourtFocusOverlay } from "./components/court-focus";
 import { SplashScreen } from "./components/layout/SplashScreen";
 import { PWAUpdateManager } from "./components/pwa/PWAUpdateManager";
 import { ErrorBoundary } from "./components/layout/ErrorBoundary";
 import { useForceUpdate } from "./hooks/useForceUpdate";
+import { useBeforeUnloadGuard } from "./hooks/useBeforeUnloadGuard";
 
 const queryClient = new QueryClient();
 
-// Component that runs the force update check
+/**
+ * SAFE PWA AUTO-UPDATE — Force Update Checker with Dialog
+ * 
+ * Runs the force update check and shows blocking dialog if update cannot proceed.
+ */
 function ForceUpdateChecker() {
-  useForceUpdate();
+  const { isBlocked, blockedConfig, setIsBlocked } = useForceUpdate();
+  
+  return (
+    <ForceUpdateBlockedDialog
+      open={isBlocked}
+      onOpenChange={setIsBlocked}
+      updateReason={blockedConfig?.reason}
+    />
+  );
+}
+
+/**
+ * SAFE PWA AUTO-UPDATE — Beforeunload Safety Net
+ * 
+ * Must be inside FormDirtyProvider to access dirty form state.
+ */
+function BeforeUnloadGuard() {
+  useBeforeUnloadGuard();
   return null;
 }
 
@@ -36,10 +58,12 @@ const App = () => (
   <ErrorBoundary>
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
-      {/* PWA Force Update Kill Switch - checks server version on every load */}
-      <ForceUpdateChecker />
-      {/* FormDirtyProvider MUST wrap SyncConflictProvider for safety checks */}
+      {/* FormDirtyProvider MUST wrap everything for safety checks */}
       <FormDirtyProvider>
+        {/* PWA Force Update Kill Switch - with safety checks and dialog */}
+        <ForceUpdateChecker />
+        {/* SAFE PWA AUTO-UPDATE: Beforeunload safety net */}
+        <BeforeUnloadGuard />
         <SyncConflictProvider>
           {/* Branded Splash Screen - shows once per session */}
           <SplashScreen />
