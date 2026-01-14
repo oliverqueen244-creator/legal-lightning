@@ -77,13 +77,9 @@ export function useVirtualCourt(
       return { data: null, isValid: false, reason: 'VC details not published' };
     }
 
-    // Check if extracted today
-    if (data.vc_extracted_at) {
-      const extractedDate = format(new Date(data.vc_extracted_at), 'yyyy-MM-dd');
-      if (extractedDate !== today) {
-        return { data: null, isValid: false, reason: 'VC data is stale (not from today\'s causelist)' };
-      }
-    }
+    // Note: vc_extracted_at is NOT checked against today's date because
+    // causelists are often published the evening before. The query already
+    // filters by docket date = today, which is the correct freshness check.
 
     // Check confidence threshold
     if (data.vc_confidence !== null && data.vc_confidence < CONFIDENCE_THRESHOLD) {
@@ -172,12 +168,7 @@ export function useDocketVC(docketId: string | undefined): {
       return { data: null, isValid: false, reason: 'VC details not published' };
     }
 
-    if (data.vc_extracted_at) {
-      const extractedDate = format(new Date(data.vc_extracted_at), 'yyyy-MM-dd');
-      if (extractedDate !== today) {
-        return { data: null, isValid: false, reason: 'VC data is stale' };
-      }
-    }
+    // Note: vc_extracted_at is NOT checked - causelist published evening before is valid
 
     if (data.vc_confidence !== null && data.vc_confidence < CONFIDENCE_THRESHOLD) {
       return { data: null, isValid: false, reason: 'VC data confidence too low' };
