@@ -1,5 +1,4 @@
 import { useQuery } from '@tanstack/react-query';
-import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { CheckCircle2, AlertTriangle, Clock, Loader2 } from 'lucide-react';
@@ -111,24 +110,16 @@ export function ScraperStatusWidget({ bench, selectedDate }: ScraperStatusWidget
     ? formatDistanceToNow(new Date(status.lastUpdate), { addSuffix: true })
     : '';
 
+  // DECLUTTER: Removed card wrapper, simpler inline display
   return (
-    <Card className="glass-card border-border/50">
-      <CardContent className="p-3">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 min-w-0">
-            <Icon className={`h-4 w-4 ${display.iconClass}`} />
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">Status:</span>
-                {display.badge}
-              </div>
-              <p className="text-xs text-muted-foreground truncate">
-                {display.text}{timeText ? ` • ${timeText}` : ''}
-              </p>
-            </div>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+    <div className="flex items-center gap-1.5 text-xs">
+      <Icon className={`h-3.5 w-3.5 ${display.iconClass}`} />
+      {display.badge}
+      {timeText && (
+        <span className="text-[10px] text-muted-foreground/60 hidden sm:inline">
+          {timeText}
+        </span>
+      )}
+    </div>
   );
 }

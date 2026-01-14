@@ -11,13 +11,14 @@ import { Info } from 'lucide-react';
  */
 export function AiDisclaimer() {
   return (
-    <div 
-      className="flex items-center gap-2 px-3 py-2 rounded-md bg-muted/50 border border-border/50 text-muted-foreground text-xs"
+    // DECLUTTER: Demoted to subtle inline text - no background, no border, smaller font, italic
+    <p 
+      className="flex items-center gap-1.5 text-[10px] text-muted-foreground/70 italic"
       role="note"
       aria-label="AI disclaimer"
     >
-      <Info className="h-3.5 w-3.5 flex-shrink-0" aria-hidden="true" />
+      <Info className="h-3 w-3 flex-shrink-0 opacity-60" aria-hidden="true" />
       <span>System-generated assistance. Verify against official court records.</span>
-    </div>
+    </p>
   );
 }
