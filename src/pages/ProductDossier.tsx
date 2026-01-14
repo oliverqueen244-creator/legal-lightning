@@ -242,7 +242,7 @@ const ProductDossier = () => {
 
               <div className="border-l-4 border-black pl-4">
                 <h3 className="font-bold text-black mb-2">Morning Brief Generation</h3>
-                <p className="text-sm text-gray-600"><strong>What:</strong> AI-generated summary of today's docket with priorities and alerts</p>
+                <p className="text-sm text-gray-600"><strong>What:</strong> System-generated summary of today's docket with priorities and alerts</p>
                 <p className="text-sm text-gray-600"><strong>When:</strong> On-demand when user opens Morning Brief panel</p>
                 <p className="text-sm text-gray-600"><strong>Output:</strong> Structured brief with readiness scores, suggested focus areas</p>
                 <p className="text-sm text-gray-600"><strong>Trust Feature:</strong> Shows "Prepared at [time]" with staleness warning if older than 5 minutes</p>

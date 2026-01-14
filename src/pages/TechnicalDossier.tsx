@@ -67,7 +67,7 @@ const TechnicalDossier = () => {
                   <li>Edge Functions Reference</li>
                   <li>Authentication & Authorization</li>
                   <li>Real-time Systems</li>
-                  <li>AI/ML Integration</li>
+                  <li>Automation & ML Integration</li>
                   <li>Security Architecture</li>
                 </ol>
               </div>
@@ -301,7 +301,7 @@ const TechnicalDossier = () => {
                       </tr>
                       <tr>
                         <td className="border border-gray-300 p-2 font-mono">ai_jobs</td>
-                        <td className="border border-gray-300 p-2">AI task queue</td>
+                        <td className="border border-gray-300 p-2">Automation task queue</td>
                         <td className="border border-gray-300 p-2">job_type, status, payload, result</td>
                         <td className="border border-gray-300 p-2">⚙️ Service role</td>
                       </tr>
@@ -435,7 +435,7 @@ const TechnicalDossier = () => {
                     </div>
                     <div className="border-l-4 border-blue-500 pl-3">
                       <code className="text-sm font-mono font-bold">parse-case / parse-all-cases</code>
-                      <p className="text-xs text-gray-600 mt-1">AI-powered PDF parsing using Google Gemini, extracts structured case data</p>
+                      <p className="text-xs text-gray-600 mt-1">Automated PDF parsing using Google Gemini, extracts structured case data</p>
                       <p className="text-xs text-gray-500">Auth: Service role | AI: Gemini 2.5 Flash</p>
                     </div>
                     <div className="border-l-4 border-blue-500 pl-3">
@@ -468,13 +468,13 @@ const TechnicalDossier = () => {
                   </div>
                 </div>
 
-                {/* AI & Search Functions */}
+                {/* Automation & Search Functions */}
                 <div className="border border-gray-300 rounded-lg p-4">
-                  <h3 className="font-semibold text-black mb-3">🤖 AI & Search</h3>
+                  <h3 className="font-semibold text-black mb-3">🤖 Automation & Search</h3>
                   <div className="space-y-3">
                     <div className="border-l-4 border-purple-500 pl-3">
                       <code className="text-sm font-mono font-bold">ai-worker</code>
-                      <p className="text-xs text-gray-600 mt-1">General AI job processor, handles queued AI tasks with retry logic</p>
+                      <p className="text-xs text-gray-600 mt-1">General job processor, handles queued automation tasks with retry logic</p>
                       <p className="text-xs text-gray-500">Auth: Service role | Providers: Gemini (primary), OpenAI (fallback)</p>
                     </div>
                     <div className="border-l-4 border-purple-500 pl-3">
@@ -484,7 +484,7 @@ const TechnicalDossier = () => {
                     </div>
                     <div className="border-l-4 border-purple-500 pl-3">
                       <code className="text-sm font-mono font-bold">extract-causelist-notes</code>
-                      <p className="text-xs text-gray-600 mt-1">AI extraction of special notes/announcements from cause list PDFs</p>
+                      <p className="text-xs text-gray-600 mt-1">Automated extraction of special notes/announcements from cause list PDFs</p>
                       <p className="text-xs text-gray-500">Auth: Service role | AI: Gemini 2.5 Flash</p>
                     </div>
                   </div>
@@ -658,16 +658,16 @@ queryClient.setQueryData(['notifications'], (old) => [...old, newNotif]);`}</pre
 
           <Separator className="my-8" />
 
-          {/* Section 6: AI/ML Integration */}
+          {/* Section 6: Automation & ML Integration */}
           <section className="mb-10 print:page-break-inside-avoid">
             <h2 className="text-2xl font-bold text-black mb-4 flex items-center gap-2">
               <Code className="h-6 w-6" />
-              6. AI/ML Integration
+              6. Automation & ML Integration
             </h2>
 
             <div className="space-y-6">
               <div>
-                <h3 className="font-semibold text-black mb-2">AI Providers</h3>
+                <h3 className="font-semibold text-black mb-2">Processing Providers</h3>
                 <div className="grid md:grid-cols-2 gap-4">
                   <div className="border border-gray-300 rounded-lg p-4">
                     <h4 className="font-medium text-black mb-2">Primary: Google Gemini</h4>
@@ -690,11 +690,11 @@ queryClient.setQueryData(['notifications'], (old) => [...old, newNotif]);`}</pre
               </div>
 
               <div>
-                <h3 className="font-semibold text-black mb-2">AI Job Queue Architecture</h3>
+                <h3 className="font-semibold text-black mb-2">Job Queue Architecture</h3>
                 <div className="bg-gray-100 p-4 rounded-lg border border-gray-300 font-mono text-xs overflow-x-auto">
                   <pre className="text-gray-700 whitespace-pre">
 {`┌─────────────────────────────────────────────────────────────┐
-│                    AI JOB PROCESSING                         │
+│                    JOB PROCESSING                            │
 └─────────────────────────────────────────────────────────────┘
 
   Job Created                ai_jobs table               Processing

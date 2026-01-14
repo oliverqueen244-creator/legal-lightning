@@ -202,7 +202,7 @@ export function MorningBriefPanel({ brief, isLoading, onRefresh }: MorningBriefP
               {caseItem.suggestion === 'delegate' && <Users className="h-4 w-4" />}
               {caseItem.suggestion === 'monitor' && <Eye className="h-4 w-4" />}
               <span className="font-medium">
-                AI suggests: <span className="capitalize">{caseItem.suggestion}</span>
+                Recommended Step: <span className="capitalize">{caseItem.suggestion}</span>
               </span>
               <span className="text-xs opacity-80">— {caseItem.suggestionReason} (verify)</span>
             </div>

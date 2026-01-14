@@ -17,7 +17,7 @@ export function AiDisclaimer() {
       aria-label="AI disclaimer"
     >
       <Info className="h-3.5 w-3.5 flex-shrink-0" aria-hidden="true" />
-      <span>AI-generated assistance. Verify against official court records.</span>
+      <span>System-generated assistance. Verify against official court records.</span>
     </div>
   );
 }
