@@ -3890,6 +3890,10 @@ export type Database = {
         }
         Returns: undefined
       }
+      review_intern_draft: {
+        Args: { p_draft_id: string; p_notes?: string; p_status: string }
+        Returns: boolean
+      }
       revoke_expired_intern_accounts: { Args: never; Returns: Json }
       try_lock_case_for_job: {
         Args: { p_case_id: string; p_job_type: string }
