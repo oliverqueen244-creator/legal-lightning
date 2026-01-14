@@ -3,6 +3,11 @@
  * 
  * Types for lawyer-initiated case export feature.
  * Supports PDF (A4/Legal), CSV, and Excel formats.
+ * 
+ * EXPORT CONTRACT:
+ * This export is intentionally black & white.
+ * Do NOT add color, badges, or visual emphasis.
+ * Court-print safe by design.
  */
 
 export type ExportFormat = 'pdf-a4' | 'pdf-legal' | 'csv' | 'excel';
@@ -12,6 +17,9 @@ export type ExportType = 'profile' | 'cv' | 'empanelment';
 export type ExportDateMode = 'today' | 'range';
 
 export type AdvocateRole = 'Petitioner' | 'Respondent';
+
+// Listing status for Late Listed indicator
+export type ListingStatus = 'Normal' | 'Late Listed';
 
 export interface ExportCase {
   id: string;
@@ -23,7 +31,10 @@ export interface ExportCase {
   petitioner: string | null;
   respondent: string | null;
   // Opposing counsel (respondent_lawyer if Petitioner, petitioner_lawyer if Respondent)
-  opposingCounsel: string | null;
+  // Normalized: name, "State Counsel / PP", or "—"
+  opposingCounsel: string;
+  // Listing status (Normal / Late Listed)
+  listingStatus: ListingStatus;
   // Lawyer notes - blank by default, space for handwritten or NyayHub-entered notes
   lawyerNotes: string;
   // Grouping keys (not exported as columns)
@@ -64,12 +75,14 @@ export interface ExportOptions {
 // Column order is LOCKED per specification (revised)
 // Type and Year removed (already in Case No.)
 // Date Range conditional (only for multi-date exports)
+// Listing Status added for Late Listed indicator
 export const EXPORT_COLUMNS_SINGLE_DATE = [
   'Case No.',
   'Petitioner',
   'Respondent',
   'Opposing Counsel',
   'Role',
+  'Listing',
   'Outcome',
   'Lawyer Notes',
 ] as const;
@@ -80,6 +93,7 @@ export const EXPORT_COLUMNS_MULTI_DATE = [
   'Respondent',
   'Opposing Counsel',
   'Role',
+  'Listing',
   'Outcome',
   'Date Range',
   'Lawyer Notes',
