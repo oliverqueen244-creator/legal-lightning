@@ -9,6 +9,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { useVirtualCourt } from '@/hooks/useVirtualCourt';
+import { VCBetaWarning, VCBetaBadge } from './VCBetaWarning';
 import { cn } from '@/lib/utils';
 
 interface VirtualCourtButtonProps {
@@ -134,6 +135,11 @@ export function VirtualCourtButton({
             </Badge>
           )}
         </div>
+      )}
+
+      {/* Beta Warning with fallback Meeting IDs */}
+      {variant !== 'compact' && (
+        <VCBetaWarning className="mt-3" />
       )}
     </div>
   );
