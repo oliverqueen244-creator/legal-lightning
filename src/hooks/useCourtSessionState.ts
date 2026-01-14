@@ -17,8 +17,9 @@
 import { useMemo } from 'react';
 import { isCourtHours } from './useLiveBoard';
 import type { LiveBoardCache, BoardStatus } from '@/types/database';
+import { differenceInMinutes } from 'date-fns';
 
-export type SessionReason = 'hearing' | 'lunch' | 'adjourned' | 'passover' | 'not_sitting' | 'inactive' | 'outside_hours' | 'no_data';
+export type SessionReason = 'hearing' | 'lunch' | 'adjourned' | 'passover' | 'not_sitting' | 'inactive' | 'outside_hours' | 'no_data' | 'stale_data';
 
 export interface CourtSessionState {
   /** Whether court is currently in an active hearing session */
@@ -31,6 +32,10 @@ export interface CourtSessionState {
   boardStatus: BoardStatus;
   /** Human-readable explanation */
   reasonText: string;
+  /** Whether data is fresh (updated within last 5 minutes) */
+  isDataFresh: boolean;
+  /** Whether court session has concluded for the day */
+  isSessionConcluded: boolean;
 }
 
 /**
@@ -52,6 +57,11 @@ export function getCurrentItem(liveBoard: LiveBoardCache | null | undefined): nu
  * This is the canonical derivation - do not duplicate this logic elsewhere
  */
 export function deriveCourtSessionState(liveBoard: LiveBoardCache | null | undefined): CourtSessionState {
+  // Check data freshness (5 minute threshold)
+  const isDataFresh = liveBoard?.last_updated 
+    ? differenceInMinutes(new Date(), new Date(liveBoard.last_updated)) <= 5
+    : false;
+
   // No data case
   if (!liveBoard) {
     return {
@@ -60,11 +70,31 @@ export function deriveCourtSessionState(liveBoard: LiveBoardCache | null | undef
       isActive: false,
       boardStatus: 'hearing',
       reasonText: 'No court data available',
+      isDataFresh: false,
+      isSessionConcluded: false,
     };
   }
 
   const boardStatus: BoardStatus = liveBoard.status ?? 'hearing';
   const isActive = liveBoard.is_active ?? false;
+  
+  // Check if court session concluded for the day
+  const courtHours = isCourtHours();
+  const isSessionConcluded = !courtHours.inSession && 
+    (boardStatus === 'adjourned' || boardStatus === 'not_sitting' || !isActive);
+
+  // Rule 0: If data is stale (>5 minutes) → not in session
+  if (!isDataFresh && isActive) {
+    return {
+      inSession: false,
+      reason: 'stale_data',
+      isActive,
+      boardStatus,
+      reasonText: 'Court data is stale (not updated in 5+ minutes)',
+      isDataFresh: false,
+      isSessionConcluded,
+    };
+  }
 
   // Rule 1: If is_active === false → not in session
   if (!isActive) {
@@ -74,6 +104,8 @@ export function deriveCourtSessionState(liveBoard: LiveBoardCache | null | undef
       isActive: false,
       boardStatus,
       reasonText: 'Court is not active',
+      isDataFresh,
+      isSessionConcluded: true,
     };
   }
 
@@ -94,11 +126,12 @@ export function deriveCourtSessionState(liveBoard: LiveBoardCache | null | undef
       isActive,
       boardStatus,
       reasonText: mapped.text,
+      isDataFresh,
+      isSessionConcluded: boardStatus === 'adjourned' || boardStatus === 'not_sitting',
     };
   }
 
   // Rule 3: If outside court hours → not in session
-  const courtHours = isCourtHours();
   if (!courtHours.inSession) {
     return {
       inSession: false,
@@ -106,6 +139,8 @@ export function deriveCourtSessionState(liveBoard: LiveBoardCache | null | undef
       isActive,
       boardStatus,
       reasonText: courtHours.reason,
+      isDataFresh,
+      isSessionConcluded: true,
     };
   }
 
@@ -116,6 +151,8 @@ export function deriveCourtSessionState(liveBoard: LiveBoardCache | null | undef
     isActive,
     boardStatus,
     reasonText: 'Court in session',
+    isDataFresh,
+    isSessionConcluded: false,
   };
 }
 
