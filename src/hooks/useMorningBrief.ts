@@ -61,6 +61,7 @@ export interface MorningBrief {
   generated_at: string;
   total_cases: number;
   cases: MorningBriefCase[];
+  lawyerName: string; // Name of the lawyer for this brief
   summary: {
     attend_count: number;
     delegate_count: number;
@@ -281,13 +282,21 @@ export function useMorningBrief() {
 
       const today = new Date().toISOString().split('T')[0];
 
-      // Get user's aliases for matching
-      const { data: aliases } = await supabase
-        .from('lawyer_aliases')
-        .select('alias_name')
-        .eq('profile_id', user.id);
+      // Fetch user's profile and aliases in parallel
+      const [profileResult, aliasResult] = await Promise.all([
+        supabase
+          .from('profiles')
+          .select('full_name')
+          .eq('id', user.id)
+          .single(),
+        supabase
+          .from('lawyer_aliases')
+          .select('alias_name')
+          .eq('profile_id', user.id),
+      ]);
 
-      const aliasNames = aliases?.map((a) => a.alias_name.toLowerCase()) || [];
+      const lawyerName = profileResult.data?.full_name || 'Advocate';
+      const aliasNames = aliasResult.data?.map((a) => a.alias_name.toLowerCase()) || [];
 
       // Fetch today's docket for the user
       const { data: docketItems, error: docketError } = await supabase
@@ -424,6 +433,7 @@ export function useMorningBrief() {
         generated_at: new Date().toISOString(),
         total_cases: briefCases.length,
         cases: briefCases,
+        lawyerName,
         summary: {
           attend_count: briefCases.filter((c) => c.suggestion === 'attend').length,
           delegate_count: briefCases.filter((c) => c.suggestion === 'delegate').length,
