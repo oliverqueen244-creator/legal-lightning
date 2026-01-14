@@ -8,7 +8,7 @@ import { ArgumentsPanel } from '@/components/war-room/ArgumentsPanel';
 import { SmartPdfViewer } from '@/components/war-room/SmartPdfViewer';
 import { DocumentSelector } from '@/components/war-room/DocumentSelector';
 import { DocumentReviewPanel } from '@/components/documents/DocumentReviewPanel';
-import { CaseHistoryPanel } from '@/components/case-history/CaseHistoryPanel';
+import { ListingHistoryPanel } from '@/components/case-history/ListingHistoryPanel';
 import { JudgmentReferencesPanel } from '@/components/war-room/JudgmentReferencesPanel';
 import { JudgeIntelligencePanel } from '@/components/judge-intelligence';
 import { PostCourtNoteCard } from '@/components/post-court/PostCourtNoteCard';
@@ -23,7 +23,7 @@ import { useDocketItem } from '@/hooks/useDocket';
 import { useArguments } from '@/hooks/useArguments';
 import { useExtendedDocuments, useDocumentReview } from '@/hooks/useDocumentManagement';
 import { useLiveBoardForCourt } from '@/hooks/useLiveBoard';
-import { useCaseHistory, useCaseHasHistory } from '@/hooks/useCaseHistory';
+import { useListingHistory, useCaseHasListings } from '@/hooks/useListingHistory';
 import { usePostCourtNotes } from '@/hooks/usePostCourtCapture';
 import { useAuth } from '@/hooks/useAuth';
 import { useEffectiveJudge } from '@/hooks/useEffectiveJudge';
@@ -47,9 +47,9 @@ export default function WarRoom() {
   const { data: args } = useArguments(caseId!);
   const { data: documents, isLoading: docsLoading, refetch: refetchDocs, dataUpdatedAt: docsUpdatedAt, isFetching: docsFetching } = useExtendedDocuments(caseId!);
   const { approveDocument, rejectDocument, setPrimaryDocument } = useDocumentReview(caseId!);
-  const { data: caseHistory, isLoading: historyLoading } = useCaseHistory(caseId!);
-  const { data: hasHistoryData } = useCaseHasHistory(caseId!);
-  const { data: postCourtNotes } = usePostCourtNotes(caseHistory?.fingerprint);
+  const { data: listingHistory, isLoading: historyLoading } = useListingHistory(caseId!);
+  const { data: hasListingsData } = useCaseHasListings(caseId!);
+  const { data: postCourtNotes } = usePostCourtNotes(listingHistory?.fingerprint);
   const latestNote = postCourtNotes?.[0];
   const liveBoard = useLiveBoardForCourt(
     docketItem?.court_location ?? '',
@@ -256,10 +256,10 @@ export default function WarRoom() {
                 </TabsTrigger>
                 <TabsTrigger value="history" className="flex items-center gap-2 relative">
                   <History className="h-4 w-4" />
-                  History
-                  {hasHistoryData?.hasHistory && (
+                  Listings
+                  {hasListingsData?.hasListings && (
                     <Badge variant="outline" className="absolute -top-1 -right-1 h-5 w-5 p-0 flex items-center justify-center text-xs text-muted-foreground">
-                      {hasHistoryData.previousCount}
+                      {hasListingsData.previousCount}
                     </Badge>
                   )}
                 </TabsTrigger>
@@ -304,8 +304,8 @@ export default function WarRoom() {
                 {latestNote && (
                   <PostCourtNoteCard note={latestNote} compact />
                 )}
-                <CaseHistoryPanel
-                  history={caseHistory}
+                <ListingHistoryPanel
+                  history={listingHistory}
                   isLoading={historyLoading}
                   compact
                 />
