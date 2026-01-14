@@ -11,7 +11,7 @@
  * No Virtual Court links or meeting IDs are included.
  */
 
-import { format } from 'date-fns';
+import { format, parse } from 'date-fns';
 import type { MorningBrief, MorningBriefCase } from '@/hooks/useMorningBrief';
 import { 
   EXPORT_FOOTER, 
@@ -103,7 +103,11 @@ function groupCasesByCourtJudge(cases: MorningBriefCase[]): BriefGroup[] {
  * Matches Case Export format exactly
  */
 export function generateBriefPDF(brief: MorningBrief, lawyerName: string): void {
-  const today = format(new Date(), 'dd MMM yyyy');
+  // Use the brief's date if available, otherwise fall back to today
+  const briefDate = brief.briefDate 
+    ? parse(brief.briefDate, 'yyyy-MM-dd', new Date())
+    : new Date();
+  const dateStr = format(briefDate, 'dd MMM yyyy');
   const groups = groupCasesByCourtJudge(brief.cases);
   
   // EXPORT CONTRACT:
@@ -116,7 +120,7 @@ export function generateBriefPDF(brief: MorningBrief, lawyerName: string): void 
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>Morning Brief - ${escapeHtml(lawyerName)} - ${today}</title>
+  <title>Morning Brief - ${escapeHtml(lawyerName)} - ${dateStr}</title>
   <style>
     @page {
       size: ${PAGE_WIDTH} ${PAGE_HEIGHT};
@@ -274,8 +278,8 @@ export function generateBriefPDF(brief: MorningBrief, lawyerName: string): void 
 <body>
   <div class="header">
     <h1>Morning Brief — ${escapeHtml(lawyerName)}</h1>
-    <div class="subtitle">Generated on ${today} | Total Cases: ${brief.total_cases}</div>
-    <div class="date-scope">Date: ${today}</div>
+    <div class="subtitle">Generated on ${format(new Date(), 'dd MMM yyyy')} | Total Cases: ${brief.total_cases}</div>
+    <div class="date-scope">Date: ${dateStr}</div>
   </div>
 `;
 
