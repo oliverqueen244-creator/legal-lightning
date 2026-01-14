@@ -649,6 +649,59 @@ export type Database = {
         }
         Relationships: []
       }
+      case_hearings: {
+        Row: {
+          case_fingerprint: string
+          court_room_no: string | null
+          created_at: string
+          created_by: string
+          hearing_date: string
+          id: string
+          judge_names: string | null
+          outcome: string | null
+          source: Database["public"]["Enums"]["hearing_source"]
+          source_post_court_note_id: string | null
+          updated_at: string
+          was_heard: boolean
+        }
+        Insert: {
+          case_fingerprint: string
+          court_room_no?: string | null
+          created_at?: string
+          created_by: string
+          hearing_date: string
+          id?: string
+          judge_names?: string | null
+          outcome?: string | null
+          source?: Database["public"]["Enums"]["hearing_source"]
+          source_post_court_note_id?: string | null
+          updated_at?: string
+          was_heard?: boolean
+        }
+        Update: {
+          case_fingerprint?: string
+          court_room_no?: string | null
+          created_at?: string
+          created_by?: string
+          hearing_date?: string
+          id?: string
+          judge_names?: string | null
+          outcome?: string | null
+          source?: Database["public"]["Enums"]["hearing_source"]
+          source_post_court_note_id?: string | null
+          updated_at?: string
+          was_heard?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "case_hearings_source_post_court_note_id_fkey"
+            columns: ["source_post_court_note_id"]
+            isOneToOne: false
+            referencedRelation: "post_court_notes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       case_judgments: {
         Row: {
           created_at: string | null
@@ -3648,6 +3701,7 @@ export type Database = {
         | "CONDITIONAL"
         | "LOW_PROBABILITY"
         | "UNKNOWN"
+      hearing_source: "post_court" | "manual"
       judgment_status:
         | "not_checked"
         | "check_queued"
@@ -3888,6 +3942,7 @@ export const Constants = {
         "LOW_PROBABILITY",
         "UNKNOWN",
       ],
+      hearing_source: ["post_court", "manual"],
       judgment_status: [
         "not_checked",
         "check_queued",
