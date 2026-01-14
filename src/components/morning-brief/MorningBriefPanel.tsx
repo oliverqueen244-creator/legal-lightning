@@ -6,6 +6,7 @@ import { Separator } from '@/components/ui/separator';
 import { AiDisclaimer } from '@/components/ui/AiDisclaimer';
 import { FreshnessIndicator } from '@/components/ui/FreshnessIndicator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { CaseVirtualCourtButton } from '@/components/dashboard/CaseVirtualCourtButton';
 import {
   Sun,
   AlertTriangle,
@@ -205,6 +206,15 @@ export function MorningBriefPanel({ brief, isLoading, onRefresh }: MorningBriefP
                 Recommended Step: <span className="capitalize">{caseItem.suggestion}</span>
               </span>
               <span className="text-xs opacity-80">— {caseItem.suggestionReason} (verify)</span>
+            </div>
+
+            {/* Virtual Court Button - Court-level, date-scoped */}
+            <div className="mt-3">
+              <CaseVirtualCourtButton
+                courtLocation={caseItem.court_location}
+                courtRoomNo={caseItem.court_room_no}
+                compact
+              />
             </div>
           </div>
 
