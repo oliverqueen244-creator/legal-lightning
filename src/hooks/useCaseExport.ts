@@ -89,6 +89,8 @@ export function useCaseExport(options: UseCaseExportOptions) {
     status: string | null;
     date: string;
     case_fingerprint: string | null;
+    petitioner: string | null;
+    respondent: string | null;
   };
   
   const { data: caseData, isLoading, error, refetch } = useQuery<DocketRow[]>({
@@ -103,6 +105,7 @@ export function useCaseExport(options: UseCaseExportOptions) {
       }
       
       // Build query to get matched cases for this user within date scope
+      // Include petitioner and respondent for party name display
       let query = supabase
         .from('daily_court_docket')
         .select(`
@@ -113,7 +116,9 @@ export function useCaseExport(options: UseCaseExportOptions) {
           matched_role,
           status,
           date,
-          case_fingerprint
+          case_fingerprint,
+          petitioner,
+          respondent
         `)
         .eq('matched_profile_id', userId)
         .not('case_fingerprint', 'is', null)
@@ -164,6 +169,8 @@ export function useCaseExport(options: UseCaseExportOptions) {
       role: AdvocateRole;
       outcome: string | null;
       dates: string[];
+      petitioner: string | null;
+      respondent: string | null;
     }>();
     
     for (const row of caseData) {
@@ -177,6 +184,13 @@ export function useCaseExport(options: UseCaseExportOptions) {
         if (row.status === 'done' || row.status === 'disposed') {
           existing.outcome = row.status === 'done' ? 'Disposed' : 'Completed';
         }
+        // Keep first non-null party names
+        if (!existing.petitioner && row.petitioner) {
+          existing.petitioner = row.petitioner;
+        }
+        if (!existing.respondent && row.respondent) {
+          existing.respondent = row.respondent;
+        }
       } else {
         caseMap.set(fingerprint, {
           fingerprint,
@@ -186,28 +200,32 @@ export function useCaseExport(options: UseCaseExportOptions) {
           role: (row.matched_role === 'petitioner' ? 'Petitioner' : 'Respondent') as AdvocateRole,
           outcome: row.status === 'done' ? 'Disposed' : null,
           dates: [row.date],
+          petitioner: row.petitioner,
+          respondent: row.respondent,
         });
       }
     }
     
     // Convert to ExportCase array
     const cases: ExportCase[] = [];
-    caseMap.forEach((data, fingerprint) => {
-      const sortedDates = data.dates.sort();
+    caseMap.forEach((caseData, fingerprint) => {
+      const sortedDates = caseData.dates.sort();
       const firstDate = sortedDates[0];
       const lastDate = sortedDates[sortedDates.length - 1];
       
       cases.push({
         id: fingerprint,
-        caseNo: data.caseNumber,
-        caseType: getCaseTypeShort(data.caseNumber),
-        year: extractYear(data.caseNumber),
-        advocateRole: data.role,
-        outcome: data.outcome,
+        caseNo: caseData.caseNumber,
+        caseType: getCaseTypeShort(caseData.caseNumber),
+        year: extractYear(caseData.caseNumber),
+        advocateRole: caseData.role,
+        outcome: caseData.outcome,
         dateRange: formatDateRange(firstDate, lastDate),
-        lawyerNotes: '', // Will be filled from stored notes
-        courtNo: data.courtNo,
-        judgeName: data.judgeName,
+        petitioner: caseData.petitioner,
+        respondent: caseData.respondent,
+        lawyerNotes: '', // Will be filled from stored notes (future-compatible)
+        courtNo: caseData.courtNo,
+        judgeName: caseData.judgeName,
         caseFingerprint: fingerprint,
       });
     });

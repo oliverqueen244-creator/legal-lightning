@@ -21,7 +21,11 @@ export interface ExportCase {
   advocateRole: AdvocateRole;
   outcome: string | null;
   dateRange: string; // "DD Mon YYYY → DD Mon YYYY"
-  lawyerNotes: string; // User-entered, empty by default unless stored
+  // Party names (from daily_court_docket)
+  petitioner: string | null;
+  respondent: string | null;
+  // Lawyer notes - blank by default, space for handwritten or NyayHub-entered notes
+  lawyerNotes: string;
   // Grouping keys (not exported as columns)
   courtNo: string;
   judgeName: string;
@@ -55,11 +59,13 @@ export interface ExportOptions {
   dateRangeEnd?: Date;
 }
 
-// Column order is LOCKED per specification
+// Column order is LOCKED per specification (extended with party names)
 export const EXPORT_COLUMNS = [
   'Case No.',
   'Case Type',
   'Year',
+  'Petitioner',
+  'Respondent',
   'Advocate Role',
   'Outcome',
   'Date Range',
