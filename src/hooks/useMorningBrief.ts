@@ -188,13 +188,12 @@ async function fetchBatchedCaseData(
       .select('docket_id')
       .in('docket_id', docketIds),
     
-    // Batch history counts by fingerprint
+    // Batch history counts by fingerprint - SERVER-SIDE AGGREGATION
     validFingerprints.length > 0
-      ? supabase
-          .from('daily_court_docket')
-          .select('case_fingerprint')
-          .in('case_fingerprint', validFingerprints)
-          .lt('date', today)
+      ? supabase.rpc('get_previous_appearance_counts', {
+          fingerprints: validFingerprints,
+          before_date: today
+        })
       : Promise.resolve({ data: [] }),
     
     // Batch post-court notes
@@ -248,16 +247,12 @@ async function fetchBatchedCaseData(
   });
   argsByDocket.forEach((count, id) => argumentCounts.set(id, count));
 
-  // Process history counts
-  const historyByFingerprint = new Map<string, number>();
+  // Process history counts - now pre-aggregated from server
   ((historyResult as any).data || []).forEach((h: any) => {
-    if (!h.case_fingerprint) return;
-    historyByFingerprint.set(
-      h.case_fingerprint,
-      (historyByFingerprint.get(h.case_fingerprint) || 0) + 1
-    );
+    if (h.case_fingerprint && h.appearance_count) {
+      previousAppearances.set(h.case_fingerprint, Number(h.appearance_count));
+    }
   });
-  historyByFingerprint.forEach((count, fp) => previousAppearances.set(fp, count));
 
   // Process post-court notes (most recent per fingerprint)
   const seenFingerprints = new Set<string>();

@@ -3486,6 +3486,13 @@ export type Database = {
           job_type: string
         }[]
       }
+      get_previous_appearance_counts: {
+        Args: { before_date: string; fingerprints: string[] }
+        Returns: {
+          appearance_count: number
+          case_fingerprint: string
+        }[]
+      }
       get_user_role: {
         Args: { _user_id: string }
         Returns: Database["public"]["Enums"]["app_role"]
