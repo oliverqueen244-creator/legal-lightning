@@ -58,7 +58,7 @@ export function VirtualCourtButton({
     );
   }
 
-  // No valid VC data
+  // No valid VC data - show disabled state with clear messaging
   if (!vcData.isValid) {
     if (variant === 'compact') {
       return null; // Don't show anything in compact mode if no VC
@@ -74,7 +74,7 @@ export function VirtualCourtButton({
             </div>
           </TooltipTrigger>
           <TooltipContent>
-            <p>{vcData.reason || 'Virtual court details not published in causelist'}</p>
+            <p>{vcData.reason || 'Virtual court link not verified for today'}</p>
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
