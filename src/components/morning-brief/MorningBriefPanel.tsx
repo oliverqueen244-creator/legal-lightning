@@ -25,7 +25,6 @@ import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import type { MorningBrief, MorningBriefCase } from '@/hooks/useMorningBrief';
 import { useState, useEffect, useCallback } from 'react';
-import { useAuth } from '@/hooks/useAuth';
 import { generateBriefPDF } from '@/lib/briefExport';
 
 interface MorningBriefPanelProps {
@@ -36,7 +35,6 @@ interface MorningBriefPanelProps {
 
 export function MorningBriefPanel({ brief, isLoading, onRefresh }: MorningBriefPanelProps) {
   const navigate = useNavigate();
-  const { profile } = useAuth();
   const [minutesSinceGeneration, setMinutesSinceGeneration] = useState(0);
   const [isExporting, setIsExporting] = useState(false);
 
@@ -61,17 +59,17 @@ export function MorningBriefPanel({ brief, isLoading, onRefresh }: MorningBriefP
   const isStale = minutesSinceGeneration > 5;
 
   // Handle PDF export - legal size by default
+  // Uses lawyerName from the brief itself (fetched with the brief data)
   const handleDownloadPDF = useCallback(() => {
     if (!brief || brief.total_cases === 0) return;
     
     setIsExporting(true);
     try {
-      const lawyerName = profile?.full_name || 'Advocate';
-      generateBriefPDF(brief, lawyerName);
+      generateBriefPDF(brief, brief.lawyerName);
     } finally {
       setIsExporting(false);
     }
-  }, [brief, profile?.full_name]);
+  }, [brief]);
 
   if (isLoading) {
     return (
