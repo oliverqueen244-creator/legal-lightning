@@ -18,12 +18,15 @@ import {
   Clock,
   Scale,
   BookMarked,
+  Download,
 } from 'lucide-react';
 import { format, differenceInMinutes } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import type { MorningBrief, MorningBriefCase } from '@/hooks/useMorningBrief';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { useAuth } from '@/hooks/useAuth';
+import { generateBriefPDF } from '@/lib/briefExport';
 
 interface MorningBriefPanelProps {
   brief: MorningBrief | null | undefined;
@@ -33,7 +36,9 @@ interface MorningBriefPanelProps {
 
 export function MorningBriefPanel({ brief, isLoading, onRefresh }: MorningBriefPanelProps) {
   const navigate = useNavigate();
+  const { profile } = useAuth();
   const [minutesSinceGeneration, setMinutesSinceGeneration] = useState(0);
+  const [isExporting, setIsExporting] = useState(false);
 
   // P1 FIX: Track freshness of the morning brief
   useEffect(() => {
@@ -54,6 +59,19 @@ export function MorningBriefPanel({ brief, isLoading, onRefresh }: MorningBriefP
   }, [brief?.generated_at]);
 
   const isStale = minutesSinceGeneration > 5;
+
+  // Handle PDF export - legal size by default
+  const handleDownloadPDF = useCallback(() => {
+    if (!brief || brief.total_cases === 0) return;
+    
+    setIsExporting(true);
+    try {
+      const lawyerName = profile?.full_name || 'Advocate';
+      generateBriefPDF(brief, lawyerName);
+    } finally {
+      setIsExporting(false);
+    }
+  }, [brief, profile?.full_name]);
 
   if (isLoading) {
     return (
@@ -232,6 +250,23 @@ export function MorningBriefPanel({ brief, isLoading, onRefresh }: MorningBriefP
         <div className="flex items-center gap-2">
           <Sun className="h-5 w-5 text-primary" />
           <h2 className="font-display text-xl tracking-wide text-foreground">Today's Brief</h2>
+          {/* Small download button for legal-size PDF */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+                onClick={handleDownloadPDF}
+                disabled={isExporting || !brief || brief.total_cases === 0}
+              >
+                <Download className={cn("h-4 w-4", isExporting && "animate-pulse")} />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              <p className="text-xs">Download PDF (Legal Size)</p>
+            </TooltipContent>
+          </Tooltip>
         </div>
         {/* DECLUTTER: Freshness indicator - demoted, smaller, less prominent */}
         <FreshnessIndicator
