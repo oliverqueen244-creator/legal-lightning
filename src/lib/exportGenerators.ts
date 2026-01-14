@@ -8,7 +8,8 @@
 import { format } from 'date-fns';
 import type { ExportData, ExportCase, ExportGroup, ExportFormat } from '@/types/export';
 import { 
-  EXPORT_COLUMNS, 
+  EXPORT_COLUMNS_SINGLE_DATE,
+  EXPORT_COLUMNS_MULTI_DATE,
   EXPORT_FOOTER, 
   NOTES_DISCLAIMER, 
   MAX_NOTES_LENGTH,
@@ -64,22 +65,30 @@ function formatPartyName(name: string | null): string {
 // Generate CSV content
 export function generateCSV(data: ExportData): string {
   const lines: string[] = [];
+  const columns = data.isMultiDate ? EXPORT_COLUMNS_MULTI_DATE : EXPORT_COLUMNS_SINGLE_DATE;
   
   // Header row
-  lines.push(EXPORT_COLUMNS.join(','));
+  lines.push(columns.join(','));
   
   // Data rows - flatten all groups
   for (const group of data.groups) {
     for (const caseItem of group.cases) {
-      const row = [
+      const row = data.isMultiDate ? [
         escapeCSV(caseItem.caseNo),
-        escapeCSV(caseItem.caseType),
-        caseItem.year.toString(),
         escapeCSV(formatPartyName(caseItem.petitioner)),
         escapeCSV(formatPartyName(caseItem.respondent)),
+        escapeCSV(formatPartyName(caseItem.opposingCounsel)),
         caseItem.advocateRole,
-        escapeCSV(caseItem.outcome || ''),
+        escapeCSV(caseItem.outcome || '—'),
         escapeCSV(caseItem.dateRange),
+        escapeCSV(caseItem.lawyerNotes),
+      ] : [
+        escapeCSV(caseItem.caseNo),
+        escapeCSV(formatPartyName(caseItem.petitioner)),
+        escapeCSV(formatPartyName(caseItem.respondent)),
+        escapeCSV(formatPartyName(caseItem.opposingCounsel)),
+        caseItem.advocateRole,
+        escapeCSV(caseItem.outcome || '—'),
         escapeCSV(caseItem.lawyerNotes),
       ];
       lines.push(row.join(','));
@@ -108,22 +117,30 @@ function escapeCSV(value: string): string {
 export function generateExcel(data: ExportData): Blob {
   // Using TSV format which Excel handles well
   const lines: string[] = [];
+  const columns = data.isMultiDate ? EXPORT_COLUMNS_MULTI_DATE : EXPORT_COLUMNS_SINGLE_DATE;
   
   // Header row
-  lines.push(EXPORT_COLUMNS.join('\t'));
+  lines.push(columns.join('\t'));
   
   // Data rows - flatten all groups
   for (const group of data.groups) {
     for (const caseItem of group.cases) {
-      const row = [
+      const row = data.isMultiDate ? [
         caseItem.caseNo,
-        caseItem.caseType,
-        caseItem.year.toString(),
         formatPartyName(caseItem.petitioner),
         formatPartyName(caseItem.respondent),
+        formatPartyName(caseItem.opposingCounsel),
         caseItem.advocateRole,
-        caseItem.outcome || '',
+        caseItem.outcome || '—',
         caseItem.dateRange,
+        caseItem.lawyerNotes.replace(/\t/g, ' ').replace(/\n/g, ' | '),
+      ] : [
+        caseItem.caseNo,
+        formatPartyName(caseItem.petitioner),
+        formatPartyName(caseItem.respondent),
+        formatPartyName(caseItem.opposingCounsel),
+        caseItem.advocateRole,
+        caseItem.outcome || '—',
         caseItem.lawyerNotes.replace(/\t/g, ' ').replace(/\n/g, ' | '),
       ];
       lines.push(row.join('\t'));
@@ -250,20 +267,21 @@ export function generatePDFContent(data: ExportData, pageSize: 'a4' | 'legal'): 
       background-color: #fafafa;
     }
     
-    .col-caseno { width: 14%; }
-    .col-type { width: 8%; }
-    .col-year { width: 5%; }
+    /* Column widths - revised layout without Type/Year */
+    .col-caseno { width: 18%; }
     .col-petitioner { width: 14%; }
     .col-respondent { width: 14%; }
+    .col-opposing { width: 14%; }
     .col-role { width: 8%; }
     .col-outcome { width: 8%; }
-    .col-dates { width: 12%; }
-    .col-notes { width: 17%; min-height: 45px; }
+    .col-dates { width: 10%; }
+    .col-notes { width: 24%; min-height: 60px; }
     
     .notes-cell {
       white-space: pre-wrap;
       max-height: none;
-      min-height: 45px; /* 2-3 lines of space for handwritten notes */
+      min-height: 60px; /* 2-3 lines of space for handwritten notes */
+      height: 60px; /* Ensures consistent space for writing */
     }
     
     .party-cell {
@@ -312,6 +330,24 @@ export function generatePDFContent(data: ExportData, pageSize: 'a4' | 'legal'): 
 
   // Generate each group
   for (const group of data.groups) {
+    // Build table header based on single-date vs multi-date
+    const tableHeaders = data.isMultiDate
+      ? `<th class="col-caseno">Case No.</th>
+         <th class="col-petitioner">Petitioner</th>
+         <th class="col-respondent">Respondent</th>
+         <th class="col-opposing">Opposing Counsel</th>
+         <th class="col-role">Role</th>
+         <th class="col-outcome">Outcome</th>
+         <th class="col-dates">Date Range</th>
+         <th class="col-notes">Lawyer Notes</th>`
+      : `<th class="col-caseno">Case No.</th>
+         <th class="col-petitioner">Petitioner</th>
+         <th class="col-respondent">Respondent</th>
+         <th class="col-opposing">Opposing Counsel</th>
+         <th class="col-role">Role</th>
+         <th class="col-outcome">Outcome</th>
+         <th class="col-notes">Lawyer Notes</th>`;
+    
     html += `
   <div class="group-header">
     <div class="court">Court No.: ${escapeHTML(group.courtNo)}</div>
@@ -321,15 +357,7 @@ export function generatePDFContent(data: ExportData, pageSize: 'a4' | 'legal'): 
   <table>
     <thead>
       <tr>
-        <th class="col-caseno">Case No.</th>
-        <th class="col-type">Type</th>
-        <th class="col-year">Year</th>
-        <th class="col-petitioner">Petitioner</th>
-        <th class="col-respondent">Respondent</th>
-        <th class="col-role">Role</th>
-        <th class="col-outcome">Outcome</th>
-        <th class="col-dates">Date Range</th>
-        <th class="col-notes">Lawyer Notes</th>
+        ${tableHeaders}
       </tr>
     </thead>
     <tbody>
@@ -338,18 +366,29 @@ export function generatePDFContent(data: ExportData, pageSize: 'a4' | 'legal'): 
     for (const caseItem of group.cases) {
       const petitionerDisplay = caseItem.petitioner?.trim() || '—';
       const respondentDisplay = caseItem.respondent?.trim() || '—';
+      const opposingCounselDisplay = caseItem.opposingCounsel?.trim() || '—';
+      
+      // Build table row based on single-date vs multi-date
+      const tableRow = data.isMultiDate
+        ? `<td class="col-caseno">${escapeHTML(caseItem.caseNo)}</td>
+           <td class="col-petitioner party-cell">${escapeHTML(petitionerDisplay)}</td>
+           <td class="col-respondent party-cell">${escapeHTML(respondentDisplay)}</td>
+           <td class="col-opposing party-cell">${escapeHTML(opposingCounselDisplay)}</td>
+           <td class="col-role">${caseItem.advocateRole}</td>
+           <td class="col-outcome">${escapeHTML(caseItem.outcome || '—')}</td>
+           <td class="col-dates">${escapeHTML(caseItem.dateRange)}</td>
+           <td class="col-notes notes-cell">${escapeHTML(caseItem.lawyerNotes) || ' '}</td>`
+        : `<td class="col-caseno">${escapeHTML(caseItem.caseNo)}</td>
+           <td class="col-petitioner party-cell">${escapeHTML(petitionerDisplay)}</td>
+           <td class="col-respondent party-cell">${escapeHTML(respondentDisplay)}</td>
+           <td class="col-opposing party-cell">${escapeHTML(opposingCounselDisplay)}</td>
+           <td class="col-role">${caseItem.advocateRole}</td>
+           <td class="col-outcome">${escapeHTML(caseItem.outcome || '—')}</td>
+           <td class="col-notes notes-cell">${escapeHTML(caseItem.lawyerNotes) || ' '}</td>`;
       
       html += `
       <tr>
-        <td class="col-caseno">${escapeHTML(caseItem.caseNo)}</td>
-        <td class="col-type">${escapeHTML(caseItem.caseType)}</td>
-        <td class="col-year">${caseItem.year}</td>
-        <td class="col-petitioner party-cell">${escapeHTML(petitionerDisplay)}</td>
-        <td class="col-respondent party-cell">${escapeHTML(respondentDisplay)}</td>
-        <td class="col-role">${caseItem.advocateRole}</td>
-        <td class="col-outcome">${escapeHTML(caseItem.outcome || '—')}</td>
-        <td class="col-dates">${escapeHTML(caseItem.dateRange)}</td>
-        <td class="col-notes notes-cell">${escapeHTML(caseItem.lawyerNotes) || ' '}</td>
+        ${tableRow}
       </tr>
 `;
     }

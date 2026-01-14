@@ -16,14 +16,14 @@ export type AdvocateRole = 'Petitioner' | 'Respondent';
 export interface ExportCase {
   id: string;
   caseNo: string;
-  caseType: string;
-  year: number;
   advocateRole: AdvocateRole;
   outcome: string | null;
   dateRange: string; // "DD Mon YYYY → DD Mon YYYY"
   // Party names (from daily_court_docket)
   petitioner: string | null;
   respondent: string | null;
+  // Opposing counsel (respondent_lawyer if Petitioner, petitioner_lawyer if Respondent)
+  opposingCounsel: string | null;
   // Lawyer notes - blank by default, space for handwritten or NyayHub-entered notes
   lawyerNotes: string;
   // Grouping keys (not exported as columns)
@@ -43,12 +43,14 @@ export interface ExportData {
   exportDate: string;
   groups: ExportGroup[];
   totalCases: number;
-  // Date scope for footer
+  // Date scope for footer and conditional columns
   dateScope?: {
     mode: ExportDateMode;
     start?: string;
     end?: string;
   };
+  // True if export covers multiple days (determines Date Range column visibility)
+  isMultiDate: boolean;
 }
 
 export interface ExportOptions {
@@ -59,14 +61,25 @@ export interface ExportOptions {
   dateRangeEnd?: Date;
 }
 
-// Column order is LOCKED per specification (extended with party names)
-export const EXPORT_COLUMNS = [
+// Column order is LOCKED per specification (revised)
+// Type and Year removed (already in Case No.)
+// Date Range conditional (only for multi-date exports)
+export const EXPORT_COLUMNS_SINGLE_DATE = [
   'Case No.',
-  'Case Type',
-  'Year',
   'Petitioner',
   'Respondent',
-  'Advocate Role',
+  'Opposing Counsel',
+  'Role',
+  'Outcome',
+  'Lawyer Notes',
+] as const;
+
+export const EXPORT_COLUMNS_MULTI_DATE = [
+  'Case No.',
+  'Petitioner',
+  'Respondent',
+  'Opposing Counsel',
+  'Role',
   'Outcome',
   'Date Range',
   'Lawyer Notes',
