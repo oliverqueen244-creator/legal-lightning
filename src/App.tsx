@@ -60,11 +60,12 @@ const App = () => (
     <TooltipProvider>
       {/* FormDirtyProvider MUST wrap everything for safety checks */}
       <FormDirtyProvider>
-        {/* PWA Force Update Kill Switch - with safety checks and dialog */}
-        <ForceUpdateChecker />
-        {/* SAFE PWA AUTO-UPDATE: Beforeunload safety net */}
-        <BeforeUnloadGuard />
+        {/* SyncConflictProvider must wrap ForceUpdateChecker since it uses useSyncConflict */}
         <SyncConflictProvider>
+          {/* PWA Force Update Kill Switch - with safety checks and dialog */}
+          <ForceUpdateChecker />
+          {/* SAFE PWA AUTO-UPDATE: Beforeunload safety net */}
+          <BeforeUnloadGuard />
           {/* Branded Splash Screen - shows once per session */}
           <SplashScreen />
           <Toaster 
