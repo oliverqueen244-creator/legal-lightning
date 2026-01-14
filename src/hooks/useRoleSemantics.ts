@@ -53,16 +53,17 @@ export function useRoleSemantics(): RoleSemantics {
   
   const isLawyerRole = role === 'SENIOR' || role === 'JUNIOR' || role === 'ADMIN';
   const isClerkRole = role === 'CLERK';
+  const isInternRole = role === 'INTERN';
   
-  // Clerks cannot perform ownership actions
-  const canClaimOwnership = isLawyerRole;
-  const canForceActive = role === 'SENIOR' || role === 'ADMIN';
-  const canConfirmMatches = isLawyerRole;
-  // CP-4: Only seniors/admins can create chamber cases
-  const canCreateChamberCases = role === 'SENIOR' || role === 'ADMIN';
+  // Clerks and Interns cannot perform ownership actions
+  const canClaimOwnership = isLawyerRole && !isInternRole;
+  const canForceActive = (role === 'SENIOR' || role === 'ADMIN') && !isInternRole;
+  const canConfirmMatches = isLawyerRole && !isInternRole;
+  // CP-4: Only seniors/admins can create chamber cases (never interns)
+  const canCreateChamberCases = (role === 'SENIOR' || role === 'ADMIN') && !isInternRole;
   
-  // CP-5: Ownership actions are NEVER allowed for clerks (hard rule)
-  const canPerformOwnershipAction = isLawyerRole;
+  // CP-5: Ownership actions are NEVER allowed for clerks or interns (hard rule)
+  const canPerformOwnershipAction = isLawyerRole && !isInternRole;
   
   // Role-aware labels (legacy - for personal context)
   const caseLabel = isClerkRole ? 'Tracked case' : 'Your case';

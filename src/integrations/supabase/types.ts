@@ -1696,6 +1696,262 @@ export type Database = {
         }
         Relationships: []
       }
+      intern_access_log: {
+        Row: {
+          action_type: string
+          details: Json | null
+          id: string
+          intern_account_id: string
+          logged_at: string
+          target_id: string | null
+          target_table: string | null
+        }
+        Insert: {
+          action_type: string
+          details?: Json | null
+          id?: string
+          intern_account_id: string
+          logged_at?: string
+          target_id?: string | null
+          target_table?: string | null
+        }
+        Update: {
+          action_type?: string
+          details?: Json | null
+          id?: string
+          intern_account_id?: string
+          logged_at?: string
+          target_id?: string | null
+          target_table?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "intern_access_log_intern_account_id_fkey"
+            columns: ["intern_account_id"]
+            isOneToOne: false
+            referencedRelation: "intern_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      intern_accounts: {
+        Row: {
+          chamber_id: string
+          created_at: string
+          expires_at: string
+          id: string
+          institution: string | null
+          intern_name: string
+          revocation_reason: string | null
+          revoked_at: string | null
+          supervisor_id: string
+          user_id: string
+        }
+        Insert: {
+          chamber_id: string
+          created_at?: string
+          expires_at: string
+          id?: string
+          institution?: string | null
+          intern_name: string
+          revocation_reason?: string | null
+          revoked_at?: string | null
+          supervisor_id: string
+          user_id: string
+        }
+        Update: {
+          chamber_id?: string
+          created_at?: string
+          expires_at?: string
+          id?: string
+          institution?: string | null
+          intern_name?: string
+          revocation_reason?: string | null
+          revoked_at?: string | null
+          supervisor_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "intern_accounts_chamber_id_fkey"
+            columns: ["chamber_id"]
+            isOneToOne: false
+            referencedRelation: "chambers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "intern_accounts_supervisor_id_fkey"
+            columns: ["supervisor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      intern_case_assignments: {
+        Row: {
+          assigned_at: string
+          assigned_by: string
+          docket_id: string
+          expires_at: string | null
+          id: string
+          intern_account_id: string
+          notes: string | null
+        }
+        Insert: {
+          assigned_at?: string
+          assigned_by: string
+          docket_id: string
+          expires_at?: string | null
+          id?: string
+          intern_account_id: string
+          notes?: string | null
+        }
+        Update: {
+          assigned_at?: string
+          assigned_by?: string
+          docket_id?: string
+          expires_at?: string | null
+          id?: string
+          intern_account_id?: string
+          notes?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "intern_case_assignments_assigned_by_fkey"
+            columns: ["assigned_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "intern_case_assignments_docket_id_fkey"
+            columns: ["docket_id"]
+            isOneToOne: false
+            referencedRelation: "daily_court_docket"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "intern_case_assignments_docket_id_fkey"
+            columns: ["docket_id"]
+            isOneToOne: false
+            referencedRelation: "user_docket_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "intern_case_assignments_docket_id_fkey"
+            columns: ["docket_id"]
+            isOneToOne: false
+            referencedRelation: "v_clerk_ownership_violations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "intern_case_assignments_docket_id_fkey"
+            columns: ["docket_id"]
+            isOneToOne: false
+            referencedRelation: "v_invalid_case_contexts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "intern_case_assignments_intern_account_id_fkey"
+            columns: ["intern_account_id"]
+            isOneToOne: false
+            referencedRelation: "intern_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      intern_drafts: {
+        Row: {
+          content: string
+          created_at: string
+          docket_id: string
+          draft_type: string
+          id: string
+          intern_account_id: string
+          review_notes: string | null
+          review_status: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          submitted_at: string | null
+          submitted_for_review: boolean
+          updated_at: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          docket_id: string
+          draft_type: string
+          id?: string
+          intern_account_id: string
+          review_notes?: string | null
+          review_status?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          submitted_at?: string | null
+          submitted_for_review?: boolean
+          updated_at?: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          docket_id?: string
+          draft_type?: string
+          id?: string
+          intern_account_id?: string
+          review_notes?: string | null
+          review_status?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          submitted_at?: string | null
+          submitted_for_review?: boolean
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "intern_drafts_docket_id_fkey"
+            columns: ["docket_id"]
+            isOneToOne: false
+            referencedRelation: "daily_court_docket"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "intern_drafts_docket_id_fkey"
+            columns: ["docket_id"]
+            isOneToOne: false
+            referencedRelation: "user_docket_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "intern_drafts_docket_id_fkey"
+            columns: ["docket_id"]
+            isOneToOne: false
+            referencedRelation: "v_clerk_ownership_violations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "intern_drafts_docket_id_fkey"
+            columns: ["docket_id"]
+            isOneToOne: false
+            referencedRelation: "v_invalid_case_contexts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "intern_drafts_intern_account_id_fkey"
+            columns: ["intern_account_id"]
+            isOneToOne: false
+            referencedRelation: "intern_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "intern_drafts_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       judge_judgment_references: {
         Row: {
           added_at: string
@@ -3431,6 +3687,10 @@ export type Database = {
         Args: { p_case_id: string; p_lawyer_id: string }
         Returns: Json
       }
+      can_manage_chamber_interns: {
+        Args: { _chamber_id: string; _user_id: string }
+        Returns: boolean
+      }
       can_sync_documents: {
         Args: { p_case_id: string; p_lawyer_id: string }
         Returns: Json
@@ -3469,6 +3729,7 @@ export type Database = {
         Args: { _clerk_id: string; _lawyer_id: string }
         Returns: string
       }
+      get_intern_account_id: { Args: { _user_id: string }; Returns: string }
       get_judgment_eligibility: {
         Args: { p_case_id: string }
         Returns: {
@@ -3521,6 +3782,11 @@ export type Database = {
         Args: { p_case_id: string }
         Returns: number
       }
+      intern_can_access_case: {
+        Args: { _docket_id: string; _user_id: string }
+        Returns: boolean
+      }
+      is_active_intern: { Args: { _user_id: string }; Returns: boolean }
       is_chamber_member: {
         Args: { _chamber_id: string; _user_id: string }
         Returns: boolean
@@ -3535,6 +3801,10 @@ export type Database = {
         Returns: boolean
       }
       is_fallback_disabled: { Args: { p_bench_code: string }; Returns: boolean }
+      is_intern_supervisor: {
+        Args: { _intern_account_id: string; _user_id: string }
+        Returns: boolean
+      }
       is_judgment_eligible_status: {
         Args: {
           p_status: Database["public"]["Enums"]["case_proceeding_status"]
@@ -3611,6 +3881,7 @@ export type Database = {
         }
         Returns: undefined
       }
+      revoke_expired_intern_accounts: { Args: never; Returns: Json }
       try_lock_case_for_job: {
         Args: { p_case_id: string; p_job_type: string }
         Returns: string
@@ -3628,7 +3899,7 @@ export type Database = {
       }
     }
     Enums: {
-      app_role: "SENIOR" | "JUNIOR" | "CLERK" | "ADMIN"
+      app_role: "SENIOR" | "JUNIOR" | "CLERK" | "ADMIN" | "INTERN"
       audit_dimension:
         | "user_experience"
         | "role_permissions"
@@ -3861,7 +4132,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["SENIOR", "JUNIOR", "CLERK", "ADMIN"],
+      app_role: ["SENIOR", "JUNIOR", "CLERK", "ADMIN", "INTERN"],
       audit_dimension: [
         "user_experience",
         "role_permissions",
