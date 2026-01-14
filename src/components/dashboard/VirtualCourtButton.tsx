@@ -126,7 +126,7 @@ export function VirtualCourtButton({
             </Badge>
           ) : vc_confidence >= 60 ? (
             <Badge variant="outline" className="text-[10px] h-5 px-1.5 bg-amber-500/10 border-amber-500/30 text-amber-600">
-              Inferred from causelist
+              Derived from cause list
             </Badge>
           ) : (
             <Badge variant="outline" className="text-[10px] h-5 px-1.5">

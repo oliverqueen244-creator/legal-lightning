@@ -146,11 +146,11 @@ function JudgmentCard({
         </div>
       )}
       
-      {/* AI-inferred warning */}
+      {/* System-inferred indicator */}
       {judgment.isAiInferred && judgment.matchedSignals.length === 0 && (
         <div className="flex items-center gap-1 text-[10px] text-muted-foreground/60">
           <Info className="h-3 w-3" />
-          <span>AI-inferred relevance</span>
+          <span>System-inferred relevance</span>
         </div>
       )}
       
