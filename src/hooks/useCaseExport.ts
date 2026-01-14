@@ -3,16 +3,20 @@
  * 
  * Fetches and prepares case data for lawyer profile exports.
  * Enforces role-based access (SENIOR, JUNIOR own profile; ADMIN audit access).
+ * 
+ * DEFAULT: Export only TODAY's cases (same date logic as Today tab)
+ * OPTIONAL: Export by custom date range when explicitly selected
  */
 
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, startOfDay } from 'date-fns';
 import { resolveCaseType, extractCaseTypeAbbr } from '@/lib/caseTypeMapping';
-import type { ExportCase, ExportGroup, ExportData, AdvocateRole } from '@/types/export';
+import type { ExportCase, ExportGroup, ExportData, AdvocateRole, ExportDateMode } from '@/types/export';
 
 interface UseCaseExportOptions {
+  dateMode: ExportDateMode; // 'today' (default) or 'range'
   dateRangeStart?: Date;
   dateRangeEnd?: Date;
   targetUserId?: string; // For admin audit access
@@ -53,9 +57,9 @@ function getCaseTypeShort(caseNumber: string): string {
   return match ? match[1].trim() : 'Unknown';
 }
 
-export function useCaseExport(options: UseCaseExportOptions = {}) {
+export function useCaseExport(options: UseCaseExportOptions) {
   const { user, role, isAuthenticated } = useAuth();
-  const { dateRangeStart, dateRangeEnd, targetUserId } = options;
+  const { dateMode, dateRangeStart, dateRangeEnd, targetUserId } = options;
   
   // Determine which user's data to fetch
   const userId = targetUserId || user?.id;
@@ -67,15 +71,38 @@ export function useCaseExport(options: UseCaseExportOptions = {}) {
     (role === 'ADMIN')
   );
   
+  // Calculate effective dates based on mode
+  const today = format(startOfDay(new Date()), 'yyyy-MM-dd');
+  const effectiveStart = dateMode === 'today' ? today : (dateRangeStart ? format(dateRangeStart, 'yyyy-MM-dd') : undefined);
+  const effectiveEnd = dateMode === 'today' ? today : (dateRangeEnd ? format(dateRangeEnd, 'yyyy-MM-dd') : undefined);
+  
+  // Validate range mode has both dates
+  const isValidRange = dateMode === 'today' || (dateRangeStart && dateRangeEnd);
+  
   // Fetch cases with all appearances grouped by case_fingerprint
-  const { data: caseData, isLoading, error, refetch } = useQuery({
-    queryKey: ['case-export', userId, dateRangeStart?.toISOString(), dateRangeEnd?.toISOString()],
-    queryFn: async () => {
+  type DocketRow = {
+    id: string;
+    case_number: string | null;
+    court_room_no: string | null;
+    judge_names: string | null;
+    matched_role: string | null;
+    status: string | null;
+    date: string;
+    case_fingerprint: string | null;
+  };
+  
+  const { data: caseData, isLoading, error, refetch } = useQuery<DocketRow[]>({
+    queryKey: ['case-export', userId, dateMode, effectiveStart, effectiveEnd],
+    queryFn: async (): Promise<DocketRow[]> => {
       if (!userId || !canExport) {
         throw new Error('Unauthorized: Export not permitted');
       }
       
-      // Build query to get all matched cases for this user
+      if (dateMode === 'range' && (!dateRangeStart || !dateRangeEnd)) {
+        throw new Error('Invalid date range');
+      }
+      
+      // Build query to get matched cases for this user within date scope
       let query = supabase
         .from('daily_court_docket')
         .select(`
@@ -92,11 +119,11 @@ export function useCaseExport(options: UseCaseExportOptions = {}) {
         .not('case_fingerprint', 'is', null)
         .order('date', { ascending: true });
       
-      if (dateRangeStart) {
-        query = query.gte('date', format(dateRangeStart, 'yyyy-MM-dd'));
-      }
-      if (dateRangeEnd) {
-        query = query.lte('date', format(dateRangeEnd, 'yyyy-MM-dd'));
+      // Apply date filters based on mode
+      if (dateMode === 'today') {
+        query = query.eq('date', today);
+      } else if (effectiveStart && effectiveEnd) {
+        query = query.gte('date', effectiveStart).lte('date', effectiveEnd);
       }
       
       const { data, error: fetchError } = await query;
@@ -105,10 +132,10 @@ export function useCaseExport(options: UseCaseExportOptions = {}) {
         throw fetchError;
       }
       
-      return data || [];
+      return (data || []) as DocketRow[];
     },
-    enabled: !!userId && canExport,
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    enabled: Boolean(userId && canExport && isValidRange),
+    staleTime: 2 * 60 * 1000, // 2 minutes
   });
   
   // Fetch lawyer profile for name
@@ -130,6 +157,7 @@ export function useCaseExport(options: UseCaseExportOptions = {}) {
   const processedData: ExportData | null = caseData ? (() => {
     // Group by case_fingerprint to find first/last appearance
     const caseMap = new Map<string, {
+      fingerprint: string;
       caseNumber: string;
       courtNo: string;
       judgeName: string;
@@ -151,6 +179,7 @@ export function useCaseExport(options: UseCaseExportOptions = {}) {
         }
       } else {
         caseMap.set(fingerprint, {
+          fingerprint,
           caseNumber: row.case_number || '',
           courtNo: row.court_room_no || 'Unknown',
           judgeName: row.judge_names || 'Unknown',
@@ -176,9 +205,10 @@ export function useCaseExport(options: UseCaseExportOptions = {}) {
         advocateRole: data.role,
         outcome: data.outcome,
         dateRange: formatDateRange(firstDate, lastDate),
-        lawyerNotes: '', // Empty by default - user fills in
+        lawyerNotes: '', // Will be filled from stored notes
         courtNo: data.courtNo,
         judgeName: data.judgeName,
+        caseFingerprint: fingerprint,
       });
     });
     
@@ -200,13 +230,26 @@ export function useCaseExport(options: UseCaseExportOptions = {}) {
     
     const groups = Array.from(groupMap.values());
     
+    // Determine date scope for footer
+    const dateScope = dateMode === 'today' 
+      ? { mode: dateMode as ExportDateMode }
+      : { 
+          mode: dateMode as ExportDateMode, 
+          start: effectiveStart, 
+          end: effectiveEnd 
+        };
+    
     return {
       lawyerName: profile?.full_name || 'Unknown Lawyer',
       exportDate: format(new Date(), 'dd MMM yyyy'),
       groups,
       totalCases: cases.length,
+      dateScope,
     };
   })() : null;
+  
+  // Get all case fingerprints for notes lookup
+  const caseFingerprints = processedData?.groups.flatMap(g => g.cases.map(c => c.caseFingerprint)) || [];
   
   return {
     data: processedData,
@@ -215,6 +258,10 @@ export function useCaseExport(options: UseCaseExportOptions = {}) {
     refetch,
     canExport,
     hasData: (processedData?.totalCases || 0) > 0,
+    caseFingerprints,
+    isValidRange,
+    effectiveStart,
+    effectiveEnd,
   };
 }
 
