@@ -1732,6 +1732,13 @@ export type Database = {
             referencedRelation: "intern_accounts"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "intern_access_log_intern_account_id_fkey"
+            columns: ["intern_account_id"]
+            isOneToOne: false
+            referencedRelation: "v_intern_activity_digest"
+            referencedColumns: ["intern_account_id"]
+          },
         ]
       }
       intern_accounts: {
@@ -1859,6 +1866,13 @@ export type Database = {
             referencedRelation: "intern_accounts"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "intern_case_assignments_intern_account_id_fkey"
+            columns: ["intern_account_id"]
+            isOneToOne: false
+            referencedRelation: "v_intern_activity_digest"
+            referencedColumns: ["intern_account_id"]
+          },
         ]
       }
       intern_drafts: {
@@ -1942,6 +1956,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "intern_accounts"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "intern_drafts_intern_account_id_fkey"
+            columns: ["intern_account_id"]
+            isOneToOne: false
+            referencedRelation: "v_intern_activity_digest"
+            referencedColumns: ["intern_account_id"]
           },
           {
             foreignKeyName: "intern_drafts_reviewed_by_fkey"
@@ -3592,6 +3613,59 @@ export type Database = {
           target_table: string | null
         }
         Relationships: []
+      }
+      v_intern_activity_digest: {
+        Row: {
+          approved_drafts_count: number | null
+          assigned_cases_count: number | null
+          days_until_expiry: number | null
+          expires_at: string | null
+          intern_account_id: string | null
+          intern_created_at: string | null
+          intern_name: string | null
+          last_activity_at: string | null
+          pending_drafts_count: number | null
+          rejected_drafts_count: number | null
+          revoked_at: string | null
+          supervisor_id: string | null
+        }
+        Insert: {
+          approved_drafts_count?: never
+          assigned_cases_count?: never
+          days_until_expiry?: never
+          expires_at?: string | null
+          intern_account_id?: string | null
+          intern_created_at?: string | null
+          intern_name?: string | null
+          last_activity_at?: never
+          pending_drafts_count?: never
+          rejected_drafts_count?: never
+          revoked_at?: string | null
+          supervisor_id?: string | null
+        }
+        Update: {
+          approved_drafts_count?: never
+          assigned_cases_count?: never
+          days_until_expiry?: never
+          expires_at?: string | null
+          intern_account_id?: string | null
+          intern_created_at?: string | null
+          intern_name?: string | null
+          last_activity_at?: never
+          pending_drafts_count?: never
+          rejected_drafts_count?: never
+          revoked_at?: string | null
+          supervisor_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "intern_accounts_supervisor_id_fkey"
+            columns: ["supervisor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       v_invalid_case_contexts: {
         Row: {

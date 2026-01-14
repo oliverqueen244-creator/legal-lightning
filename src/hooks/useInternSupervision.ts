@@ -1,5 +1,5 @@
 /**
- * INTERN INTEGRATION PHASE 2A: Supervisor Control Hooks
+ * INTERN INTEGRATION PHASE 2A + 2B: Supervisor Control Hooks
  * 
  * Provides hooks for supervisors to manage their interns.
  * 
@@ -7,8 +7,7 @@
  * - Only shows interns supervised by the current user
  * - No global intern list
  * - No bulk actions
- * - No stats/analytics
- * - Feature-flagged per chamber
+ * - Phase 2B adds read-only digest and timeline (feature-flagged separately)
  * 
  * SECURITY REVIEW: 2026-01-14
  */
@@ -343,6 +342,169 @@ export function useReviewDraft() {
     onError: (error) => {
       console.error('Failed to review draft:', error);
       toast.error('Failed to review draft');
+    }
+  });
+}
+
+// ============================================
+// PHASE 2B: Supervisor Visibility Hooks
+// Feature-flagged separately from Phase 2A
+// ============================================
+
+export interface InternActivityDigest {
+  supervisor_id: string;
+  intern_account_id: string;
+  intern_name: string;
+  expires_at: string;
+  revoked_at: string | null;
+  intern_created_at: string;
+  pending_drafts_count: number;
+  approved_drafts_count: number;
+  rejected_drafts_count: number;
+  assigned_cases_count: number;
+  last_activity_at: string | null;
+  days_until_expiry: number | null;
+}
+
+export interface InternAccessLogEntry {
+  id: string;
+  intern_account_id: string;
+  action_type: string;
+  target_table: string | null;
+  target_id: string | null;
+  details: Record<string, unknown> | null;
+  logged_at: string;
+}
+
+/**
+ * Check if Phase 2B features are enabled
+ */
+export function usePhase2BEnabled() {
+  return useQuery({
+    queryKey: ['feature-flag', 'intern-supervision-phase2b'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('app_config')
+        .select('value')
+        .eq('key', 'feature_intern_supervision_phase2b_enabled')
+        .maybeSingle();
+      
+      if (error) {
+        console.error('Failed to fetch Phase 2B feature flag:', error);
+        return false;
+      }
+      
+      return data?.value === true;
+    },
+    staleTime: 60000,
+  });
+}
+
+/**
+ * Fetch activity digest for all supervised interns
+ * Phase 2B: Read-only aggregated view
+ */
+export function useInternActivityDigest() {
+  const { user } = useAuth();
+  
+  return useQuery({
+    queryKey: ['intern-activity-digest', user?.id],
+    queryFn: async () => {
+      if (!user?.id) return [];
+      
+      const { data, error } = await supabase
+        .from('v_intern_activity_digest')
+        .select('*')
+        .eq('supervisor_id', user.id)
+        .order('days_until_expiry', { ascending: true, nullsFirst: false });
+      
+      if (error) throw error;
+      return data as InternActivityDigest[];
+    },
+    enabled: !!user?.id,
+  });
+}
+
+/**
+ * Get summary counts for passive supervisor signals
+ * Phase 2B: Badge/strip display only
+ */
+export function useSupervisorSignals() {
+  const { data: digest = [] } = useInternActivityDigest();
+  
+  const pendingDraftsTotal = digest.reduce((sum, d) => sum + (d.pending_drafts_count || 0), 0);
+  const internsWithPending = digest.filter(d => (d.pending_drafts_count || 0) > 0).length;
+  const internsExpiringIn7Days = digest.filter(d => 
+    d.days_until_expiry !== null && 
+    d.days_until_expiry >= 0 && 
+    d.days_until_expiry <= 7
+  );
+  
+  return {
+    pendingDraftsTotal,
+    internsWithPending,
+    internsExpiringIn7Days,
+    hasSignals: pendingDraftsTotal > 0 || internsExpiringIn7Days.length > 0
+  };
+}
+
+/**
+ * Fetch immutable access log timeline for a specific intern
+ * Phase 2B: Read-only, no actions
+ */
+export function useInternTimeline(internAccountId: string | undefined) {
+  return useQuery({
+    queryKey: ['intern-timeline', internAccountId],
+    queryFn: async () => {
+      if (!internAccountId) return [];
+      
+      const { data, error } = await supabase
+        .from('intern_access_log')
+        .select('*')
+        .eq('intern_account_id', internAccountId)
+        .order('logged_at', { ascending: false })
+        .limit(100);
+      
+      if (error) throw error;
+      return data as InternAccessLogEntry[];
+    },
+    enabled: !!internAccountId,
+  });
+}
+
+/**
+ * Extend an intern's expiry date
+ * Phase 2B: Soft nudge action
+ */
+export function useExtendInternExpiry() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ 
+      internAccountId, 
+      newExpiryDate 
+    }: { 
+      internAccountId: string; 
+      newExpiryDate: Date;
+    }) => {
+      const { data, error } = await supabase
+        .from('intern_accounts')
+        .update({ expires_at: newExpiryDate.toISOString() })
+        .eq('id', internAccountId)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['supervised-interns'] });
+      queryClient.invalidateQueries({ queryKey: ['intern-activity-digest'] });
+      toast.success('Intern expiry extended');
+    },
+    onError: (error) => {
+      console.error('Failed to extend expiry:', error);
+      toast.error('Failed to extend expiry');
     }
   });
 }
