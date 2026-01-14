@@ -1,21 +1,23 @@
 /**
  * useListingHistory Hook
  * 
- * SEMANTIC CORRECTION: Replaces useCaseHistory semantically.
+ * CANONICAL MODEL: Listing = History, Meaning = Notes
  * 
- * This hook fetches CAUSE LIST LISTINGS (not confirmed hearings).
- * A listing represents a case appearing on a cause list for a given date.
- * A hearing is a CONFIRMED event derived from post-court notes or manual marking.
+ * This hook fetches CAUSE LIST LISTINGS as the sole source of truth for history.
+ * Each row in daily_court_docket represents:
+ * "This case was listed before this court on this date."
  * 
- * This distinction is critical for Indian court workflows:
- * - Listings are system-ingested, objective facts
- * - Hearings are lawyer-confirmed, semantic events
+ * NyayHub does NOT infer:
+ * - Whether the case was heard
+ * - What happened in court
+ * - What the judge ruled
+ * 
+ * Those belong ONLY to post-court notes (lawyer-authored, optional).
  */
 
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import type { CaseDocument, CaseArgument } from '@/types/database';
-import type { CaseHearing } from './useHearings';
 
 export interface PostCourtNoteEntry {
   id: string;
@@ -30,12 +32,10 @@ export interface ListingEntry {
   docket_id: string;
   item_no: number;
   court_room_no: string;
-  status: string;
   judge_names: string | null;
   documents: CaseDocument[];
   arguments: CaseArgument[];
-  // Hearing overlay - populated if lawyer confirmed hearing for this date
-  hearing?: CaseHearing;
+  // Post-court note - lawyer-authored meaning layer
   postCourtNote?: PostCourtNoteEntry;
 }
 
@@ -44,14 +44,14 @@ export interface ListingHistory {
   case_number: string;
   first_listing: string;
   total_listings: number;
-  confirmed_hearings: number;
   entries: ListingEntry[];
   all_documents: CaseDocument[];
   all_arguments: CaseArgument[];
 }
 
 /**
- * Fetch all cause list listings for a case, with hearing overlays
+ * Fetch all cause list listings for a case
+ * Listings are the history. Post-court notes provide meaning.
  */
 export function useListingHistory(docketId: string) {
   return useQuery({
@@ -75,13 +75,11 @@ export function useListingHistory(docketId: string) {
           case_number: currentDocket.case_number || '',
           first_listing: currentDocket.date,
           total_listings: 1,
-          confirmed_hearings: 0,
           entries: [{
             date: currentDocket.date,
             docket_id: currentDocket.id,
             item_no: currentDocket.item_no || 0,
             court_room_no: currentDocket.court_room_no || '',
-            status: currentDocket.status || 'pending',
             judge_names: currentDocket.judge_names || null,
             documents: [],
             arguments: [],
@@ -102,8 +100,8 @@ export function useListingHistory(docketId: string) {
 
       const docketIds = allListings?.map((d) => d.id) || [];
 
-      // Fetch documents, arguments, hearings, and notes in parallel
-      const [docsResult, argsResult, hearingsResult, notesResult] = await Promise.all([
+      // Fetch documents, arguments, and post-court notes in parallel
+      const [docsResult, argsResult, notesResult] = await Promise.all([
         supabase
           .from('case_documents')
           .select('*')
@@ -115,11 +113,6 @@ export function useListingHistory(docketId: string) {
           .in('docket_id', docketIds)
           .order('created_at', { ascending: false }),
         supabase
-          .from('case_hearings')
-          .select('*')
-          .eq('case_fingerprint', fingerprint)
-          .order('hearing_date', { ascending: true }),
-        supabase
           .from('post_court_notes')
           .select('*')
           .eq('case_fingerprint', fingerprint)
@@ -128,17 +121,14 @@ export function useListingHistory(docketId: string) {
 
       if (docsResult.error) throw docsResult.error;
       if (argsResult.error) throw argsResult.error;
-      if (hearingsResult.error) throw hearingsResult.error;
       if (notesResult.error) throw notesResult.error;
 
       const allDocuments = docsResult.data || [];
       const allArguments = argsResult.data || [];
-      const allHearings = (hearingsResult.data || []) as CaseHearing[];
       const allNotes = notesResult.data || [];
 
-      // Build listing entries with hearing overlays
+      // Build listing entries with post-court notes as meaning layer
       const entries: ListingEntry[] = (allListings || []).map((listing) => {
-        const hearing = allHearings.find(h => h.hearing_date === listing.date);
         const note = allNotes.find(n => n.hearing_date === listing.date);
         
         return {
@@ -146,11 +136,9 @@ export function useListingHistory(docketId: string) {
           docket_id: listing.id,
           item_no: listing.item_no || 0,
           court_room_no: listing.court_room_no || '',
-          status: listing.status || 'pending',
           judge_names: listing.judge_names || null,
           documents: allDocuments.filter((d) => d.docket_id === listing.id) as CaseDocument[],
           arguments: allArguments.filter((a) => a.docket_id === listing.id) as CaseArgument[],
-          hearing: hearing || undefined,
           postCourtNote: note ? {
             id: note.id,
             hearing_date: note.hearing_date,
@@ -161,14 +149,11 @@ export function useListingHistory(docketId: string) {
         };
       });
 
-      const confirmedHearings = entries.filter(e => e.hearing?.was_heard).length;
-
       return {
         fingerprint,
         case_number: currentDocket.case_number || '',
         first_listing: entries[0]?.date || currentDocket.date,
         total_listings: entries.length,
-        confirmed_hearings: confirmedHearings,
         entries,
         all_documents: allDocuments as CaseDocument[],
         all_arguments: allArguments as CaseArgument[],
@@ -180,7 +165,6 @@ export function useListingHistory(docketId: string) {
 
 /**
  * Check if a case has previous listings
- * (Semantic replacement for useCaseHasHistory)
  */
 export function useCaseHasListings(docketId: string) {
   return useQuery({
