@@ -610,6 +610,45 @@ export type Database = {
           },
         ]
       }
+      case_export_logs: {
+        Row: {
+          cases_exported: number
+          date_range_end: string | null
+          date_range_start: string | null
+          export_format: string
+          export_type: string
+          exported_at: string
+          id: string
+          ip_address: string | null
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          cases_exported?: number
+          date_range_end?: string | null
+          date_range_start?: string | null
+          export_format: string
+          export_type: string
+          exported_at?: string
+          id?: string
+          ip_address?: string | null
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: {
+          cases_exported?: number
+          date_range_end?: string | null
+          date_range_start?: string | null
+          export_format?: string
+          export_type?: string
+          exported_at?: string
+          id?: string
+          ip_address?: string | null
+          user_agent?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       case_judgments: {
         Row: {
           created_at: string | null
