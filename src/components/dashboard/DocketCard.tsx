@@ -14,6 +14,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { CaseTimeEstimatorCompact } from './CaseTimeEstimator';
 import { HearingLikelihoodBadge } from './HearingLikelihoodBadge';
+import { CaseVirtualCourtButton } from './CaseVirtualCourtButton';
 import { useAliases } from '@/hooks/useAliases';
 import { useCourtSessionState, getCurrentItem, isRunningState, shouldShowWaitTime, CURRENT_ITEM_FALLBACK } from '@/hooks/useCourtSessionState';
 
@@ -385,6 +386,13 @@ function DocketCardInner({ item, liveBoard, userRole, onForceActive, showDate, p
           </div>
           
           <div className="flex flex-col items-end gap-2">
+            {/* Virtual Court Button - Court-level, date-scoped */}
+            <CaseVirtualCourtButton
+              courtLocation={item.court_location}
+              courtRoomNo={item.court_room_no}
+              compact
+            />
+            
             {/* Force Active Button - Only for SENIOR/ADMIN */}
             {canForceActive && (
               <Button
