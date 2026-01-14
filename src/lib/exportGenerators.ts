@@ -3,10 +3,16 @@
  * 
  * Generates PDF, CSV, and Excel exports for case data.
  * Follows strict schema and layout rules from specification.
+ * 
+ * EXPORT CONTRACT:
+ * This export is intentionally black & white.
+ * Do NOT add color, badges, or visual emphasis.
+ * Court-print safe by design.
+ * No Virtual Court links or meeting IDs are included.
  */
 
 import { format } from 'date-fns';
-import type { ExportData, ExportCase, ExportGroup, ExportFormat } from '@/types/export';
+import type { ExportData, ExportCase, ExportFormat } from '@/types/export';
 import { 
   EXPORT_COLUMNS_SINGLE_DATE,
   EXPORT_COLUMNS_MULTI_DATE,
@@ -29,24 +35,33 @@ export function validateNotes(cases: ExportCase[]): { valid: boolean; errors: st
   return { valid: errors.length === 0, errors };
 }
 
-// Format date scope for display
+// Format date scope for display - strict header rule
+// Single date: "Date: 14 Jan 2026"
+// Multi-date: "From 12 Jan 2026 to 14 Jan 2026"
 function formatDateScope(data: ExportData): string {
   if (!data.dateScope) return '';
   
+  const formatDate = (dateStr: string) => {
+    try {
+      const [year, month, day] = dateStr.split('-');
+      return `${day} ${getMonthName(parseInt(month))} ${year}`;
+    } catch {
+      return dateStr;
+    }
+  };
+  
+  // Single date export - no range wording
   if (data.dateScope.mode === 'today') {
-    return `Export scope: ${data.exportDate} (Today)`;
+    return `Date: ${data.exportDate}`;
   }
   
+  // Multi-date range
   if (data.dateScope.start && data.dateScope.end) {
-    const formatDate = (dateStr: string) => {
-      try {
-        const [year, month, day] = dateStr.split('-');
-        return `${day} ${getMonthName(parseInt(month))} ${year}`;
-      } catch {
-        return dateStr;
-      }
-    };
-    return `Export scope: ${formatDate(data.dateScope.start)} → ${formatDate(data.dateScope.end)}`;
+    if (data.dateScope.start === data.dateScope.end) {
+      // Same start and end = single date
+      return `Date: ${formatDate(data.dateScope.start)}`;
+    }
+    return `From ${formatDate(data.dateScope.start)} to ${formatDate(data.dateScope.end)}`;
   }
   
   return '';
@@ -63,6 +78,7 @@ function formatPartyName(name: string | null): string {
 }
 
 // Generate CSV content
+// Multiline notes are preserved with newlines for proper CSV handling
 export function generateCSV(data: ExportData): string {
   const lines: string[] = [];
   const columns = data.isMultiDate ? EXPORT_COLUMNS_MULTI_DATE : EXPORT_COLUMNS_SINGLE_DATE;
@@ -70,26 +86,33 @@ export function generateCSV(data: ExportData): string {
   // Header row
   lines.push(columns.join(','));
   
-  // Data rows - flatten all groups
+  // Data rows - flatten all groups (include court/judge context per case)
   for (const group of data.groups) {
     for (const caseItem of group.cases) {
+      // Lawyer notes: preserve multiline, add empty lines for handwriting space
+      const notesWithSpace = caseItem.lawyerNotes 
+        ? caseItem.lawyerNotes 
+        : '\n\n'; // 2-3 lines of blank space for manual notes
+      
       const row = data.isMultiDate ? [
         escapeCSV(caseItem.caseNo),
         escapeCSV(formatPartyName(caseItem.petitioner)),
         escapeCSV(formatPartyName(caseItem.respondent)),
-        escapeCSV(formatPartyName(caseItem.opposingCounsel)),
+        escapeCSV(caseItem.opposingCounsel), // Already normalized, never null
         caseItem.advocateRole,
+        caseItem.listingStatus,
         escapeCSV(caseItem.outcome || '—'),
         escapeCSV(caseItem.dateRange),
-        escapeCSV(caseItem.lawyerNotes),
+        escapeCSV(notesWithSpace),
       ] : [
         escapeCSV(caseItem.caseNo),
         escapeCSV(formatPartyName(caseItem.petitioner)),
         escapeCSV(formatPartyName(caseItem.respondent)),
-        escapeCSV(formatPartyName(caseItem.opposingCounsel)),
+        escapeCSV(caseItem.opposingCounsel), // Already normalized, never null
         caseItem.advocateRole,
+        caseItem.listingStatus,
         escapeCSV(caseItem.outcome || '—'),
-        escapeCSV(caseItem.lawyerNotes),
+        escapeCSV(notesWithSpace),
       ];
       lines.push(row.join(','));
     }
@@ -114,6 +137,7 @@ function escapeCSV(value: string): string {
 }
 
 // Generate Excel-compatible TSV (for simple Excel import)
+// Row heights are pre-expanded for notes column, text wrapping enabled
 export function generateExcel(data: ExportData): Blob {
   // Using TSV format which Excel handles well
   const lines: string[] = [];
@@ -125,23 +149,31 @@ export function generateExcel(data: ExportData): Blob {
   // Data rows - flatten all groups
   for (const group of data.groups) {
     for (const caseItem of group.cases) {
+      // Lawyer notes: replace tabs, preserve newlines as pipe separators for Excel
+      // Add blank lines if empty for writing space indication
+      const notesForExcel = caseItem.lawyerNotes 
+        ? caseItem.lawyerNotes.replace(/\t/g, ' ').replace(/\n/g, ' | ')
+        : '   |   |   '; // Visual space indicator for 2-3 lines
+      
       const row = data.isMultiDate ? [
         caseItem.caseNo,
         formatPartyName(caseItem.petitioner),
         formatPartyName(caseItem.respondent),
-        formatPartyName(caseItem.opposingCounsel),
+        caseItem.opposingCounsel, // Already normalized
         caseItem.advocateRole,
+        caseItem.listingStatus,
         caseItem.outcome || '—',
         caseItem.dateRange,
-        caseItem.lawyerNotes.replace(/\t/g, ' ').replace(/\n/g, ' | '),
+        notesForExcel,
       ] : [
         caseItem.caseNo,
         formatPartyName(caseItem.petitioner),
         formatPartyName(caseItem.respondent),
-        formatPartyName(caseItem.opposingCounsel),
+        caseItem.opposingCounsel, // Already normalized
         caseItem.advocateRole,
+        caseItem.listingStatus,
         caseItem.outcome || '—',
-        caseItem.lawyerNotes.replace(/\t/g, ' ').replace(/\n/g, ' | '),
+        notesForExcel,
       ];
       lines.push(row.join('\t'));
     }
@@ -158,10 +190,16 @@ export function generateExcel(data: ExportData): Blob {
 }
 
 // PDF Generator - returns HTML that will be converted to PDF
+// EXPORT CONTRACT: Black & white only, no colors, court-print safe
 export function generatePDFContent(data: ExportData, pageSize: 'a4' | 'legal'): string {
   const pageWidth = pageSize === 'a4' ? '210mm' : '215.9mm';
   const pageHeight = pageSize === 'a4' ? '297mm' : '355.6mm';
   const dateScopeText = formatDateScope(data);
+  
+  // EXPORT CONTRACT:
+  // This export is intentionally black & white.
+  // Do NOT add color, badges, or visual emphasis.
+  // Court-print safe by design.
   
   let html = `
 <!DOCTYPE html>
@@ -181,11 +219,13 @@ export function generatePDFContent(data: ExportData, pageSize: 'a4' | 'legal'): 
       padding: 0;
     }
     
+    /* BLACK & WHITE ONLY - No colors, gradients, or colored elements */
     body {
       font-family: 'Times New Roman', Times, serif;
       font-size: 10pt;
       line-height: 1.4;
       color: #000;
+      background: #fff;
     }
     
     .header {
@@ -203,21 +243,20 @@ export function generatePDFContent(data: ExportData, pageSize: 'a4' | 'legal'): 
     
     .header .subtitle {
       font-size: 10pt;
-      color: #444;
     }
     
     .header .date-scope {
-      font-size: 9pt;
-      color: #666;
-      margin-top: 3px;
+      font-size: 10pt;
+      font-weight: bold;
+      margin-top: 5px;
     }
     
     .group-header {
       margin-top: 15px;
       margin-bottom: 10px;
       padding: 8px;
-      background-color: #f5f5f5;
-      border-left: 3px solid #333;
+      border: 1px solid #000;
+      border-left: 3px solid #000;
       page-break-inside: avoid;
     }
     
@@ -228,7 +267,6 @@ export function generatePDFContent(data: ExportData, pageSize: 'a4' | 'legal'): 
     
     .group-header .judge {
       font-size: 10pt;
-      color: #444;
     }
     
     table {
@@ -241,19 +279,21 @@ export function generatePDFContent(data: ExportData, pageSize: 'a4' | 'legal'): 
       display: table-header-group;
     }
     
+    /* BLACK & WHITE: Header uses bold text on white, not colored background */
     th {
-      background-color: #333;
-      color: #fff;
+      background-color: #fff;
+      color: #000;
       padding: 6px 4px;
       text-align: left;
       font-size: 9pt;
       font-weight: bold;
-      border: 1px solid #333;
+      border: 1px solid #000;
+      border-bottom: 2px solid #000;
     }
     
     td {
       padding: 5px 4px;
-      border: 1px solid #ccc;
+      border: 1px solid #000;
       vertical-align: top;
       font-size: 9pt;
       word-wrap: break-word;
@@ -263,25 +303,32 @@ export function generatePDFContent(data: ExportData, pageSize: 'a4' | 'legal'): 
       page-break-inside: avoid;
     }
     
-    tr:nth-child(even) {
-      background-color: #fafafa;
-    }
+    /* No alternating colors - all white */
     
-    /* Column widths - revised layout without Type/Year */
-    .col-caseno { width: 18%; }
-    .col-petitioner { width: 14%; }
-    .col-respondent { width: 14%; }
-    .col-opposing { width: 14%; }
-    .col-role { width: 8%; }
-    .col-outcome { width: 8%; }
-    .col-dates { width: 10%; }
-    .col-notes { width: 24%; min-height: 60px; }
+    /* Column widths - revised layout with Listing Status */
+    .col-caseno { width: 15%; font-family: 'Courier New', monospace; }
+    .col-petitioner { width: 12%; }
+    .col-respondent { width: 12%; }
+    .col-opposing { width: 12%; }
+    .col-role { width: 7%; }
+    .col-listing { width: 6%; }
+    .col-outcome { width: 7%; }
+    .col-dates { width: 9%; }
+    .col-notes { width: 20%; }
     
+    /* Lawyer Notes: 2-3 lines of writable space with dotted ruling */
     .notes-cell {
       white-space: pre-wrap;
-      max-height: none;
-      min-height: 60px; /* 2-3 lines of space for handwritten notes */
-      height: 60px; /* Ensures consistent space for writing */
+      min-height: 48px; /* ~3 lines at 16px line-height */
+      height: 48px;
+      background-image: repeating-linear-gradient(
+        to bottom,
+        transparent,
+        transparent 15px,
+        #ccc 15px,
+        #ccc 16px
+      );
+      background-size: 100% 16px;
     }
     
     .party-cell {
@@ -289,23 +336,15 @@ export function generatePDFContent(data: ExportData, pageSize: 'a4' | 'legal'): 
       word-wrap: break-word;
     }
     
-    .footer {
-      position: fixed;
-      bottom: 0;
-      left: 0;
-      right: 0;
-      text-align: center;
+    .caseno-cell {
+      font-family: 'Courier New', monospace;
       font-size: 8pt;
-      color: #666;
-      padding: 10px;
-      border-top: 1px solid #ccc;
     }
     
     .disclaimer {
       margin-top: 20px;
       padding: 10px;
-      background-color: #fff9e6;
-      border: 1px solid #e6d279;
+      border: 1px solid #000;
       font-size: 8pt;
       font-style: italic;
     }
@@ -313,16 +352,15 @@ export function generatePDFContent(data: ExportData, pageSize: 'a4' | 'legal'): 
     .page-footer {
       text-align: center;
       font-size: 8pt;
-      color: #666;
       margin-top: 30px;
       padding-top: 10px;
-      border-top: 1px solid #ccc;
+      border-top: 1px solid #000;
     }
   </style>
 </head>
 <body>
   <div class="header">
-    <h1>Case Record - ${escapeHTML(data.lawyerName)}</h1>
+    <h1>Case Record — ${escapeHTML(data.lawyerName)}</h1>
     <div class="subtitle">Generated on ${data.exportDate} | Total Cases: ${data.totalCases}</div>
     ${dateScopeText ? `<div class="date-scope">${escapeHTML(dateScopeText)}</div>` : ''}
   </div>
@@ -331,20 +369,23 @@ export function generatePDFContent(data: ExportData, pageSize: 'a4' | 'legal'): 
   // Generate each group
   for (const group of data.groups) {
     // Build table header based on single-date vs multi-date
+    // Includes Listing Status column for Late Listed indicator
     const tableHeaders = data.isMultiDate
       ? `<th class="col-caseno">Case No.</th>
          <th class="col-petitioner">Petitioner</th>
          <th class="col-respondent">Respondent</th>
-         <th class="col-opposing">Opposing Counsel</th>
+         <th class="col-opposing">Opp. Counsel</th>
          <th class="col-role">Role</th>
+         <th class="col-listing">Listing</th>
          <th class="col-outcome">Outcome</th>
          <th class="col-dates">Date Range</th>
          <th class="col-notes">Lawyer Notes</th>`
       : `<th class="col-caseno">Case No.</th>
          <th class="col-petitioner">Petitioner</th>
          <th class="col-respondent">Respondent</th>
-         <th class="col-opposing">Opposing Counsel</th>
+         <th class="col-opposing">Opp. Counsel</th>
          <th class="col-role">Role</th>
+         <th class="col-listing">Listing</th>
          <th class="col-outcome">Outcome</th>
          <th class="col-notes">Lawyer Notes</th>`;
     
@@ -366,23 +407,27 @@ export function generatePDFContent(data: ExportData, pageSize: 'a4' | 'legal'): 
     for (const caseItem of group.cases) {
       const petitionerDisplay = caseItem.petitioner?.trim() || '—';
       const respondentDisplay = caseItem.respondent?.trim() || '—';
-      const opposingCounselDisplay = caseItem.opposingCounsel?.trim() || '—';
+      // Opposing counsel is already normalized (never null/blank)
+      const opposingCounselDisplay = caseItem.opposingCounsel;
       
       // Build table row based on single-date vs multi-date
+      // Notes cell left intentionally sparse for handwriting
       const tableRow = data.isMultiDate
-        ? `<td class="col-caseno">${escapeHTML(caseItem.caseNo)}</td>
+        ? `<td class="col-caseno caseno-cell">${escapeHTML(caseItem.caseNo)}</td>
            <td class="col-petitioner party-cell">${escapeHTML(petitionerDisplay)}</td>
            <td class="col-respondent party-cell">${escapeHTML(respondentDisplay)}</td>
            <td class="col-opposing party-cell">${escapeHTML(opposingCounselDisplay)}</td>
            <td class="col-role">${caseItem.advocateRole}</td>
+           <td class="col-listing">${caseItem.listingStatus}</td>
            <td class="col-outcome">${escapeHTML(caseItem.outcome || '—')}</td>
            <td class="col-dates">${escapeHTML(caseItem.dateRange)}</td>
            <td class="col-notes notes-cell">${escapeHTML(caseItem.lawyerNotes) || ' '}</td>`
-        : `<td class="col-caseno">${escapeHTML(caseItem.caseNo)}</td>
+        : `<td class="col-caseno caseno-cell">${escapeHTML(caseItem.caseNo)}</td>
            <td class="col-petitioner party-cell">${escapeHTML(petitionerDisplay)}</td>
            <td class="col-respondent party-cell">${escapeHTML(respondentDisplay)}</td>
            <td class="col-opposing party-cell">${escapeHTML(opposingCounselDisplay)}</td>
            <td class="col-role">${caseItem.advocateRole}</td>
+           <td class="col-listing">${caseItem.listingStatus}</td>
            <td class="col-outcome">${escapeHTML(caseItem.outcome || '—')}</td>
            <td class="col-notes notes-cell">${escapeHTML(caseItem.lawyerNotes) || ' '}</td>`;
       

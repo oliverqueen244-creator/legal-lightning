@@ -12,7 +12,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { format, parseISO, startOfDay } from 'date-fns';
-import type { ExportCase, ExportGroup, ExportData, AdvocateRole, ExportDateMode } from '@/types/export';
+import type { ExportCase, ExportGroup, ExportData, AdvocateRole, ExportDateMode, ListingStatus } from '@/types/export';
 
 interface UseCaseExportOptions {
   dateMode: ExportDateMode; // 'today' (default) or 'range'
@@ -74,6 +74,7 @@ export function useCaseExport(options: UseCaseExportOptions) {
     respondent: string | null;
     petitioner_lawyer: string | null;
     respondent_lawyer: string | null;
+    list_type: string | null; // For Late Listed detection
   };
   
   const { data: caseData, isLoading, error, refetch } = useQuery<DocketRow[]>({
@@ -103,7 +104,8 @@ export function useCaseExport(options: UseCaseExportOptions) {
           petitioner,
           respondent,
           petitioner_lawyer,
-          respondent_lawyer
+          respondent_lawyer,
+          list_type
         `)
         .eq('matched_profile_id', userId)
         .not('case_fingerprint', 'is', null)
@@ -143,6 +145,27 @@ export function useCaseExport(options: UseCaseExportOptions) {
     enabled: !!userId,
   });
   
+  // Normalize opposing counsel: name, "State Counsel / PP", or "—"
+  function normalizeOpposingCounsel(counsel: string | null, respondentName: string | null): string {
+    if (counsel?.trim()) {
+      return counsel.trim();
+    }
+    // Check if this is a government matter (common patterns)
+    const respondent = (respondentName || '').toLowerCase();
+    const isGovernmentMatter = 
+      respondent.includes('state of') ||
+      respondent.includes('union of india') ||
+      respondent.includes('government') ||
+      respondent.includes('govt.') ||
+      respondent.includes('collector') ||
+      respondent.includes('commissioner');
+    
+    if (isGovernmentMatter) {
+      return 'State Counsel / PP';
+    }
+    return '—';
+  }
+  
   // Process and group data
   const processedData: ExportData | null = caseData ? (() => {
     // Group by case_fingerprint to find first/last appearance
@@ -156,7 +179,8 @@ export function useCaseExport(options: UseCaseExportOptions) {
       dates: string[];
       petitioner: string | null;
       respondent: string | null;
-      opposingCounsel: string | null;
+      opposingCounsel: string;
+      listingStatus: ListingStatus;
     }>();
     
     for (const row of caseData) {
@@ -167,9 +191,15 @@ export function useCaseExport(options: UseCaseExportOptions) {
       // If user is Petitioner, opposing counsel = respondent_lawyer
       // If user is Respondent, opposing counsel = petitioner_lawyer
       const userRole = row.matched_role;
-      const opposingCounsel = userRole === 'petitioner' 
+      const rawOpposingCounsel = userRole === 'petitioner' 
         ? row.respondent_lawyer 
         : row.petitioner_lawyer;
+      
+      // Normalize opposing counsel (never null/blank)
+      const opposingCounsel = normalizeOpposingCounsel(rawOpposingCounsel, row.respondent);
+      
+      // Determine listing status (Late Listed = SUPPLEMENTARY list type)
+      const listingStatus: ListingStatus = row.list_type === 'SUPPLEMENTARY' ? 'Late Listed' : 'Normal';
       
       const existing = caseMap.get(fingerprint);
       if (existing) {
@@ -185,9 +215,13 @@ export function useCaseExport(options: UseCaseExportOptions) {
         if (!existing.respondent && row.respondent) {
           existing.respondent = row.respondent;
         }
-        // Keep first non-null opposing counsel
-        if (!existing.opposingCounsel && opposingCounsel) {
+        // Update opposing counsel if we now have a better one
+        if (existing.opposingCounsel === '—' && opposingCounsel !== '—') {
           existing.opposingCounsel = opposingCounsel;
+        }
+        // Update listing status if any appearance is Late Listed
+        if (listingStatus === 'Late Listed') {
+          existing.listingStatus = 'Late Listed';
         }
       } else {
         caseMap.set(fingerprint, {
@@ -201,6 +235,7 @@ export function useCaseExport(options: UseCaseExportOptions) {
           petitioner: row.petitioner,
           respondent: row.respondent,
           opposingCounsel: opposingCounsel,
+          listingStatus: listingStatus,
         });
       }
     }
@@ -221,6 +256,7 @@ export function useCaseExport(options: UseCaseExportOptions) {
         petitioner: caseData.petitioner,
         respondent: caseData.respondent,
         opposingCounsel: caseData.opposingCounsel,
+        listingStatus: caseData.listingStatus,
         lawyerNotes: '', // Will be filled from stored notes (future-compatible)
         courtNo: caseData.courtNo,
         judgeName: caseData.judgeName,
