@@ -3857,6 +3857,15 @@ export type Database = {
         }
         Returns: string
       }
+      log_intern_access: {
+        Args: {
+          p_action_type: string
+          p_details?: Json
+          p_target_id?: string
+          p_target_table?: string
+        }
+        Returns: string
+      }
       log_security_event: {
         Args: {
           p_attempted_action: string
