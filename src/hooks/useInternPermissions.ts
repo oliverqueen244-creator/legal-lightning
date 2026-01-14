@@ -1,5 +1,5 @@
 /**
- * INTERN INTEGRATION PHASE 1: Zero-Trust Intern Permissions
+ * INTERN INTEGRATION PHASE 1 + 2B: Zero-Trust Intern Permissions
  * 
  * Provides strict permission checks for interns.
  * All permissions default to DENY.
@@ -10,6 +10,23 @@
  *   - All case access denied via RLS
  *   - Drafts become read-only (cannot create/modify)
  *   - Existing drafts remain visible to supervisors only
+ * 
+ * HARD-DENIED ACTIONS (compile-time constants):
+ * - canOwnCases: false
+ * - canApproveDocuments: false
+ * - canExport: false
+ * - canPrint: false
+ * - canDownload: false
+ * - canSeeClientContact: false
+ * - canSendWhispers: false
+ * - canAccessVirtualCourt: false
+ * - canModifyCaseMetadata: false
+ * - canPersistToMaster: false
+ * 
+ * ============================================================
+ * INTERN FEATURE SET COMPLETE as of Phase 2B (2026-01-14).
+ * Any expansion requires new audit + design approval.
+ * ============================================================
  * 
  * SECURITY REVIEW: 2026-01-14
  */

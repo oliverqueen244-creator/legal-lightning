@@ -8,8 +8,14 @@
  * - SupervisorSignalBadge/Strip: Passive pending work indicators
  * - InternExpiryNudge: Banner for expiring interns
  * - InternActivityDigestPanel: Read-only activity summary
+ * - SupervisorAuditPanel: Full read-only audit view
  * 
  * All components are feature-flagged and fully removable.
+ * 
+ * ============================================================
+ * INTERN FEATURE SET COMPLETE as of Phase 2B (2026-01-14).
+ * Any expansion requires new audit + design approval.
+ * ============================================================
  * 
  * SECURITY REVIEW: 2026-01-14
  */
@@ -17,7 +23,10 @@
 // Phase 2A
 export { InternSupervisionPanel } from './InternSupervisionPanel';
 
-// Phase 2B
+// Phase 2B - Passive Signals
 export { SupervisorSignalBadge, SupervisorSignalStrip } from './SupervisorSignals';
 export { InternExpiryNudge } from './InternExpiryNudge';
 export { InternActivityDigestPanel } from './InternActivityDigest';
+
+// Phase 2B - Full Audit Panel
+export { SupervisorAuditPanel } from './SupervisorAuditPanel';
