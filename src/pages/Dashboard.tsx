@@ -19,6 +19,7 @@ import { PostCourtCapturePanel } from '@/components/post-court/PostCourtCaptureP
 import { FreshnessIndicator } from '@/components/ui/FreshnessIndicator';
 import { PullToRefreshHint } from '@/components/ui/PullToRefreshHint';
 import { CourtFocusTrigger } from '@/components/court-focus';
+import { CaseExportPanel } from '@/components/export';
 import { useDocket } from '@/hooks/useDocket';
 import { useLiveBoard } from '@/hooks/useLiveBoard';
 import { useAuth } from '@/hooks/useAuth';
@@ -31,7 +32,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Scale, AlertCircle, Search, Sun, Gavel, Calendar, CheckCircle, Upload, MessageCircle, ClipboardList, Focus } from 'lucide-react';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Scale, AlertCircle, Search, Sun, Gavel, Calendar, CheckCircle, Upload, MessageCircle, ClipboardList, Focus, FileDown, ChevronDown } from 'lucide-react';
 import { LiveBoardSimulator } from '@/components/dashboard/LiveBoardSimulator';
 
 export default function Dashboard() {
@@ -336,8 +338,7 @@ export default function Dashboard() {
                   </TabsContent>
                 )}
 
-                {/* Morning Brief Tab - SENIOR's Today View */}
-                <TabsContent value="brief" className="mt-0">
+                <TabsContent value="brief" className="mt-0 space-y-6">
                   {isSenior && (
                     <div className="mb-4 p-3 rounded-lg bg-primary/5 border border-primary/20">
                       <p className="text-sm text-muted-foreground">
@@ -350,6 +351,24 @@ export default function Dashboard() {
                     isLoading={briefLoading}
                     onRefresh={refetchBrief}
                   />
+                  
+                  {/* Case Export Panel - For profile/CV exports */}
+                  {isSenior && (
+                    <Collapsible className="mt-6">
+                      <CollapsibleTrigger asChild>
+                        <Button variant="outline" className="w-full justify-between">
+                          <span className="flex items-center gap-2">
+                            <FileDown className="h-4 w-4" />
+                            Export Case Record
+                          </span>
+                          <ChevronDown className="h-4 w-4" />
+                        </Button>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent className="mt-4">
+                        <CaseExportPanel />
+                      </CollapsibleContent>
+                    </Collapsible>
+                  )}
                 </TabsContent>
 
                 <TabsContent value="daily" className="space-y-3 mt-0">
