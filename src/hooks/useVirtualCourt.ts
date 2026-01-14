@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { useInternPermissions } from '@/hooks/useInternPermissions';
 import { format } from 'date-fns';
 
 interface VCData {
@@ -11,20 +12,28 @@ interface VCData {
   vc_extracted_at: string | null;
 }
 
-interface VCResult {
+export interface VCResult {
   data: VCData | null;
   isValid: boolean;
   reason: string | null;
+  /** True if VC data exists but is stale (from previous date) */
+  isStale: boolean;
 }
 
 const CONFIDENCE_THRESHOLD = 50;
 
 /**
  * Hook to get Virtual Court data for a specific court on today's date.
+ * 
+ * CANONICAL RULE: VC link is identified by (court_id + listing_date)
+ * All cases in the same court on the same date use the same VC link.
+ * 
  * Only returns valid data if:
- * 1. vc_extracted_at is today
+ * 1. docket.date = today (date-bound freshness)
  * 2. vc_confidence >= threshold
  * 3. vc_join_url exists
+ * 
+ * NEVER falls back to previous dates or cached values without date match.
  */
 export function useVirtualCourt(
   courtLocation: string | undefined,
@@ -34,7 +43,8 @@ export function useVirtualCourt(
   isLoading: boolean;
   logClick: () => void;
 } {
-  const { user } = useAuth();
+  const { user, role } = useAuth();
+  const internPermissions = useInternPermissions();
   const queryClient = useQueryClient();
   const today = format(new Date(), 'yyyy-MM-dd');
 
@@ -43,14 +53,19 @@ export function useVirtualCourt(
     queryFn: async (): Promise<VCData | null> => {
       if (!courtLocation || !courtRoomNo) return null;
 
+      // SAFETY: Block intern access to VC data entirely
+      if (internPermissions.isIntern && !internPermissions.canAccessVirtualCourt) {
+        return null;
+      }
+
       // Fetch VC data from any docket entry for this court/date
-      // (all entries for a court should have same VC data)
+      // CANONICAL: All entries for a court on the same date share the same VC link
       const { data: docketEntry, error } = await supabase
         .from('daily_court_docket')
         .select('vc_provider, vc_meeting_id, vc_join_url, vc_confidence, vc_extracted_at')
         .eq('court_location', courtLocation)
         .eq('court_room_no', courtRoomNo)
-        .eq('date', today)
+        .eq('date', today) // FRESHNESS: Only today's date
         .not('vc_meeting_id', 'is', null)
         .limit(1)
         .maybeSingle();
@@ -62,37 +77,44 @@ export function useVirtualCourt(
 
       return docketEntry as VCData | null;
     },
-    enabled: !!courtLocation && !!courtRoomNo,
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    enabled: !!courtLocation && !!courtRoomNo && !(internPermissions.isIntern && !internPermissions.canAccessVirtualCourt),
+    staleTime: 5 * 60 * 1000, // 5 minutes - cache within session only
     refetchOnWindowFocus: false,
+    // SAFETY: Don't cache beyond session (gcTime handles cleanup)
+    gcTime: 10 * 60 * 1000, // 10 minutes
   });
 
-  // Validate VC data
+  // Validate VC data with explicit stale detection
   const vcData: VCResult = (() => {
+    // SAFETY: Block intern access
+    if (internPermissions.isIntern && !internPermissions.canAccessVirtualCourt) {
+      return { data: null, isValid: false, reason: 'Access restricted', isStale: false };
+    }
+
     if (!data) {
-      return { data: null, isValid: false, reason: 'VC details not published' };
+      return { data: null, isValid: false, reason: 'Virtual court link not verified for today', isStale: false };
     }
 
     if (!data.vc_join_url || !data.vc_meeting_id) {
-      return { data: null, isValid: false, reason: 'VC details not published' };
+      return { data: null, isValid: false, reason: 'Virtual court link not verified for today', isStale: false };
     }
 
-    // Note: vc_extracted_at is NOT checked against today's date because
-    // causelists are often published the evening before. The query already
-    // filters by docket date = today, which is the correct freshness check.
+    // FRESHNESS: The query already filters by date = today, so if we have data it's fresh
+    // No silent fallbacks - data is either today's or nothing
 
     // Check confidence threshold
     if (data.vc_confidence !== null && data.vc_confidence < CONFIDENCE_THRESHOLD) {
-      return { data: null, isValid: false, reason: 'VC data confidence too low' };
+      return { data: null, isValid: false, reason: 'VC data confidence too low', isStale: false };
     }
 
-    return { data, isValid: true, reason: null };
+    return { data, isValid: true, reason: null, isStale: false };
   })();
 
   // Mutation to log VC clicks for beta monitoring
   const logClickMutation = useMutation({
     mutationFn: async () => {
-      if (!user?.id || !data?.vc_meeting_id || !courtLocation || !courtRoomNo) {
+      // SAFETY: Block intern click logging
+      if (!user?.id || !data?.vc_meeting_id || !courtLocation || !courtRoomNo || internPermissions.isIntern) {
         return;
       }
 
@@ -125,18 +147,27 @@ export function useVirtualCourt(
 }
 
 /**
- * Hook to get VC data for a specific docket item
+ * Hook to get VC data for a specific docket item.
+ * 
+ * CANONICAL RULE: Resolves VC via court + date binding.
+ * Shows button only if VC link is valid for today.
  */
 export function useDocketVC(docketId: string | undefined): {
   vcData: VCResult;
   isLoading: boolean;
 } {
+  const internPermissions = useInternPermissions();
   const today = format(new Date(), 'yyyy-MM-dd');
 
   const { data, isLoading } = useQuery({
     queryKey: ['docket-vc', docketId],
-    queryFn: async (): Promise<VCData | null> => {
+    queryFn: async (): Promise<(VCData & { date: string }) | null> => {
       if (!docketId) return null;
+
+      // SAFETY: Block intern access
+      if (internPermissions.isIntern && !internPermissions.canAccessVirtualCourt) {
+        return null;
+      }
 
       const { data: docketEntry, error } = await supabase
         .from('daily_court_docket')
@@ -148,33 +179,40 @@ export function useDocketVC(docketId: string | undefined): {
         return null;
       }
 
-      // Only return if it's today's docket
+      // FRESHNESS: Only return if it's today's docket
+      // NO SILENT FALLBACK to previous dates
       if (docketEntry.date !== today) {
         return null;
       }
 
-      return docketEntry as VCData | null;
+      return docketEntry as VCData & { date: string };
     },
-    enabled: !!docketId,
+    enabled: !!docketId && !(internPermissions.isIntern && !internPermissions.canAccessVirtualCourt),
     staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
   });
 
   const vcData: VCResult = (() => {
+    // SAFETY: Block intern access
+    if (internPermissions.isIntern && !internPermissions.canAccessVirtualCourt) {
+      return { data: null, isValid: false, reason: 'Access restricted', isStale: false };
+    }
+
     if (!data) {
-      return { data: null, isValid: false, reason: 'VC details not published' };
+      return { data: null, isValid: false, reason: 'Virtual court link not verified for today', isStale: false };
     }
 
     if (!data.vc_join_url || !data.vc_meeting_id) {
-      return { data: null, isValid: false, reason: 'VC details not published' };
+      return { data: null, isValid: false, reason: 'Virtual court link not verified for today', isStale: false };
     }
 
-    // Note: vc_extracted_at is NOT checked - causelist published evening before is valid
+    // FRESHNESS: Already verified date = today in query
 
     if (data.vc_confidence !== null && data.vc_confidence < CONFIDENCE_THRESHOLD) {
-      return { data: null, isValid: false, reason: 'VC data confidence too low' };
+      return { data: null, isValid: false, reason: 'VC data confidence too low', isStale: false };
     }
 
-    return { data, isValid: true, reason: null };
+    return { data, isValid: true, reason: null, isStale: false };
   })();
 
   return { vcData, isLoading };
