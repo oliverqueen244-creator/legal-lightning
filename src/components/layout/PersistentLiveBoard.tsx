@@ -1,4 +1,4 @@
-import { AlertTriangle, Activity, MapPin, WifiOff, Clock } from 'lucide-react';
+import { AlertTriangle, Activity, MapPin, WifiOff, Clock, Timer } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
@@ -6,21 +6,46 @@ import { useLiveBoard } from '@/hooks/useLiveBoard';
 import { useDocket } from '@/hooks/useDocket';
 import { useAuth } from '@/hooks/useAuth';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
+import { useInternPermissions } from '@/hooks/useInternPermissions';
 import { deriveCourtSessionState, getCurrentItem, CURRENT_ITEM_FALLBACK } from '@/hooks/useCourtSessionState';
+import { useWaitTimeEstimate } from '@/hooks/useWaitTimeEstimate';
 import { format, differenceInSeconds } from 'date-fns';
 import { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 
 interface PersistentLiveBoardProps {
   className?: string;
 }
 
+// Allowed routes for live board visibility
+const ALLOWED_ROUTES = ['/', '/dashboard', '/war-room', '/control-deck', '/courtroom'];
+
 /**
- * Compact Live Board Widget - Persistent on ALL court-day screens
- * Shows: Current court item, user's nearest case, item distance
- * One-tap accessible, non-intrusive, color-coded by urgency
- * 
- * CORRECTNESS PLAN 2: Uses canonical court session state
+ * Check if current route is allowed for live board display
  */
+function useIsAllowedRoute(): boolean {
+  const location = useLocation();
+  return ALLOWED_ROUTES.some(route => 
+    location.pathname === route || location.pathname.startsWith(`${route}/`)
+  );
+}
+
+/**
+ * Compact Live Board Widget - Persistent on court-day screens
+ * Shows: Current court item, user's nearest case, item distance, wait time estimate
+ * 
+ * VISIBILITY RULES:
+ * 1. Only on allowed screens (dashboard, case detail, morning brief, courtroom)
+ * 2. Only when court session is active OR in passive mode when concluded
+ * 3. Hidden from interns
+ * 4. Shows passive mode when session concluded
+ * 
+ * PASSIVE MODE:
+ * When court session is inactive, shows:
+ * - Court number + "Court session concluded"
+ * - Hides: Now, My, Away, wait time, Live Sync indicator
+ */
+
 /**
  * P0 FIX: Staleness indicator helper
  * Calculates seconds since last update and returns visual state
@@ -53,8 +78,10 @@ function useStalenessState(lastUpdated: string | null | undefined) {
 }
 
 export function PersistentLiveBoard({ className }: PersistentLiveBoardProps) {
-  const { profile } = useAuth();
+  const { profile, role } = useAuth();
   const { isOnline } = useNetworkStatus();
+  const { isIntern } = useInternPermissions();
+  const isAllowedRoute = useIsAllowedRoute();
   const formattedDate = format(new Date(), 'yyyy-MM-dd');
   const { data: liveBoards, isLoading: liveBoardLoading } = useLiveBoard();
   const { data: docket, isLoading: docketLoading } = useDocket(formattedDate);
@@ -78,7 +105,6 @@ export function PersistentLiveBoard({ className }: PersistentLiveBoardProps) {
     const board = filteredLiveBoards.find(
       b => b.court_location === item.court_location && b.court_no === item.court_room_no
     );
-    // CORRECTNESS PLAN 2: Use canonical fallback
     const currentItem = getCurrentItem(board);
     const distance = (item.item_no ?? 0) - currentItem;
     
@@ -88,27 +114,50 @@ export function PersistentLiveBoard({ className }: PersistentLiveBoardProps) {
     return nearest;
   }, null as { item: typeof filteredDocket[0]; board: typeof filteredLiveBoards[0] | undefined; distance: number } | null);
 
-  // CRITICAL FIX: Call useStalenessState UNCONDITIONALLY before any early returns
-  // This was causing React hook rule violations when called after conditional returns
+  // CRITICAL FIX: Call hooks UNCONDITIONALLY before any early returns
   const lastUpdatedForStaleness = nearestCase?.board?.last_updated ?? null;
   const { secondsSinceUpdate, isStale, isWarning } = useStalenessState(lastUpdatedForStaleness);
+  
+  // Derive court session state
+  const courtSession = nearestCase ? deriveCourtSessionState(nearestCase.board) : null;
+  
+  // Wait time estimate
+  const waitTime = useWaitTimeEstimate(
+    nearestCase?.item.court_location,
+    nearestCase?.item.court_room_no,
+    nearestCase?.distance ?? 0,
+    courtSession?.inSession ?? false
+  );
 
-  // Loading state - after all hooks are called
+  // ═══════════════════════════════════════════════════════════════════
+  // VISIBILITY RULES - All must pass
+  // ═══════════════════════════════════════════════════════════════════
+  
+  // Rule 1: Hide from interns
+  if (isIntern) {
+    return null;
+  }
+
+  // Rule 2: Only show on allowed routes
+  if (!isAllowedRoute) {
+    return null;
+  }
+
+  // Loading state
   if (liveBoardLoading || docketLoading) {
     return (
       <div className={cn('h-10 bg-secondary/50 rounded-lg animate-pulse', className)} />
     );
   }
 
-  // No cases today - after all hooks are called
+  // Rule 3: No cases today - hide completely
   if (!nearestCase) {
     return null;
   }
 
   const { item, board, distance } = nearestCase;
   
-  // CORRECTNESS PLAN 2: Use canonical session state
-  const courtSession = deriveCourtSessionState(board);
+  // Derive session state from the found board
   const currentItem = getCurrentItem(board);
   
   // Format last update time for display
@@ -116,12 +165,61 @@ export function PersistentLiveBoard({ className }: PersistentLiveBoardProps) {
     ? format(new Date(board.last_updated), 'h:mm a')
     : null;
 
-  // CORRECTNESS PLAN 2: Urgency levels gated by session state
-  // Only show urgency when inSession === true
-  const isPanic = isOnline && courtSession.inSession && distance > 0 && distance <= 5;
-  const isImminent = isOnline && courtSession.inSession && distance > 0 && distance <= 10;
-  // CORRECTNESS PLAN 2: Canonical RUNNING - requires inSession && distance <= 0
-  const isRunning = isOnline && courtSession.inSession && distance <= 0;
+  // ═══════════════════════════════════════════════════════════════════
+  // PASSIVE MODE - When session has concluded
+  // ═══════════════════════════════════════════════════════════════════
+  if (courtSession?.isSessionConcluded || !courtSession?.inSession) {
+    return (
+      <TooltipProvider>
+        <div
+          className={cn(
+            'relative flex items-center gap-3 px-3 py-2 rounded-lg border',
+            'bg-muted/30 border-border/50',
+            className
+          )}
+          role="status"
+          aria-live="polite"
+        >
+          {/* Court Status Indicator - Dimmed */}
+          <div className="flex items-center gap-2">
+            <Activity className="h-4 w-4 text-muted-foreground/50" />
+            <div className="text-xs text-muted-foreground">
+              <MapPin className="h-3 w-3 inline mr-1" />
+              Court {item.court_room_no}
+            </div>
+          </div>
+
+          {/* Session Concluded Message */}
+          <Badge variant="secondary" className="text-xs font-normal">
+            Court session concluded
+          </Badge>
+
+          {/* Tooltip with reason */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="text-xs text-muted-foreground/70 cursor-help">
+                {courtSession?.reasonText || 'Session ended'}
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              <p className="text-sm">
+                Court status will update when the next session begins.
+              </p>
+            </TooltipContent>
+          </Tooltip>
+        </div>
+      </TooltipProvider>
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // ACTIVE MODE - Court in session
+  // ═══════════════════════════════════════════════════════════════════
+  
+  // Urgency levels (only when in session)
+  const isPanic = isOnline && distance > 0 && distance <= 5;
+  const isImminent = isOnline && distance > 0 && distance <= 10;
+  const isRunning = isOnline && distance <= 0;
 
   return (
     <TooltipProvider>
@@ -149,16 +247,12 @@ export function PersistentLiveBoard({ className }: PersistentLiveBoardProps) {
         </div>
       )}
 
-      {/* Court Status Indicator - CORRECTNESS PLAN 2: Use session state */}
+      {/* Court Status Indicator */}
       <div className="flex items-center gap-2">
         <Activity className={cn(
           'h-4 w-4',
-          // Show status based on court session, not raw board status
           !isOnline && 'text-muted-foreground',
-          isOnline && courtSession.inSession && 'text-court-success',
-          isOnline && !courtSession.inSession && courtSession.reason === 'lunch' && 'text-muted-foreground',
-          isOnline && !courtSession.inSession && courtSession.reason === 'passover' && 'text-court-warning',
-          isOnline && !courtSession.inSession && courtSession.reason !== 'lunch' && courtSession.reason !== 'passover' && 'text-muted-foreground'
+          isOnline && 'text-court-success'
         )} />
         <div className="text-xs text-muted-foreground hidden sm:block">
           <MapPin className="h-3 w-3 inline mr-1" />
@@ -191,7 +285,7 @@ export function PersistentLiveBoard({ className }: PersistentLiveBoardProps) {
         </span>
       </div>
 
-      {/* Distance Badge - CORRECTNESS PLAN 2: Use MARKED instead of NOW */}
+      {/* Distance Badge */}
       <Badge
         variant={!isOnline ? 'secondary' : isPanic ? 'danger' : isImminent ? 'secondary' : isRunning ? 'running' : 'outline'}
         className={cn(
@@ -204,7 +298,25 @@ export function PersistentLiveBoard({ className }: PersistentLiveBoardProps) {
         {isRunning && isOnline ? 'MARKED' : `${distance} away`}
       </Badge>
 
-      {/* P0 FIX: Staleness Indicator */}
+      {/* Wait Time Estimate - Only when in session and cases away > 0 */}
+      {isOnline && waitTime.displayText && distance > 0 && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div className="flex items-center gap-1 text-xs text-muted-foreground">
+              <Timer className="h-3 w-3" />
+              <span className="hidden sm:inline">{waitTime.displayText}</span>
+            </div>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" className="max-w-xs">
+            <p className="text-sm">
+              Estimated wait based on ~{waitTime.avgMinutesPerCase} min/case average.
+              {!waitTime.isReliable && ' This is an approximate estimate.'}
+            </p>
+          </TooltipContent>
+        </Tooltip>
+      )}
+
+      {/* Staleness Indicator + Live Sync */}
       {lastUpdateTime && isOnline && (
         <Tooltip>
           <TooltipTrigger asChild>
@@ -213,18 +325,25 @@ export function PersistentLiveBoard({ className }: PersistentLiveBoardProps) {
                 'flex items-center gap-1 text-xs',
                 isStale && 'text-amber-500',
                 isWarning && 'text-muted-foreground',
-                !isStale && !isWarning && 'text-muted-foreground'
+                !isStale && !isWarning && 'text-court-success'
               )}
             >
-              {(isStale || isWarning) && <Clock className="h-3 w-3" />}
+              <div className={cn(
+                'h-2 w-2 rounded-full',
+                isStale && 'bg-amber-500',
+                isWarning && 'bg-muted-foreground',
+                !isStale && !isWarning && 'bg-court-success animate-pulse'
+              )} />
               <span className="hidden sm:inline">
-                {lastUpdateTime}
+                {isStale ? 'Stale' : 'Live Sync'}
               </span>
             </div>
           </TooltipTrigger>
           <TooltipContent side="bottom" className="max-w-xs">
             <p className="text-sm">
-              Court position updates depend on live board availability. Verify if data appears delayed.
+              {isStale 
+                ? 'Court data has not been updated recently. Verify with court display.'
+                : `Last updated: ${lastUpdateTime}. Data refreshes automatically.`}
             </p>
           </TooltipContent>
         </Tooltip>
