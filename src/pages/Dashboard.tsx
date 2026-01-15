@@ -349,6 +349,7 @@ export default function Dashboard() {
                     brief={morningBrief}
                     isLoading={briefLoading}
                     onRefresh={refetchBrief}
+                    liveBoards={filteredLiveBoards}
                   />
                   
                   {/* Case Export Panel - For profile/CV exports */}

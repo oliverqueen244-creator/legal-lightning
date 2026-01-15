@@ -18,21 +18,26 @@ import {
   Scale,
   BookMarked,
   Download,
+  ArrowUp,
 } from 'lucide-react';
 import { format, differenceInMinutes } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import type { MorningBrief, MorningBriefCase } from '@/hooks/useMorningBrief';
-import { useState, useEffect, useCallback } from 'react';
+import type { LiveBoardCache } from '@/types/database';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { generateBriefPDF } from '@/lib/briefExport';
+import { deriveCourtSessionState, getCurrentItem } from '@/hooks/useCourtSessionState';
 
 interface MorningBriefPanelProps {
   brief: MorningBrief | null | undefined;
   isLoading?: boolean;
   onRefresh?: () => void;
+  /** Live board data for determining Up Next case */
+  liveBoards?: LiveBoardCache[];
 }
 
-export function MorningBriefPanel({ brief, isLoading, onRefresh }: MorningBriefPanelProps) {
+export function MorningBriefPanel({ brief, isLoading, onRefresh, liveBoards }: MorningBriefPanelProps) {
   const navigate = useNavigate();
   const [minutesSinceGeneration, setMinutesSinceGeneration] = useState(0);
   const [isExporting, setIsExporting] = useState(false);
@@ -56,6 +61,71 @@ export function MorningBriefPanel({ brief, isLoading, onRefresh }: MorningBriefP
   }, [brief?.generated_at]);
 
   const isStale = minutesSinceGeneration > 5;
+
+  /**
+   * UP NEXT Case Identification (per-court)
+   * 
+   * Definition: case.item_no > current_item_no AND smallest such number
+   * Conditions for showing UP NEXT:
+   * - Court must be in session (inSession = true)
+   * - Live board data must be fresh (not stale)
+   * - Case must not be MARKED (item_no > current_item_no)
+   */
+  const upNextCaseId = useMemo(() => {
+    if (!brief?.cases || brief.cases.length === 0 || !liveBoards || liveBoards.length === 0) {
+      return null;
+    }
+
+    // Group cases by court (court_location + court_room_no)
+    // For each court, find the up next case
+    const upNextCandidates: { caseId: string; courtKey: string; itemNo: number }[] = [];
+
+    // Get all unique courts from cases
+    const courtKeys = new Set(
+      brief.cases.map(c => `${c.court_location}::${c.court_room_no}`)
+    );
+
+    for (const courtKey of courtKeys) {
+      const [courtLocation, courtRoomNo] = courtKey.split('::');
+      
+      // Find matching live board
+      const liveBoard = liveBoards.find(
+        board => board.court_location === courtLocation && board.court_no === courtRoomNo
+      );
+      
+      if (!liveBoard) continue;
+      
+      // Check if court is in session
+      const sessionState = deriveCourtSessionState(liveBoard);
+      if (!sessionState.inSession || !sessionState.isDataFresh) continue;
+      
+      const currentItem = getCurrentItem(liveBoard);
+      
+      // Find cases for this court that are UP NEXT (item_no > current_item_no)
+      const futureCases = brief.cases
+        .filter(c => 
+          c.court_location === courtLocation && 
+          c.court_room_no === courtRoomNo && 
+          c.item_no > currentItem
+        )
+        .sort((a, b) => a.item_no - b.item_no);
+      
+      if (futureCases.length > 0) {
+        upNextCandidates.push({
+          caseId: futureCases[0].id,
+          courtKey,
+          itemNo: futureCases[0].item_no
+        });
+      }
+    }
+
+    // If we have multiple up next candidates (from different courts),
+    // return the one with the smallest item number (most imminent)
+    if (upNextCandidates.length === 0) return null;
+    
+    upNextCandidates.sort((a, b) => a.itemNo - b.itemNo);
+    return upNextCandidates[0].caseId;
+  }, [brief?.cases, liveBoards]);
 
   // Handle PDF export - legal size by default
   // Uses lawyerName from the brief itself (fetched with the brief data)
@@ -106,14 +176,15 @@ export function MorningBriefPanel({ brief, isLoading, onRefresh }: MorningBriefP
     );
   }
 
-  const CaseCard = ({ caseItem }: { caseItem: MorningBriefCase }) => {
+  const CaseCard = ({ caseItem, isUpNext }: { caseItem: MorningBriefCase; isUpNext?: boolean }) => {
     const hasRisks = Object.values(caseItem.risks).some(Boolean);
     
     return (
       <div
         className={cn(
           'p-4 rounded-lg glass-card cursor-pointer transition-all hover:bg-white/10',
-          hasRisks && 'border-l-4 border-l-court-danger-light'
+          hasRisks && !isUpNext && 'border-l-4 border-l-court-danger-light',
+          isUpNext && 'border-l-4 border-l-court-warning'
         )}
         onClick={() => navigate(`/war-room/${caseItem.id}`)}
       >
@@ -121,6 +192,13 @@ export function MorningBriefPanel({ brief, isLoading, onRefresh }: MorningBriefP
           <div className="flex-1 min-w-0">
             {/* Case header */}
             <div className="flex items-center gap-2 flex-wrap mb-2">
+              {/* UP NEXT Badge - shown first when active */}
+              {isUpNext && (
+                <Badge variant="upnext" className="text-xs flex items-center gap-1">
+                  <ArrowUp className="h-3 w-3" />
+                  UP NEXT
+                </Badge>
+              )}
               <span className="font-display font-bold text-foreground">
                 #{caseItem.item_no}
               </span>
@@ -140,6 +218,13 @@ export function MorningBriefPanel({ brief, isLoading, onRefresh }: MorningBriefP
                 </Badge>
               )}
             </div>
+            
+            {/* UP NEXT explanatory subtext */}
+            {isUpNext && (
+              <p className="text-xs text-muted-foreground/70 mb-2">
+                Based on current court sequence
+              </p>
+            )}
 
             {/* Party names */}
             {(caseItem.petitioner || caseItem.respondent) && (
@@ -296,12 +381,21 @@ export function MorningBriefPanel({ brief, isLoading, onRefresh }: MorningBriefP
 
       {/* DECLUTTER: Removed Separator, relying on whitespace for structure */}
       
-      {/* Case list */}
+      {/* Case list - Up Next case shown first (if exists), then remaining in original order */}
       <ScrollArea className="h-[400px] legal-scroll pr-4">
         <div className="space-y-3">
-          {brief.cases.map((caseItem) => (
-            <CaseCard key={caseItem.id} caseItem={caseItem} />
-          ))}
+          {/* Render Up Next case first if it exists */}
+          {upNextCaseId && (() => {
+            const upNextCase = brief.cases.find(c => c.id === upNextCaseId);
+            return upNextCase ? <CaseCard key={upNextCase.id} caseItem={upNextCase} isUpNext /> : null;
+          })()}
+          
+          {/* Render remaining cases (excluding Up Next case if it exists) */}
+          {brief.cases
+            .filter(caseItem => caseItem.id !== upNextCaseId)
+            .map((caseItem) => (
+              <CaseCard key={caseItem.id} caseItem={caseItem} />
+            ))}
         </div>
       </ScrollArea>
 
