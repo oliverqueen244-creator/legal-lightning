@@ -18,6 +18,7 @@ const badgeVariants = cva(
         warning: "border-court-warning bg-court-warning/10 text-court-warning",
         supplementary: "border-court-warning bg-court-warning/10 text-court-warning font-medium",
         running: "border-court-danger-light bg-court-positive-urgency text-foreground font-bold",
+        upnext: "border-court-warning bg-court-warning/10 text-court-warning font-medium",
       },
     },
     defaultVariants: {
