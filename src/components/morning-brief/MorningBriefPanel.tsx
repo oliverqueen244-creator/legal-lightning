@@ -10,9 +10,8 @@ import {
   Sun,
   AlertTriangle,
   CheckCircle,
-  Eye,
-  Users,
   FileText,
+  Users,
   History,
   ChevronRight,
   Clock,
@@ -210,24 +209,6 @@ export function MorningBriefPanel({ brief, isLoading, onRefresh }: MorningBriefP
                   style={{ width: `${caseItem.readiness.total}%` }}
                 />
               </div>
-            </div>
-
-            {/* Suggestion - prefixed with "Suggested:" to avoid implying certainty */}
-            <div
-              className={cn(
-                'flex items-center gap-2 p-2 rounded-lg text-sm',
-                caseItem.suggestion === 'attend' && 'bg-court-danger/10 text-court-danger-light',
-                caseItem.suggestion === 'delegate' && 'bg-court-success/10 text-court-success',
-                caseItem.suggestion === 'monitor' && 'bg-primary/10 text-primary'
-              )}
-            >
-              {caseItem.suggestion === 'attend' && <Scale className="h-4 w-4" />}
-              {caseItem.suggestion === 'delegate' && <Users className="h-4 w-4" />}
-              {caseItem.suggestion === 'monitor' && <Eye className="h-4 w-4" />}
-              <span className="font-medium">
-                Recommended Step: <span className="capitalize">{caseItem.suggestion}</span>
-              </span>
-              <span className="text-xs opacity-80">— {caseItem.suggestionReason} (verify)</span>
             </div>
 
             {/* Virtual Court Button - Court-level, date-scoped */}
