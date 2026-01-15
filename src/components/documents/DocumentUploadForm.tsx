@@ -301,10 +301,10 @@ export function DocumentUploadForm({ docketId, onUpload, uploading }: DocumentUp
             <AlertCircle className="h-5 w-5 text-court-warning flex-shrink-0" />
             <p className="text-sm text-court-warning">
               {metadata.format === 'HANDWRITTEN' && metadata.legibility === 'POOR'
-                ? 'Handwritten document with poor legibility - Senior review strongly recommended'
+                ? 'Handwritten document with poor legibility flagged'
                 : metadata.format === 'HANDWRITTEN'
-                ? 'Handwritten documents may require extra review time'
-                : 'Poor legibility noted - ensure document is readable'}
+                ? 'Handwritten document flagged for review'
+                : 'Poor legibility noted'}
             </p>
           </div>
         )}

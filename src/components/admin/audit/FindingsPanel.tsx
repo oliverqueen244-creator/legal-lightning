@@ -194,11 +194,11 @@ export function FindingsPanel({ auditRunId, dimension, findings, onClose }: Find
               </div>
 
               <div className="space-y-1">
-                <Label className="text-xs">Recommendation (optional)</Label>
+                <Label className="text-xs">Notes (optional)</Label>
                 <Textarea
                   value={newRecommendation}
                   onChange={(e) => setNewRecommendation(e.target.value)}
-                  placeholder="Suggested fix or improvement..."
+                  placeholder="Additional context or observations..."
                   rows={2}
                 />
               </div>

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Clock, Timer, TrendingUp, AlertTriangle, Zap } from 'lucide-react';
+import { Clock, Timer, AlertTriangle, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
@@ -103,29 +103,28 @@ export function CaseTimeEstimator({
           bgClass: 'bg-primary/20 border-primary',
           textClass: 'text-primary',
           badgeVariant: 'gold' as const,
-          // CORRECTNESS PLAN 2: Use MARKED instead of NOW
           label: 'MARKED',
         };
       case 'urgent':
         return {
           icon: AlertTriangle,
-          bgClass: 'bg-court-danger/20 border-court-danger-light',
+          bgClass: 'bg-court-danger/10 border-court-danger-light/50',
           textClass: 'text-court-danger-light',
           badgeVariant: 'danger' as const,
-          label: 'URGENT',
+          label: 'SOON',
         };
       case 'warning':
         return {
           icon: Timer,
-          bgClass: 'bg-court-warning/20 border-court-warning',
+          bgClass: 'bg-court-warning/10 border-court-warning/50',
           textClass: 'text-court-warning',
           badgeVariant: 'supplementary' as const,
-          label: 'SOON',
+          label: 'QUEUED',
         };
       default:
         return {
           icon: Clock,
-          bgClass: 'bg-secondary/50 border-border',
+          bgClass: 'bg-secondary/30 border-border',
           textClass: 'text-muted-foreground',
           badgeVariant: 'secondary' as const,
           label: 'SCHEDULED',
@@ -149,8 +148,8 @@ export function CaseTimeEstimator({
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
           <Icon className={`h-4 w-4 ${config.textClass}`} />
-          <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-            Est. Wait Time
+          <span className="text-xs text-muted-foreground/70 uppercase tracking-wider">
+            Sequence Status
           </span>
         </div>
         <Badge variant={config.badgeVariant} className="text-xs">
@@ -165,42 +164,34 @@ export function CaseTimeEstimator({
           </p>
           {casesAhead <= 0 && (
             <p className="text-sm text-foreground font-medium mt-1">
-              Please be present.
+              Verify with court display.
             </p>
           )}
           {casesAhead > 0 && (
-            <p className="text-xs text-muted-foreground mt-1">
-              {casesAhead} case{casesAhead !== 1 ? 's' : ''} ahead • Item #{docketItem.item_no}
+            <p className="text-xs text-muted-foreground/70 mt-1">
+              {casesAhead} item{casesAhead !== 1 ? 's' : ''} ahead • #{docketItem.item_no}
             </p>
           )}
         </div>
       </div>
 
-      {/* Progress bar */}
+      {/* Progress bar - suppressed visual weight */}
       {casesAhead > 0 && (
         <div className="mt-3">
-          <div className="flex justify-between text-xs text-muted-foreground mb-1">
-            <span>Item #{currentItem}</span>
-            <span>Your Item #{docketItem.item_no}</span>
+          <div className="flex justify-between text-[10px] text-muted-foreground/60 mb-1">
+            <span>#{currentItem}</span>
+            <span>#{docketItem.item_no}</span>
           </div>
           <Progress 
             value={progress} 
-            className="h-2"
+            className="h-1.5"
           />
         </div>
       )}
 
-      {/* Time breakdown hint */}
-      {casesAhead > 0 && estimatedMinutes > 0 && (
-        <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
-          <TrendingUp className="h-3 w-3" />
-          Based on ~{avgMinutesPerCase} min/case average
-        </p>
-      )}
-
-      {/* Passive explanatory subtext */}
-      <p className="text-xs text-muted-foreground/70 mt-2">
-        This status is based on live court sequence updates.
+      {/* Micro-context - neutral, procedural */}
+      <p className="text-[10px] text-muted-foreground/50 mt-2">
+        Derived from court sequence data.
       </p>
     </div>
   );
