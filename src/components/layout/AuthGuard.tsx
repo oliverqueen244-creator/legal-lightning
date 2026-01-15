@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
-import { Scale, AlertCircle } from 'lucide-react';
+import { AlertCircle, RefreshCw, Scale } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -11,7 +11,8 @@ interface AuthGuardProps {
 }
 
 // HARDENING: Maximum time to wait for auth before showing fallback
-const AUTH_TIMEOUT_MS = 10000;
+// Increased to 15s and made more resilient
+const AUTH_TIMEOUT_MS = 15000;
 
 /**
  * AuthGuard - PHASE 0.2 OPTIMIZED
@@ -27,18 +28,41 @@ export function AuthGuard({ children, requireOnboarding = true }: AuthGuardProps
   const { isAuthenticated, profile, loading } = useAuth();
   const [authTimedOut, setAuthTimedOut] = useState(false);
   const [redirecting, setRedirecting] = useState(false);
+  const [retrying, setRetrying] = useState(false);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const mountTimeRef = useRef(Date.now());
+
+  // Clear timeout when loading completes
+  useEffect(() => {
+    if (!loading && timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+      // Reset timeout state if auth resolved
+      if (authTimedOut) {
+        setAuthTimedOut(false);
+      }
+    }
+  }, [loading, authTimedOut]);
 
   // HARDENING: Timeout fallback - never show blank screen indefinitely
   useEffect(() => {
-    const timeout = setTimeout(() => {
-      if (loading) {
-        console.error('[AuthGuard] Auth loading timed out after 10s');
-        setAuthTimedOut(true);
-      }
-    }, AUTH_TIMEOUT_MS);
+    // Only set timeout if we're still loading and haven't timed out
+    if (loading && !authTimedOut) {
+      timeoutRef.current = setTimeout(() => {
+        if (loading) {
+          const elapsed = Date.now() - mountTimeRef.current;
+          console.error(`[AuthGuard] Auth loading timed out after ${elapsed}ms`);
+          setAuthTimedOut(true);
+        }
+      }, AUTH_TIMEOUT_MS);
+    }
 
-    return () => clearTimeout(timeout);
-  }, [loading]);
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, [loading, authTimedOut]);
 
   // Handle redirects for unauthenticated users
   useEffect(() => {
@@ -60,21 +84,35 @@ export function AuthGuard({ children, requireOnboarding = true }: AuthGuardProps
     }
   }, [isAuthenticated, loading, profile, navigate, requireOnboarding, location.pathname]);
 
+  // Retry handler - soft retry without full page reload
+  const handleRetry = useCallback(async () => {
+    setRetrying(true);
+    // Reset states and give auth another chance
+    setAuthTimedOut(false);
+    mountTimeRef.current = Date.now();
+    
+    // Wait a moment then reload to reset auth state
+    await new Promise(resolve => setTimeout(resolve, 500));
+    window.location.reload();
+  }, []);
+
   // HARDENING: Auth timeout - show recovery UI instead of blank screen
-  if (authTimedOut) {
+  if (authTimedOut && !retrying) {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
         <AlertCircle className="h-12 w-12 text-destructive mb-4" />
-        <h2 className="text-lg font-semibold text-foreground mb-2">Connection Issue</h2>
-        <p className="text-sm text-muted-foreground text-center mb-4">
-          Unable to verify your session. Please try again.
+        <h2 className="text-lg font-semibold text-foreground mb-2">Taking Longer Than Usual</h2>
+        <p className="text-sm text-muted-foreground text-center mb-4 max-w-xs">
+          Session verification is slow. This could be a temporary network issue.
         </p>
         <div className="flex gap-3">
           <Button 
             variant="outline" 
-            onClick={() => window.location.reload()}
+            onClick={handleRetry}
+            className="gap-2"
           >
-            Refresh Page
+            <RefreshCw className="h-4 w-4" />
+            Try Again
           </Button>
           <Button 
             onClick={() => navigate('/auth')}
@@ -82,6 +120,16 @@ export function AuthGuard({ children, requireOnboarding = true }: AuthGuardProps
             Sign In Again
           </Button>
         </div>
+      </div>
+    );
+  }
+
+  // Show loading spinner while retrying
+  if (retrying) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
+        <RefreshCw className="h-8 w-8 text-primary animate-spin mb-4" />
+        <p className="text-sm text-muted-foreground">Reconnecting...</p>
       </div>
     );
   }
