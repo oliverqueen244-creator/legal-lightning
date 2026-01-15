@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Clock, Timer, TrendingUp, AlertTriangle, Zap } from 'lucide-react';
+import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import type { DocketItem, LiveBoardCache } from '@/types/database';
@@ -28,6 +29,9 @@ export function CaseTimeEstimator({
   const [estimatedMinutes, setEstimatedMinutes] = useState<number>(0);
   const [progress, setProgress] = useState<number>(0);
   const [urgencyLevel, setUrgencyLevel] = useState<'safe' | 'warning' | 'urgent' | 'now'>('safe');
+  
+  // Track previous casesAhead for one-time transition toast
+  const prevCasesAheadRef = useRef<number | null>(null);
 
   // CORRECTNESS PLAN 2: Use canonical session state
   const derivedSession = useCourtSessionState(liveBoard);
@@ -46,12 +50,23 @@ export function CaseTimeEstimator({
 
     if (casesAhead <= 0) {
       // CORRECTNESS PLAN 2: Use MARKED instead of certainty-implying language
-      setEstimatedTime('Your case is marked');
+      setEstimatedTime('Your item number has been reached in the current court sequence.');
       setEstimatedMinutes(0);
       setProgress(100);
       setUrgencyLevel('now');
+      
+      // One-time transition toast when case becomes MARKED
+      if (prevCasesAheadRef.current !== null && prevCasesAheadRef.current > 0) {
+        toast(`Your case has reached its turn in Court ${docketItem.court_room_no || 'N/A'}.`, {
+          duration: 4000,
+        });
+      }
+      prevCasesAheadRef.current = casesAhead;
       return;
     }
+    
+    // Update ref for non-MARKED cases
+    prevCasesAheadRef.current = casesAhead;
 
     // Calculate estimated time
     const totalMinutes = casesAhead * avgMinutesPerCase;
@@ -145,23 +160,20 @@ export function CaseTimeEstimator({
 
       <div className="flex items-end justify-between">
         <div>
-          <p className={`text-2xl font-bold font-display ${config.textClass}`}>
+          <p className={`text-lg font-semibold ${config.textClass}`}>
             {estimatedTime}
           </p>
+          {casesAhead <= 0 && (
+            <p className="text-sm text-foreground font-medium mt-1">
+              Please be present.
+            </p>
+          )}
           {casesAhead > 0 && (
             <p className="text-xs text-muted-foreground mt-1">
               {casesAhead} case{casesAhead !== 1 ? 's' : ''} ahead • Item #{docketItem.item_no}
             </p>
           )}
         </div>
-        
-        {/* CORRECTNESS PLAN 2: Use MARKED instead of GO NOW */}
-        {urgencyLevel === 'now' && (
-          <div className="flex items-center gap-1 text-primary animate-pulse">
-            <Zap className="h-5 w-5" />
-            <span className="text-sm font-bold">MARKED</span>
-          </div>
-        )}
       </div>
 
       {/* Progress bar */}
@@ -185,6 +197,11 @@ export function CaseTimeEstimator({
           Based on ~{avgMinutesPerCase} min/case average
         </p>
       )}
+
+      {/* Passive explanatory subtext */}
+      <p className="text-xs text-muted-foreground/70 mt-2">
+        This status is based on live court sequence updates.
+      </p>
     </div>
   );
 }
