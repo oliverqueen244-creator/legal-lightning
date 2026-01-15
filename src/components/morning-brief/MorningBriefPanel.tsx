@@ -142,6 +142,13 @@ export function MorningBriefPanel({ brief, isLoading, onRefresh }: MorningBriefP
               )}
             </div>
 
+            {/* Party names */}
+            {(caseItem.petitioner || caseItem.respondent) && (
+              <p className="text-sm text-foreground/80 mb-1 truncate">
+                {caseItem.petitioner || 'Unknown'} <span className="text-muted-foreground">vs</span> {caseItem.respondent || 'Unknown'}
+              </p>
+            )}
+
             {/* Court info */}
             <p className="text-sm text-muted-foreground mb-3">
               Court {caseItem.court_room_no} • {caseItem.court_location}
