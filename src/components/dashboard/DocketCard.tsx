@@ -250,15 +250,16 @@ function DocketCardInner({ item, liveBoard, userRole, onForceActive, showDate, p
                   {t('completed')}
                 </Badge>
               )}
-              {isPanic && !item.force_active && (
-                <Badge variant="danger" className="flex items-center gap-1" role="status" aria-live="polite">
+              {/* Panic indicator - suppressed when MARKED is active */}
+              {isPanic && !item.force_active && !isRunning && (
+                <Badge variant="danger" className="flex items-center gap-1 text-xs" role="status" aria-live="polite">
                   <AlertTriangle className="h-3 w-3" aria-hidden="true" />
-                  {isSupplementary ? t('urgent_supp') : t('urgent')}
+                  {distance} away
                 </Badge>
               )}
-              {/* CORRECTNESS PLAN 2: Use MARKED RUNNING instead of RUNNING NOW */}
+              {/* CORRECTNESS PLAN 2: Use MARKED instead of RUNNING NOW - single dominant signal */}
               {isRunning && !item.force_active && (
-                <Badge variant="running" role="status" aria-live="assertive">{t('marked_running', 'MARKED RUNNING')}</Badge>
+                <Badge variant="running" role="status" aria-live="assertive" className="text-sm font-bold">MARKED</Badge>
               )}
             </div>
             

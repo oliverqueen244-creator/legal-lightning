@@ -82,7 +82,7 @@ export default function AliasManager({ defaultName }: AliasManagerProps) {
     });
   };
 
-  // Generate smart suggestions based on core name
+  // Generate name variations based on core name
   const suggestions = generateAliasVariations(coreName)
     .filter((s) => !aliases.some((a) => a.alias_name.toUpperCase() === s.toUpperCase()))
     .slice(0, 4); // Limit to 4 suggestions
@@ -164,10 +164,10 @@ export default function AliasManager({ defaultName }: AliasManagerProps) {
         </Button>
       </div>
 
-      {/* Suggestions */}
+      {/* Detected name variations */}
       {suggestions.length > 0 && (
         <div className="space-y-2">
-          <p className="text-xs text-muted-foreground">Suggestions:</p>
+          <p className="text-xs text-muted-foreground">Detected variations:</p>
           <div className="flex flex-wrap gap-2">
             {suggestions.map((suggestion) => (
               <Button

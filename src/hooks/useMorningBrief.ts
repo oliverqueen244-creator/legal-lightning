@@ -148,13 +148,13 @@ function calculateReadiness(
   
   if (total >= 70) {
     level = 'safe';
-    levelLabel = 'Safe to delegate';
+    levelLabel = 'Ready';
   } else if (total >= 40) {
     level = 'review';
-    levelLabel = 'Review once';
+    levelLabel = 'Review required';
   } else {
     level = 'senior_required';
-    levelLabel = 'Senior presence advised';
+    levelLabel = 'Preparation incomplete';
   }
 
   return { total, breakdown, level, levelLabel };
@@ -372,27 +372,27 @@ export function useMorningBrief(selectedDate?: string) {
           late_listed: docket.item_no > 20,
         };
 
-        // Determine suggestion
+        // Determine classification based on preparation status
         let suggestion: 'attend' | 'delegate' | 'monitor';
         let suggestionReason: string;
 
         if (risks.missing_documents || risks.low_readiness) {
           suggestion = 'attend';
           suggestionReason = risks.missing_documents 
-            ? 'No documents uploaded - personal attention needed'
-            : 'Low preparation level - senior guidance recommended';
+            ? 'No documents uploaded'
+            : 'Preparation incomplete';
         } else if (risks.pending_review) {
           suggestion = 'attend';
-          suggestionReason = 'Documents pending review - verify before hearing';
+          suggestionReason = 'Documents pending review';
         } else if (readiness.level === 'safe' && !risks.late_listed) {
           suggestion = 'delegate';
-          suggestionReason = 'Well prepared case - safe for delegation';
+          suggestionReason = 'Case preparation complete';
         } else if (risks.late_listed) {
           suggestion = 'monitor';
-          suggestionReason = 'Late in list - may be adjourned, monitor board';
+          suggestionReason = 'Listed late in sequence';
         } else {
           suggestion = 'monitor';
-          suggestionReason = 'Moderate preparation - keep track of progress';
+          suggestionReason = 'Partial preparation';
         }
 
         return {
