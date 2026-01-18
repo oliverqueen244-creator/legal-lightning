@@ -16,7 +16,7 @@
  */
 
 import { useState } from 'react';
-import { GraduationCap, FileText, CheckCircle, XCircle, ChevronDown, ChevronRight, Trash2, UserPlus } from 'lucide-react';
+import { GraduationCap, FileText, CheckCircle, XCircle, ChevronDown, ChevronRight, Trash2, UserPlus, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
@@ -25,6 +25,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { InternInviteDialog } from './InternInviteDialog';
+import { CaseAssignmentDialog } from './CaseAssignmentDialog';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -133,6 +134,7 @@ export function InternSupervisionPanel() {
  */
 function InternCard({ intern }: { intern: SupervisedIntern }) {
   const [isOpen, setIsOpen] = useState(false);
+  const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const { data: assignments = [] } = useInternAssignments(intern.id);
   const removeAssignment = useRemoveCaseAssignment();
   
@@ -166,9 +168,20 @@ function InternCard({ intern }: { intern: SupervisedIntern }) {
         <CollapsibleContent>
           <CardContent className="pt-0 pb-3">
             <Separator className="mb-3" />
+            {/* Assign case button */}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setAssignDialogOpen(true)}
+              className="w-full mb-3"
+            >
+              <Plus className="h-4 w-4 mr-1" />
+              Assign Case
+            </Button>
+            
             {assignments.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-2">
-                No cases assigned
+                No cases assigned yet
               </p>
             ) : (
               <ScrollArea className="max-h-40">
@@ -222,6 +235,14 @@ function InternCard({ intern }: { intern: SupervisedIntern }) {
           </CardContent>
         </CollapsibleContent>
       </Card>
+      
+      {/* Case Assignment Dialog */}
+      <CaseAssignmentDialog
+        open={assignDialogOpen}
+        onOpenChange={setAssignDialogOpen}
+        internAccountId={intern.id}
+        internName={intern.intern_name}
+      />
     </Collapsible>
   );
 }
