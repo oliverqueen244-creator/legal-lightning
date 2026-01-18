@@ -94,7 +94,10 @@ export function generateCSV(data: ExportData): string {
         ? caseItem.lawyerNotes 
         : '\n\n'; // 2-3 lines of blank space for manual notes
       
+      const itemNoDisplay = caseItem.itemNo != null ? String(caseItem.itemNo) : '—';
+      
       const row = data.isMultiDate ? [
+        itemNoDisplay,
         escapeCSV(caseItem.caseNo),
         escapeCSV(formatPartyName(caseItem.petitioner)),
         escapeCSV(formatPartyName(caseItem.respondent)),
@@ -105,6 +108,7 @@ export function generateCSV(data: ExportData): string {
         escapeCSV(caseItem.dateRange),
         escapeCSV(notesWithSpace),
       ] : [
+        itemNoDisplay,
         escapeCSV(caseItem.caseNo),
         escapeCSV(formatPartyName(caseItem.petitioner)),
         escapeCSV(formatPartyName(caseItem.respondent)),
@@ -155,7 +159,10 @@ export function generateExcel(data: ExportData): Blob {
         ? caseItem.lawyerNotes.replace(/\t/g, ' ').replace(/\n/g, ' | ')
         : '   |   |   '; // Visual space indicator for 2-3 lines
       
+      const itemNoDisplay = caseItem.itemNo != null ? String(caseItem.itemNo) : '—';
+      
       const row = data.isMultiDate ? [
+        itemNoDisplay,
         caseItem.caseNo,
         formatPartyName(caseItem.petitioner),
         formatPartyName(caseItem.respondent),
@@ -166,6 +173,7 @@ export function generateExcel(data: ExportData): Blob {
         caseItem.dateRange,
         notesForExcel,
       ] : [
+        itemNoDisplay,
         caseItem.caseNo,
         formatPartyName(caseItem.petitioner),
         formatPartyName(caseItem.respondent),
@@ -305,16 +313,17 @@ export function generatePDFContent(data: ExportData, pageSize: 'a4' | 'legal'): 
     
     /* No alternating colors - all white */
     
-    /* Column widths - revised layout with Listing Status */
-    .col-caseno { width: 15%; font-family: 'Courier New', monospace; }
-    .col-petitioner { width: 12%; }
-    .col-respondent { width: 12%; }
-    .col-opposing { width: 12%; }
-    .col-role { width: 7%; }
+    /* Column widths - revised layout with Sr. No. and Listing Status */
+    .col-srno { width: 5%; text-align: center; }
+    .col-caseno { width: 14%; font-family: 'Courier New', monospace; }
+    .col-petitioner { width: 11%; }
+    .col-respondent { width: 11%; }
+    .col-opposing { width: 11%; }
+    .col-role { width: 6%; }
     .col-listing { width: 6%; }
-    .col-outcome { width: 7%; }
-    .col-dates { width: 9%; }
-    .col-notes { width: 20%; }
+    .col-outcome { width: 6%; }
+    .col-dates { width: 8%; }
+    .col-notes { width: 18%; }
     
     /* Lawyer Notes: 2-3 lines of writable space with dotted ruling */
     .notes-cell {
@@ -371,7 +380,8 @@ export function generatePDFContent(data: ExportData, pageSize: 'a4' | 'legal'): 
     // Build table header based on single-date vs multi-date
     // Includes Listing Status column for Late Listed indicator
     const tableHeaders = data.isMultiDate
-      ? `<th class="col-caseno">Case No.</th>
+      ? `<th class="col-srno">Sr.</th>
+         <th class="col-caseno">Case No.</th>
          <th class="col-petitioner">Petitioner</th>
          <th class="col-respondent">Respondent</th>
          <th class="col-opposing">Opp. Counsel</th>
@@ -380,7 +390,8 @@ export function generatePDFContent(data: ExportData, pageSize: 'a4' | 'legal'): 
          <th class="col-outcome">Outcome</th>
          <th class="col-dates">Date Range</th>
          <th class="col-notes">Lawyer Notes</th>`
-      : `<th class="col-caseno">Case No.</th>
+      : `<th class="col-srno">Sr.</th>
+         <th class="col-caseno">Case No.</th>
          <th class="col-petitioner">Petitioner</th>
          <th class="col-respondent">Respondent</th>
          <th class="col-opposing">Opp. Counsel</th>
@@ -409,11 +420,13 @@ export function generatePDFContent(data: ExportData, pageSize: 'a4' | 'legal'): 
       const respondentDisplay = caseItem.respondent?.trim() || '—';
       // Opposing counsel is already normalized (never null/blank)
       const opposingCounselDisplay = caseItem.opposingCounsel;
+      const itemNoDisplay = caseItem.itemNo != null ? String(caseItem.itemNo) : '—';
       
       // Build table row based on single-date vs multi-date
       // Notes cell left intentionally sparse for handwriting
       const tableRow = data.isMultiDate
-        ? `<td class="col-caseno caseno-cell">${escapeHTML(caseItem.caseNo)}</td>
+        ? `<td class="col-srno">${itemNoDisplay}</td>
+           <td class="col-caseno caseno-cell">${escapeHTML(caseItem.caseNo)}</td>
            <td class="col-petitioner party-cell">${escapeHTML(petitionerDisplay)}</td>
            <td class="col-respondent party-cell">${escapeHTML(respondentDisplay)}</td>
            <td class="col-opposing party-cell">${escapeHTML(opposingCounselDisplay)}</td>
@@ -422,7 +435,8 @@ export function generatePDFContent(data: ExportData, pageSize: 'a4' | 'legal'): 
            <td class="col-outcome">${escapeHTML(caseItem.outcome || '—')}</td>
            <td class="col-dates">${escapeHTML(caseItem.dateRange)}</td>
            <td class="col-notes notes-cell">${escapeHTML(caseItem.lawyerNotes) || ' '}</td>`
-        : `<td class="col-caseno caseno-cell">${escapeHTML(caseItem.caseNo)}</td>
+        : `<td class="col-srno">${itemNoDisplay}</td>
+           <td class="col-caseno caseno-cell">${escapeHTML(caseItem.caseNo)}</td>
            <td class="col-petitioner party-cell">${escapeHTML(petitionerDisplay)}</td>
            <td class="col-respondent party-cell">${escapeHTML(respondentDisplay)}</td>
            <td class="col-opposing party-cell">${escapeHTML(opposingCounselDisplay)}</td>

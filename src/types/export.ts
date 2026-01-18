@@ -24,6 +24,7 @@ export type ListingStatus = 'Normal' | 'Late Listed';
 export interface ExportCase {
   id: string;
   caseNo: string;
+  itemNo: number | null; // Serial number from the court list
   advocateRole: AdvocateRole;
   outcome: string | null;
   dateRange: string; // "DD Mon YYYY → DD Mon YYYY"
@@ -77,6 +78,7 @@ export interface ExportOptions {
 // Date Range conditional (only for multi-date exports)
 // Listing Status added for Late Listed indicator
 export const EXPORT_COLUMNS_SINGLE_DATE = [
+  'Sr. No.',
   'Case No.',
   'Petitioner',
   'Respondent',
@@ -88,6 +90,7 @@ export const EXPORT_COLUMNS_SINGLE_DATE = [
 ] as const;
 
 export const EXPORT_COLUMNS_MULTI_DATE = [
+  'Sr. No.',
   'Case No.',
   'Petitioner',
   'Respondent',

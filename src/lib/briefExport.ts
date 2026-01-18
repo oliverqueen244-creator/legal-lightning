@@ -219,15 +219,16 @@ export function generateBriefPDF(brief: MorningBrief, lawyerName: string): void 
     
     /* No alternating colors - all white */
     
-    /* Column widths - matching Case Export layout */
-    .col-caseno { width: 15%; font-family: 'Courier New', monospace; }
-    .col-petitioner { width: 13%; }
-    .col-respondent { width: 13%; }
-    .col-opposing { width: 12%; }
-    .col-role { width: 7%; }
+    /* Column widths - matching Case Export layout with Sr. No. */
+    .col-srno { width: 5%; text-align: center; }
+    .col-caseno { width: 14%; font-family: 'Courier New', monospace; }
+    .col-petitioner { width: 12%; }
+    .col-respondent { width: 12%; }
+    .col-opposing { width: 11%; }
+    .col-role { width: 6%; }
     .col-listing { width: 6%; }
-    .col-outcome { width: 7%; }
-    .col-notes { width: 27%; }
+    .col-outcome { width: 6%; }
+    .col-notes { width: 24%; }
     
     /* Lawyer Notes: 2-3 lines of writable space with dotted ruling */
     .notes-cell {
@@ -294,6 +295,7 @@ export function generateBriefPDF(brief: MorningBrief, lawyerName: string): void 
   <table>
     <thead>
       <tr>
+        <th class="col-srno">Sr.</th>
         <th class="col-caseno">Case No.</th>
         <th class="col-petitioner">Petitioner</th>
         <th class="col-respondent">Respondent</th>
@@ -368,8 +370,11 @@ function generateCaseRow(c: MorningBriefCase): string {
   // Outcome - not available in morning brief (it's for today), show "—"
   const outcome = '—';
   
+  const itemNoDisplay = c.item_no != null ? String(c.item_no) : '—';
+  
   return `
       <tr>
+        <td class="col-srno">${itemNoDisplay}</td>
         <td class="col-caseno caseno-cell">${escapeHtml(c.case_number)}</td>
         <td class="col-petitioner party-cell">${escapeHtml(petitionerDisplay)}</td>
         <td class="col-respondent party-cell">${escapeHtml(respondentDisplay)}</td>
