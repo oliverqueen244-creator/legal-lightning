@@ -347,6 +347,57 @@ export function useReviewDraft() {
 }
 
 // ============================================
+// INTERN ACCOUNT CREATION
+// ============================================
+
+export interface InternCredentials {
+  email: string;
+  name: string;
+  tempPassword: string;
+  expiresAt: string;
+  supervisorName: string;
+}
+
+/**
+ * Create a new intern account
+ * Calls the secure edge function
+ */
+export function useCreateInternAccount() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ 
+      email, 
+      name, 
+      institution,
+      durationDays 
+    }: { 
+      email: string; 
+      name: string;
+      institution?: string;
+      durationDays: number;
+    }): Promise<InternCredentials> => {
+      const { data, error } = await supabase.functions.invoke('create-intern-account', {
+        body: { email, name, institution, durationDays }
+      });
+      
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      
+      return data.intern as InternCredentials;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['supervised-interns'] });
+      toast.success('Intern account created');
+    },
+    onError: (error: Error) => {
+      console.error('Failed to create intern account:', error);
+      toast.error(error.message || 'Failed to create intern account');
+    }
+  });
+}
+
+// ============================================
 // PHASE 2B: Supervisor Visibility Hooks
 // Feature-flagged separately from Phase 2A
 // ============================================
