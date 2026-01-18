@@ -11,6 +11,7 @@ import Documentation from "./pages/Documentation";
 import ProductDossier from "./pages/ProductDossier";
 import TechnicalDossier from "./pages/TechnicalDossier";
 import Onboarding from "./pages/Onboarding";
+import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 import CourtroomMode from "./pages/CourtroomMode";
 import Install from "./pages/Install";
@@ -89,6 +90,7 @@ const App = () => (
               <Route path="/" element={<Dashboard />} />
               <Route path="/auth" element={<Auth />} />
               <Route path="/onboarding" element={<Onboarding />} />
+              <Route path="/settings" element={<Settings />} />
               <Route path="/docs" element={<Documentation />} />
               <Route path="/dossier" element={<ProductDossier />} />
               <Route path="/technical-dossier" element={<TechnicalDossier />} />

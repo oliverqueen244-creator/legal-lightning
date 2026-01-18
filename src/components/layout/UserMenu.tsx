@@ -163,7 +163,7 @@ export function UserMenu() {
         {/* Functional Menu Items Only */}
         <DropdownMenuGroup>
           <DropdownMenuItem 
-            onClick={() => navigate('/onboarding')}
+            onClick={() => navigate('/settings')}
             className="min-h-touch"
           >
             <User className="mr-2 h-4 w-4" />
@@ -201,9 +201,9 @@ export function UserMenu() {
             </DropdownMenuSubContent>
           </DropdownMenuSub>
 
-          {/* Alias Management - FUNCTIONAL: navigates to onboarding with aliases step */}
+          {/* Alias Management - FUNCTIONAL: navigates to settings with aliases tab */}
           <DropdownMenuItem 
-            onClick={() => navigate('/onboarding?step=aliases')}
+            onClick={() => navigate('/settings?tab=aliases')}
             className="min-h-touch"
           >
             <Fingerprint className="mr-2 h-4 w-4" />
