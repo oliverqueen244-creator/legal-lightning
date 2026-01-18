@@ -16,7 +16,7 @@
  */
 
 import { useState } from 'react';
-import { GraduationCap, FileText, CheckCircle, XCircle, ChevronDown, ChevronRight, Trash2 } from 'lucide-react';
+import { GraduationCap, FileText, CheckCircle, XCircle, ChevronDown, ChevronRight, Trash2, UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
@@ -24,6 +24,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
+import { InternInviteDialog } from './InternInviteDialog';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -51,6 +52,7 @@ import { format, formatDistanceToNow } from 'date-fns';
  * Main supervisor panel - shows interns and pending drafts
  */
 export function InternSupervisionPanel() {
+  const [inviteOpen, setInviteOpen] = useState(false);
   const { data: isEnabled, isLoading: flagLoading } = useInternSupervisionEnabled();
   const { data: interns = [], isLoading: internsLoading } = useSupervisedInterns();
   const { data: drafts = [], isLoading: draftsLoading } = useSubmittedDrafts();
@@ -67,22 +69,24 @@ export function InternSupervisionPanel() {
   const isLoading = internsLoading || draftsLoading;
   const hasInterns = interns.length > 0;
   const pendingDrafts = drafts.filter(d => !d.review_status);
-  
-  if (!hasInterns && pendingDrafts.length === 0) {
-    return null; // No interns, no drafts - show nothing
-  }
 
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex items-center gap-2">
-        <GraduationCap className="h-5 w-5 text-primary" />
-        <h3 className="font-medium">Intern Work</h3>
-        {pendingDrafts.length > 0 && (
-          <Badge variant="destructive" className="text-xs">
-            {pendingDrafts.length} pending
-          </Badge>
-        )}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <GraduationCap className="h-5 w-5 text-primary" />
+          <h3 className="font-medium">Intern Work</h3>
+          {pendingDrafts.length > 0 && (
+            <Badge variant="destructive" className="text-xs">
+              {pendingDrafts.length} pending
+            </Badge>
+          )}
+        </div>
+        <Button size="sm" variant="outline" onClick={() => setInviteOpen(true)}>
+          <UserPlus className="h-4 w-4 mr-1" />
+          Add Intern
+        </Button>
       </div>
 
       {isLoading ? (
@@ -108,8 +112,18 @@ export function InternSupervisionPanel() {
               ))}
             </div>
           )}
+          
+          {/* Empty state when no interns yet */}
+          {!hasInterns && pendingDrafts.length === 0 && (
+            <p className="text-sm text-muted-foreground text-center py-4">
+              No interns yet. Click "Add Intern" to create an account.
+            </p>
+          )}
         </div>
       )}
+      
+      {/* Invite Dialog */}
+      <InternInviteDialog open={inviteOpen} onOpenChange={setInviteOpen} />
     </div>
   );
 }

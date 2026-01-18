@@ -77,3 +77,6 @@ verify_jwt = false
 
 [functions.revoke-expired-interns]
 verify_jwt = false
+
+[functions.create-intern-account]
+verify_jwt = false
