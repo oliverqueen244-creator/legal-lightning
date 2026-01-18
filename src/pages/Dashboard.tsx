@@ -35,6 +35,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Scale, AlertCircle, Search, Sun, Gavel, Calendar, CheckCircle, Upload, MessageCircle, ClipboardList, Focus, FileDown, ChevronDown } from 'lucide-react';
 import { LiveBoardSimulator } from '@/components/dashboard/LiveBoardSimulator';
+import { InternSupervisionPanel } from '@/components/intern-supervision';
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -549,6 +550,9 @@ export default function Dashboard() {
                 
                 {/* Court Metadata Widget - Shows active courts */}
                 <CourtMetadataWidget bench={profile?.bench || undefined} />
+                
+                {/* Intern Supervision Panel - For supervisors with interns */}
+                {isSenior && <InternSupervisionPanel />}
                 
                 {/* Live Board Simulator - Admin Only */}
                 {isAdmin && <LiveBoardSimulator liveBoards={filteredLiveBoards} />}
