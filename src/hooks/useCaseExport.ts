@@ -64,6 +64,7 @@ export function useCaseExport(options: UseCaseExportOptions) {
   type DocketRow = {
     id: string;
     case_number: string | null;
+    item_no: number | null;
     court_room_no: string | null;
     judge_names: string | null;
     matched_role: string | null;
@@ -95,6 +96,7 @@ export function useCaseExport(options: UseCaseExportOptions) {
         .select(`
           id,
           case_number,
+          item_no,
           court_room_no,
           judge_names,
           matched_role,
@@ -109,7 +111,8 @@ export function useCaseExport(options: UseCaseExportOptions) {
         `)
         .eq('matched_profile_id', userId)
         .not('case_fingerprint', 'is', null)
-        .order('date', { ascending: true });
+        .order('court_room_no', { ascending: true })
+        .order('item_no', { ascending: true });
       
       // Apply date filters based on mode
       if (dateMode === 'today') {
@@ -172,6 +175,7 @@ export function useCaseExport(options: UseCaseExportOptions) {
     const caseMap = new Map<string, {
       fingerprint: string;
       caseNumber: string;
+      itemNo: number | null;
       courtNo: string;
       judgeName: string;
       role: AdvocateRole;
@@ -227,6 +231,7 @@ export function useCaseExport(options: UseCaseExportOptions) {
         caseMap.set(fingerprint, {
           fingerprint,
           caseNumber: row.case_number || '',
+          itemNo: row.item_no,
           courtNo: row.court_room_no || 'Unknown',
           judgeName: row.judge_names || 'Unknown',
           role: (row.matched_role === 'petitioner' ? 'Petitioner' : 'Respondent') as AdvocateRole,
@@ -250,6 +255,7 @@ export function useCaseExport(options: UseCaseExportOptions) {
       cases.push({
         id: fingerprint,
         caseNo: caseData.caseNumber,
+        itemNo: caseData.itemNo,
         advocateRole: caseData.role,
         outcome: caseData.outcome,
         dateRange: formatDateRange(firstDate, lastDate),
@@ -263,6 +269,9 @@ export function useCaseExport(options: UseCaseExportOptions) {
         caseFingerprint: fingerprint,
       });
     });
+    
+    // Sort cases by item number within each group
+    cases.sort((a, b) => (a.itemNo || 0) - (b.itemNo || 0));
     
     // Group by court_no + judge_name
     const groupMap = new Map<string, ExportGroup>();
