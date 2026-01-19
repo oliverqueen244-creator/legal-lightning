@@ -41,7 +41,7 @@ export interface WaitTimeEstimate {
   /** Number of historical samples used */
   sampleCount: number;
   /** Data source for audit */
-  source: 'historical' | 'default' | 'insufficient_data';
+  source: 'recent_cases' | 'historical' | 'default' | 'insufficient_data';
   /** Average minutes per case used */
   avgMinutesPerCase: number | null;
 }
@@ -80,8 +80,8 @@ export function useWaitTimeEstimate(
       };
     }
 
-    // Use historical average if available, otherwise fallback
-    const avgMinutesPerCase = durationAvg.source === 'historical'
+    // Use recent/historical average if available, otherwise fallback
+    const avgMinutesPerCase = durationAvg.source !== 'default'
       ? durationAvg.avgSecondsPerCase / 60
       : DEFAULT_AVG_MINUTES;
     
