@@ -702,6 +702,45 @@ export type Database = {
           },
         ]
       }
+      case_item_durations: {
+        Row: {
+          court_location: string
+          court_no: string
+          created_at: string | null
+          duration_seconds: number | null
+          ended_at: string | null
+          id: string
+          is_supplementary: boolean | null
+          item_no: number
+          session_date: string
+          started_at: string
+        }
+        Insert: {
+          court_location: string
+          court_no: string
+          created_at?: string | null
+          duration_seconds?: number | null
+          ended_at?: string | null
+          id?: string
+          is_supplementary?: boolean | null
+          item_no: number
+          session_date?: string
+          started_at: string
+        }
+        Update: {
+          court_location?: string
+          court_no?: string
+          created_at?: string | null
+          duration_seconds?: number | null
+          ended_at?: string | null
+          id?: string
+          is_supplementary?: boolean | null
+          item_no?: number
+          session_date?: string
+          started_at?: string
+        }
+        Relationships: []
+      }
       case_judgments: {
         Row: {
           created_at: string | null
@@ -1086,6 +1125,30 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      court_avg_duration: {
+        Row: {
+          avg_seconds_per_case: number | null
+          court_location: string
+          court_no: string
+          last_updated: string | null
+          sample_count: number | null
+        }
+        Insert: {
+          avg_seconds_per_case?: number | null
+          court_location: string
+          court_no: string
+          last_updated?: string | null
+          sample_count?: number | null
+        }
+        Update: {
+          avg_seconds_per_case?: number | null
+          court_location?: string
+          court_no?: string
+          last_updated?: string | null
+          sample_count?: number | null
+        }
+        Relationships: []
       }
       court_metadata: {
         Row: {
@@ -3757,6 +3820,15 @@ export type Database = {
         Returns: Json
       }
       archive_old_causelists: { Args: never; Returns: number }
+      calculate_court_averages: {
+        Args: never
+        Returns: {
+          avg_seconds: number
+          court_location: string
+          court_no: string
+          sample_count: number
+        }[]
+      }
       can_check_judgment: {
         Args: { p_case_id: string; p_lawyer_id: string }
         Returns: Json
@@ -3956,6 +4028,7 @@ export type Database = {
         Args: { p_case_id: string; p_lawyer_id: string }
         Returns: Json
       }
+      refresh_court_averages: { Args: never; Returns: number }
       release_document_sync_lock: {
         Args: {
           p_case_id: string

@@ -209,18 +209,121 @@ async function markAllCourtsInactive(supabase: any, location: string): Promise<v
   }
 }
 
+// Track case item transitions for duration estimation
+async function trackItemTransition(
+  supabase: any,
+  location: string,
+  courtNo: string,
+  prevItem: number,
+  newItem: number,
+  isSupplementary: boolean,
+  sessionDate: string
+): Promise<void> {
+  const now = new Date().toISOString();
+  
+  try {
+    // Close previous item if it was active
+    if (prevItem > 0 && prevItem !== newItem) {
+      const { error: closeError } = await supabase
+        .from("case_item_durations")
+        .update({ 
+          ended_at: now,
+          duration_seconds: supabase.rpc ? undefined : null // Will be calculated below
+        })
+        .eq("court_location", location)
+        .eq("court_no", courtNo)
+        .eq("item_no", prevItem)
+        .eq("session_date", sessionDate)
+        .is("ended_at", null);
+      
+      if (closeError) {
+        console.error(`[${location}] Error closing item ${prevItem}:`, closeError);
+      } else {
+        // Calculate duration separately (since we can't use SQL functions in update)
+        await supabase.rpc("calculate_item_duration", {
+          p_location: location,
+          p_court_no: courtNo,
+          p_item_no: prevItem,
+          p_session_date: sessionDate,
+          p_ended_at: now
+        }).catch(() => {
+          // Fallback: calculate manually if RPC doesn't exist
+          console.log(`[${location}] RPC not available, duration will be calculated later`);
+        });
+      }
+    }
+    
+    // Start tracking new item if it's a valid item number
+    if (newItem > 0 && newItem !== prevItem) {
+      const { error: insertError } = await supabase
+        .from("case_item_durations")
+        .upsert({
+          court_location: location,
+          court_no: courtNo,
+          item_no: newItem,
+          is_supplementary: isSupplementary,
+          started_at: now,
+          session_date: sessionDate,
+        }, {
+          onConflict: "court_location,court_no,item_no,is_supplementary,session_date",
+          ignoreDuplicates: true
+        });
+      
+      if (insertError && !insertError.message?.includes("duplicate")) {
+        console.error(`[${location}] Error starting item ${newItem}:`, insertError);
+      }
+    }
+  } catch (error) {
+    // Don't let tracking failures affect the main scraping
+    console.error(`[${location}] Item transition tracking error:`, error);
+  }
+}
+
 async function updateLiveBoardCache(
   supabase: any,
   location: string,
   courts: CourtStatus[]
 ): Promise<void> {
   const now = new Date().toISOString();
+  const sessionDate = now.split("T")[0]; // YYYY-MM-DD
   
-  // First mark all courts for this location as inactive
+  // First, fetch current state for transition tracking
+  const { data: currentState } = await supabase
+    .from("live_board_cache")
+    .select("court_no, current_item, is_supplementary_running")
+    .eq("court_location", location);
+  
+  const currentStateMap = new Map<string, { item: number; supp: boolean }>();
+  if (currentState) {
+    for (const row of currentState) {
+      currentStateMap.set(row.court_no, { 
+        item: row.current_item, 
+        supp: row.is_supplementary_running 
+      });
+    }
+  }
+  
+  // Mark all courts for this location as inactive first
   await markAllCourtsInactive(supabase, location);
   
-  // Then upsert the active courts with is_active = true
+  // Track transitions and upsert active courts
   for (const court of courts) {
+    const prev = currentStateMap.get(court.court_no);
+    const prevItem = prev?.item || 0;
+    
+    // Track item transition for duration estimation
+    if (court.current_item !== prevItem) {
+      await trackItemTransition(
+        supabase,
+        location,
+        court.court_no,
+        prevItem,
+        court.current_item,
+        court.is_supplementary_running,
+        sessionDate
+      );
+    }
+    
     const { error } = await supabase
       .from("live_board_cache")
       .upsert(
@@ -234,7 +337,7 @@ async function updateLiveBoardCache(
           status: court.status,
           last_updated: now,
           source_timestamp: now,
-          is_active: true, // Mark as active since it's currently on the display board
+          is_active: true,
         },
         {
           onConflict: "court_location,court_no",

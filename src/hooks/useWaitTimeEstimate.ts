@@ -1,26 +1,28 @@
 /**
  * WAIT TIME ESTIMATE HOOK
  * 
- * Provides estimated wait time based on configurable average minutes per case.
+ * Provides estimated wait time based on court-specific historical averages.
+ * Falls back to a conservative default when insufficient data is available.
  * 
- * NOTE: Due to lack of historical case progression data,
- * this uses a conservative fixed average as a baseline.
+ * Data Source:
+ * - Primary: court_avg_duration table (aggregated from case_item_durations)
+ * - Fallback: DEFAULT_AVG_SECONDS (300s / 5 min)
  * 
- * Formula: estimated_time = cases_away × avg_minutes_per_case
+ * Formula: estimated_time = cases_away × avg_seconds_per_case
  * 
  * Display rules:
  * - Range format (e.g., "~35–45 min")
- * - "Time estimate unavailable" if data insufficient
+ * - Shows confidence indicator based on sample count
  * - Never show outside court hours
  * 
- * No predictive AI. All logic is explainable and auditable.
+ * All logic is explainable and auditable.
  */
 
 import { useMemo } from 'react';
+import { useCourtDurationAverage, getDurationConfidenceLevel } from './useCourtDurationAverage';
 
-// Average minutes per case (conservative estimate based on court observations)
-// This should ideally come from actual data aggregation
-const AVG_MINUTES_PER_CASE = 5;
+// Fallback: 5 minutes per case (if no historical data)
+const DEFAULT_AVG_MINUTES = 5;
 const VARIANCE_FACTOR = 0.3; // ±30% variance
 
 export interface WaitTimeEstimate {
@@ -32,10 +34,14 @@ export interface WaitTimeEstimate {
   maxMinutes: number | null;
   /** Formatted display string (e.g., "~35–45 min") */
   displayText: string;
-  /** Whether the estimate is reliable (has sufficient data) */
+  /** Whether the estimate is reliable (has sufficient historical data) */
   isReliable: boolean;
+  /** Confidence level based on sample count */
+  confidenceLevel: 'high' | 'medium' | 'low';
+  /** Number of historical samples used */
+  sampleCount: number;
   /** Data source for audit */
-  source: 'default_average' | 'insufficient_data';
+  source: 'historical' | 'default' | 'insufficient_data';
   /** Average minutes per case used */
   avgMinutesPerCase: number | null;
 }
@@ -43,6 +49,8 @@ export interface WaitTimeEstimate {
 /**
  * Calculate wait time estimate for a specific court
  * 
+ * @param courtLocation - Court location (JODHPUR/JAIPUR)
+ * @param courtNo - Court number
  * @param casesAway - Number of cases ahead in queue
  * @param inSession - Whether court is in active session
  * @returns WaitTimeEstimate with display text and reliability info
@@ -53,6 +61,9 @@ export function useWaitTimeEstimate(
   casesAway: number,
   inSession: boolean
 ): WaitTimeEstimate {
+  // Fetch court-specific historical average
+  const durationAvg = useCourtDurationAverage(courtLocation, courtNo);
+  
   return useMemo((): WaitTimeEstimate => {
     // Don't show estimate outside session or when already at/past turn
     if (!inSession || casesAway <= 0 || !courtLocation || !courtNo) {
@@ -62,13 +73,19 @@ export function useWaitTimeEstimate(
         maxMinutes: null,
         displayText: '',
         isReliable: false,
+        confidenceLevel: 'low',
+        sampleCount: 0,
         source: 'insufficient_data',
         avgMinutesPerCase: null,
       };
     }
 
-    // Use default average (in future, could pull from aggregated court stats)
-    const avgMinutesPerCase = AVG_MINUTES_PER_CASE;
+    // Use historical average if available, otherwise fallback
+    const avgMinutesPerCase = durationAvg.source === 'historical'
+      ? durationAvg.avgSecondsPerCase / 60
+      : DEFAULT_AVG_MINUTES;
+    
+    const confidenceLevel = getDurationConfidenceLevel(durationAvg.sampleCount);
     
     // Calculate estimate with variance
     const baseEstimate = casesAway * avgMinutesPerCase;
@@ -104,11 +121,13 @@ export function useWaitTimeEstimate(
       minMinutes,
       maxMinutes,
       displayText,
-      isReliable: false, // Mark as not reliable since using default average
-      source: 'default_average',
+      isReliable: durationAvg.isReliable,
+      confidenceLevel,
+      sampleCount: durationAvg.sampleCount,
+      source: durationAvg.source,
       avgMinutesPerCase,
     };
-  }, [inSession, casesAway, courtLocation, courtNo]);
+  }, [inSession, casesAway, courtLocation, courtNo, durationAvg]);
 }
 
 /**
