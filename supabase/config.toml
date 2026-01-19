@@ -80,3 +80,6 @@ verify_jwt = false
 
 [functions.create-intern-account]
 verify_jwt = false
+
+[functions.aggregate-case-durations]
+verify_jwt = false
