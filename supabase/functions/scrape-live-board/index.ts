@@ -222,34 +222,43 @@ async function trackItemTransition(
   const now = new Date().toISOString();
   
   try {
-    // Close previous item if it was active
+    // Close previous item if it was active and calculate duration
     if (prevItem > 0 && prevItem !== newItem) {
-      const { error: closeError } = await supabase
+      // First, get the started_at time to calculate duration
+      const { data: prevRecord, error: fetchError } = await supabase
         .from("case_item_durations")
-        .update({ 
-          ended_at: now,
-          duration_seconds: supabase.rpc ? undefined : null // Will be calculated below
-        })
+        .select("id, started_at")
         .eq("court_location", location)
         .eq("court_no", courtNo)
         .eq("item_no", prevItem)
         .eq("session_date", sessionDate)
-        .is("ended_at", null);
+        .is("ended_at", null)
+        .maybeSingle();
       
-      if (closeError) {
-        console.error(`[${location}] Error closing item ${prevItem}:`, closeError);
-      } else {
-        // Calculate duration separately (since we can't use SQL functions in update)
-        await supabase.rpc("calculate_item_duration", {
-          p_location: location,
-          p_court_no: courtNo,
-          p_item_no: prevItem,
-          p_session_date: sessionDate,
-          p_ended_at: now
-        }).catch(() => {
-          // Fallback: calculate manually if RPC doesn't exist
-          console.log(`[${location}] RPC not available, duration will be calculated later`);
-        });
+      if (!fetchError && prevRecord) {
+        // Calculate duration in JavaScript
+        const startedAt = new Date(prevRecord.started_at);
+        const endedAt = new Date(now);
+        const durationSeconds = Math.round((endedAt.getTime() - startedAt.getTime()) / 1000);
+        
+        // Only record valid durations (30s to 1 hour)
+        const validDuration = durationSeconds >= 30 && durationSeconds <= 3600 
+          ? durationSeconds 
+          : null;
+        
+        const { error: closeError } = await supabase
+          .from("case_item_durations")
+          .update({ 
+            ended_at: now,
+            duration_seconds: validDuration
+          })
+          .eq("id", prevRecord.id);
+        
+        if (closeError) {
+          console.error(`[${location}] Error closing item ${prevItem}:`, closeError);
+        } else {
+          console.log(`[${location}] Closed item ${prevItem}, duration: ${validDuration || 'invalid'}s`);
+        }
       }
     }
     
@@ -271,6 +280,8 @@ async function trackItemTransition(
       
       if (insertError && !insertError.message?.includes("duplicate")) {
         console.error(`[${location}] Error starting item ${newItem}:`, insertError);
+      } else {
+        console.log(`[${location}] Started tracking item ${newItem}`);
       }
     }
   } catch (error) {
