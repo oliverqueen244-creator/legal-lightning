@@ -15,6 +15,8 @@ interface CourtStatus {
 }
 
 // Check if current time (in IST) is within court hours
+// Hours: 9:00 AM - 1:00 PM (morning) + 2:00 PM - 6:00 PM (afternoon)
+// Lunch break: 1:00 PM - 2:00 PM (scraper OFF)
 function isCourtHours(): { inSession: boolean; reason: string } {
   const now = new Date();
   
@@ -32,40 +34,37 @@ function isCourtHours(): { inSession: boolean; reason: string } {
     return { inSession: false, reason: "Sunday - Courts closed" };
   }
   
-  // Determine if summer schedule (Apr 15 - Jun 27)
-  const month = istTime.getUTCMonth() + 1; // 1-12
-  const day = istTime.getUTCDate();
-  
-  const isSummer = (month === 4 && day >= 15) || 
-                   (month === 5) || 
-                   (month === 6 && day <= 27);
-  
-  // Add 15-minute buffer before and 30-minute buffer after
-  const bufferBefore = 15;
-  const bufferAfter = 30;
-  
-  if (isSummer) {
-    // Summer hours: 8 AM - 1 PM IST
-    const startTime = 8 * 60 - bufferBefore; // 7:45 AM
-    const endTime = 13 * 60 + bufferAfter; // 1:30 PM
-    
-    if (timeInMinutes >= startTime && timeInMinutes <= endTime) {
-      return { inSession: true, reason: "Summer session (8 AM - 1 PM)" };
-    }
-    return { inSession: false, reason: `Outside summer hours (8 AM - 1 PM). Current IST: ${hours}:${minutes.toString().padStart(2, '0')}` };
-  } else {
-    // Winter hours: 10:30 AM - 1 PM + 2 PM - 4:30 PM IST
-    const morningStart = 10 * 60 + 30 - bufferBefore; // 10:15 AM
-    const morningEnd = 13 * 60 + bufferAfter; // 1:30 PM
-    const afternoonStart = 14 * 60 - bufferBefore; // 1:45 PM
-    const afternoonEnd = 16 * 60 + 30 + bufferAfter; // 5:00 PM
-    
-    if ((timeInMinutes >= morningStart && timeInMinutes <= morningEnd) ||
-        (timeInMinutes >= afternoonStart && timeInMinutes <= afternoonEnd)) {
-      return { inSession: true, reason: "Winter session" };
-    }
-    return { inSession: false, reason: `Outside winter hours. Current IST: ${hours}:${minutes.toString().padStart(2, '0')}` };
+  // Saturday - courts may have limited hours or be closed
+  if (dayOfWeek === 6) {
+    return { inSession: false, reason: "Saturday - Courts closed" };
   }
+  
+  // Fixed court hours as per requirement:
+  // Morning session: 9:00 AM - 1:00 PM IST
+  // Lunch break: 1:00 PM - 2:00 PM IST (OFF)
+  // Afternoon session: 2:00 PM - 6:00 PM IST
+  const morningStart = 9 * 60;  // 9:00 AM = 540 minutes
+  const morningEnd = 13 * 60;   // 1:00 PM = 780 minutes (lunch starts)
+  const afternoonStart = 14 * 60; // 2:00 PM = 840 minutes (lunch ends)
+  const afternoonEnd = 18 * 60;   // 6:00 PM = 1080 minutes
+  
+  // Morning session: 9:00 AM - 1:00 PM
+  if (timeInMinutes >= morningStart && timeInMinutes < morningEnd) {
+    return { inSession: true, reason: "Morning session (9 AM - 1 PM)" };
+  }
+  
+  // Lunch break: 1:00 PM - 2:00 PM
+  if (timeInMinutes >= morningEnd && timeInMinutes < afternoonStart) {
+    return { inSession: false, reason: `Lunch break (1 PM - 2 PM). Current IST: ${hours}:${minutes.toString().padStart(2, '0')}` };
+  }
+  
+  // Afternoon session: 2:00 PM - 6:00 PM
+  if (timeInMinutes >= afternoonStart && timeInMinutes < afternoonEnd) {
+    return { inSession: true, reason: "Afternoon session (2 PM - 6 PM)" };
+  }
+  
+  // Outside court hours
+  return { inSession: false, reason: `Outside court hours (9 AM - 1 PM, 2 PM - 6 PM). Current IST: ${hours}:${minutes.toString().padStart(2, '0')}` };
 }
 
 // Parse item format: "293(S)", "75(D)", "[C-9] 645 (S)", "516-517(S)", "ADJ", "L.BREAK"
