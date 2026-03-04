@@ -10,6 +10,8 @@ interface MatchRequest {
   date?: string;
   bench?: string;
   debug_sample?: number; // If set, log debug info for first N cases
+  full_scan?: boolean; // Explicitly allow full historical scan
+  lookback_days?: number; // Default 7, max 30 for scheduled/background runs
 }
 
 interface MatchResult {
@@ -186,8 +188,17 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Fetch ALL unmatched cases using pagination
+    // Fetch unmatched cases using pagination
+    // SAFETY: For background runs (no explicit scope), only scan recent data.
     const BATCH_SIZE = 1000;
+    const MAX_BACKGROUND_CASES = 5000;
+    const isExplicitScope = Boolean(body.causelist_id || body.date || body.bench || body.full_scan);
+    const lookbackDays = Math.min(Math.max(body.lookback_days ?? 7, 1), 30);
+
+    const defaultStartDate = new Date();
+    defaultStartDate.setUTCDate(defaultStartDate.getUTCDate() - lookbackDays);
+    const defaultStartDateIso = defaultStartDate.toISOString().slice(0, 10);
+
     let allUnmatchedCases: any[] = [];
     let offset = 0;
     let hasMore = true;
@@ -210,6 +221,11 @@ Deno.serve(async (req) => {
         docketQuery = docketQuery.eq('court_location', body.bench);
       }
 
+      // Default guard for scheduled/background calls to avoid full-history rescans.
+      if (!isExplicitScope) {
+        docketQuery = docketQuery.gte('date', defaultStartDateIso);
+      }
+
       const { data: batch, error: docketError } = await docketQuery;
 
       if (docketError) {
@@ -223,6 +239,13 @@ Deno.serve(async (req) => {
       if (batch && batch.length > 0) {
         allUnmatchedCases = allUnmatchedCases.concat(batch);
         console.log(`[MATCH-DOCKET-ALIASES] Fetched ${batch.length} cases (total: ${allUnmatchedCases.length})`);
+
+        if (!isExplicitScope && allUnmatchedCases.length >= MAX_BACKGROUND_CASES) {
+          console.log(`[MATCH-DOCKET-ALIASES] Background cap reached (${MAX_BACKGROUND_CASES}); stopping pagination`);
+          hasMore = false;
+          break;
+        }
+
         offset += BATCH_SIZE;
         hasMore = batch.length === BATCH_SIZE;
       } else {
