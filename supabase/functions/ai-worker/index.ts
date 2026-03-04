@@ -22,6 +22,7 @@ const corsHeaders = {
 const MIN_JOB_INTERVAL_MS = 3000; // 3 seconds between jobs
 const MAX_TOKENS_PER_HOUR = 250000; // Token budget (increased for larger causelists)
 const RETRY_DELAYS = [60, 300, 900]; // 1min, 5min, 15min
+const ENABLE_LOVABLE_AI_FALLBACK = Deno.env.get('ENABLE_LOVABLE_AI_FALLBACK') === 'true';
 
 interface AiJob {
   id: string;
@@ -339,13 +340,16 @@ async function processJob(job: AiJob, supabase: any): Promise<{ cases: ParsedCas
 }
 
 async function callAIProviders(prompt: string, courtNo: string, parseType: 'daily' | 'search'): Promise<{ cases: ParsedCase[]; provider: string; tokensUsed: number }> {
-  // Provider fallback chain: Google → OpenAI → OpenRouter → Lovable AI (last resort)
-  const providers = [
+  // Provider fallback chain: Google → OpenAI → OpenRouter (optional Lovable fallback)
+  const providers: Array<{ name: string; fn: () => Promise<{ success: boolean; content: string; tokensUsed?: number }> }> = [
     { name: 'google', fn: () => callGoogleAI(prompt) },
     { name: 'openai', fn: () => callOpenAI(prompt) },
-    { name: 'openrouter', fn: () => callOpenRouter(prompt) },
-    { name: 'lovable', fn: () => callLovableAI(prompt) }
+    { name: 'openrouter', fn: () => callOpenRouter(prompt) }
   ];
+
+  if (ENABLE_LOVABLE_AI_FALLBACK) {
+    providers.push({ name: 'lovable', fn: () => callLovableAI(prompt) });
+  }
 
   let lastError: Error | null = null;
   const failedProviders: string[] = [];

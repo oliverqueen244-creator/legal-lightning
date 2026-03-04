@@ -30,6 +30,7 @@ const corsHeaders = {
 // Throttling configuration
 const MIN_REQUEST_INTERVAL_MS = 2000; // 2 seconds between AI calls
 const MAX_RETRIES = 3;
+const ENABLE_LOVABLE_AI_FALLBACK = Deno.env.get('ENABLE_LOVABLE_AI_FALLBACK') === 'true';
 
 interface ParsedCase {
   court_room_no: string;
@@ -426,13 +427,16 @@ async function callAIWithFallback(
   }
   lastRequestTime = Date.now();
 
-  // Provider fallback chain: Google → OpenAI → OpenRouter → Lovable AI (last resort)
-  const providers = [
+  // Provider fallback chain: Google → OpenAI → OpenRouter (optional Lovable fallback)
+  const providers: Array<() => Promise<AICallResult>> = [
     () => callGoogleAI(systemPrompt, userPrompt),
     () => callOpenAI(systemPrompt, userPrompt),
-    () => callOpenRouter(systemPrompt, userPrompt),
-    () => callLovableAI(systemPrompt, userPrompt)
+    () => callOpenRouter(systemPrompt, userPrompt)
   ];
+
+  if (ENABLE_LOVABLE_AI_FALLBACK) {
+    providers.push(() => callLovableAI(systemPrompt, userPrompt));
+  }
 
   const failedProviders: string[] = [];
 
