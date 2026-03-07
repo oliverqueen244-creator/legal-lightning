@@ -104,10 +104,8 @@ const App = () => (
               {/* SAFE PWA AUTO-UPDATE: Manages update lifecycle with safety checks */}
               <PWAUpdateManager />
               <SmartPrefetcher />
-              <GlobalCommandPalette />
               <BrowserRouter>
-
-
+                <GlobalCommandPalette />
                 <KineticProvider>
                   {/* Court Focus Mode - Full screen overlay for critical court moments */}
                   <CourtFocusOverlay />
