@@ -14,10 +14,10 @@ export function useNotificationEscalation() {
   const { user, profile } = useAuth();
   const { settings: courtModeSettings, isWithinCourtHours } = useCourtMode();
   const { criticalUnacknowledged } = useCourtNotifications();
-  
+
   // Track escalation timers
   const escalationTimers = useRef<Map<string, NodeJS.Timeout>>(new Map());
-  
+
   // Track already escalated notifications
   const escalatedNotifications = useRef<Set<string>>(new Set());
 
@@ -157,13 +157,14 @@ export function useNotificationEscalation() {
       scheduleEscalation(notification);
     });
 
+    const currentTimers = escalationTimers.current;
     // Cleanup: cancel timers for acknowledged notifications
     return () => {
-      escalationTimers.current.forEach((timer, id) => {
+      currentTimers.forEach((timer, id) => {
         const stillUnacked = criticalUnacknowledged.some(n => n.id === id);
         if (!stillUnacked) {
           clearTimeout(timer);
-          escalationTimers.current.delete(id);
+          currentTimers.delete(id);
         }
       });
     };
@@ -171,9 +172,10 @@ export function useNotificationEscalation() {
 
   // Cleanup all timers on unmount
   useEffect(() => {
+    const currentTimers = escalationTimers.current;
     return () => {
-      escalationTimers.current.forEach((timer) => clearTimeout(timer));
-      escalationTimers.current.clear();
+      currentTimers.forEach((timer) => clearTimeout(timer));
+      currentTimers.clear();
     };
   }, []);
 

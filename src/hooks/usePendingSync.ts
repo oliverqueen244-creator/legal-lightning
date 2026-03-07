@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { Activity, Play, SkipForward, AlertCircle, WifiOff, Zap } from 'lucide-react';
 import { useOfflineCache } from './useOfflineCache';
 import { useNetworkStatus } from './useNetworkStatus';
 import { supabase } from '@/integrations/supabase/client';
@@ -25,10 +26,10 @@ export function usePendingSync(
   onConflictDetected?: (conflict: ConflictData) => Promise<'keep-local' | 'discard-local'>
 ) {
   const { isOnline } = useNetworkStatus();
-  const { 
-    queueMutation, 
-    getPendingMutations, 
-    clearPendingMutation 
+  const {
+    queueMutation,
+    getPendingMutations,
+    clearPendingMutation
   } = useOfflineCache();
   const [pendingCount, setPendingCount] = useState(0);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -47,104 +48,22 @@ export function usePendingSync(
     refreshPendingCount();
   }, [refreshPendingCount]);
 
-  // Sync pending mutations when coming online
-  useEffect(() => {
-    if (isOnline && pendingCount > 0 && !isSyncing) {
-      syncPendingMutations();
-    }
-  }, [isOnline, pendingCount]);
-
-  const syncPendingMutations = async () => {
-    if (!isOnline || isSyncing) return;
-
-    setIsSyncing(true);
-    let synced = 0;
-    let failed = 0;
-
-    try {
-      const mutations = await getPendingMutations();
-      
-      for (const mutation of mutations) {
-        try {
-          // Cast to PendingMutation type
-          const typedMutation = mutation as unknown as PendingMutation;
-
-          if (typedMutation.table === 'post_court_notes') {
-            // Check for conflict before syncing
-            const conflict = await checkForConflict(typedMutation);
-            
-            if (conflict) {
-              // HARDENING FIX: Surface conflict via global dialog if handler provided
-              if (onConflictDetected) {
-                const choice = await onConflictDetected(conflict);
-                
-                if (choice === 'discard-local') {
-                  // User chose to discard - clear mutation without applying
-                  await clearPendingMutation(mutation.id!);
-                  toast.info('Local changes discarded', {
-                    description: 'Loaded latest version from server.',
-                  });
-                  continue;
-                }
-                // choice === 'keep-local' - proceed with upsert below
-              } else {
-                // No handler - skip and mark as needing review
-                failed++;
-                continue;
-              }
-            }
-          }
-
-          // Perform the sync
-          const error = await performMutation(typedMutation);
-          
-          if (error) {
-            console.error('Sync error:', error);
-            failed++;
-          } else {
-            await clearPendingMutation(mutation.id!);
-            synced++;
-          }
-        } catch (err) {
-          console.error('Mutation sync failed:', err);
-          failed++;
-        }
-      }
-
-      await refreshPendingCount();
-
-      if (synced > 0) {
-        toast.success(`Synced ${synced} pending change${synced > 1 ? 's' : ''}`, {
-          description: 'Your personal notes have been saved.',
-        });
-      }
-
-      if (failed > 0) {
-        toast.warning(`${failed} change${failed > 1 ? 's' : ''} need${failed === 1 ? 's' : ''} review`, {
-          description: 'Some notes could not be synced automatically.',
-        });
-      }
-    } finally {
-      setIsSyncing(false);
-    }
-  };
-
   /**
    * Check for conflict and return conflict data if found
    */
-  const checkForConflict = async (mutation: PendingMutation): Promise<ConflictData | null> => {
+  const checkForConflict = useCallback(async (mutation: PendingMutation): Promise<ConflictData | null> => {
     if (mutation.table !== 'post_court_notes') return null;
 
-    const { 
-      case_fingerprint, 
-      hearing_date, 
-      author_id, 
+    const {
+      case_fingerprint,
+      hearing_date,
+      author_id,
       updated_at: localUpdatedAt,
       what_happened,
       next_direction,
       note_for_next,
     } = mutation.data;
-    
+
     if (!localUpdatedAt) return null;
 
     const { data: serverNote } = await supabase
@@ -176,9 +95,9 @@ export function usePendingSync(
     }
 
     return null;
-  };
+  }, []);
 
-  const performMutation = async (mutation: PendingMutation): Promise<any> => {
+  const performMutation = useCallback(async (mutation: PendingMutation): Promise<any> => {
     const { type, table, data, conflictColumns } = mutation;
 
     // Only handle post_court_notes for now
@@ -187,21 +106,106 @@ export function usePendingSync(
     }
 
     switch (type) {
-      case 'insert':
+      case 'insert': {
         const insertResult = await supabase.from('post_court_notes').insert(data);
         return insertResult.error;
-      case 'update':
+      }
+      case 'update': {
         const updateResult = await supabase.from('post_court_notes').update(data).eq('id', data.id);
         return updateResult.error;
-      case 'upsert':
+      }
+      case 'upsert': {
         const upsertResult = await supabase.from('post_court_notes').upsert(data, {
           onConflict: conflictColumns || 'case_fingerprint,hearing_date,author_id',
         });
         return upsertResult.error;
+      }
       default:
         return new Error('Unknown mutation type');
     }
-  };
+  }, []);
+
+  const syncPendingMutations = useCallback(async () => {
+    if (!isOnline || isSyncing) return;
+
+    setIsSyncing(true);
+    let synced = 0;
+    let failed = 0;
+
+    try {
+      const mutations = await getPendingMutations();
+
+      for (const mutation of mutations) {
+        try {
+          // Cast to PendingMutation type
+          const typedMutation = mutation as unknown as PendingMutation;
+
+          if (typedMutation.table === 'post_court_notes') {
+            // Check for conflict before syncing
+            const conflict = await checkForConflict(typedMutation);
+
+            if (conflict) {
+              // HARDENING FIX: Surface conflict via global dialog if handler provided
+              if (onConflictDetected) {
+                const choice = await onConflictDetected(conflict);
+
+                if (choice === 'discard-local') {
+                  // User chose to discard - clear mutation without applying
+                  await clearPendingMutation(mutation.id!);
+                  toast.info('Local changes discarded', {
+                    description: 'Loaded latest version from server.',
+                  });
+                  continue;
+                }
+                // choice === 'keep-local' - proceed with upsert below
+              } else {
+                // No handler - skip and mark as needing review
+                failed++;
+                continue;
+              }
+            }
+          }
+
+          // Perform the sync
+          const error = await performMutation(typedMutation);
+
+          if (error) {
+            console.error('Sync error:', error);
+            failed++;
+          } else {
+            await clearPendingMutation(mutation.id!);
+            synced++;
+          }
+        } catch (err) {
+          console.error('Mutation sync failed:', err);
+          failed++;
+        }
+      }
+
+      await refreshPendingCount();
+
+      if (synced > 0) {
+        toast.success(`Synced ${synced} pending change${synced > 1 ? 's' : ''}`, {
+          description: 'Your personal notes have been saved.',
+        });
+      }
+
+      if (failed > 0) {
+        toast.warning(`${failed} change${failed > 1 ? 's' : ''} need${failed === 1 ? 's' : ''} review`, {
+          description: 'Some notes could not be synced automatically.',
+        });
+      }
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [isOnline, isSyncing, getPendingMutations, clearPendingMutation, onConflictDetected, refreshPendingCount, checkForConflict, performMutation]);
+
+  // Sync pending mutations when coming online
+  useEffect(() => {
+    if (isOnline && pendingCount > 0 && !isSyncing) {
+      syncPendingMutations();
+    }
+  }, [isOnline, pendingCount, isSyncing, syncPendingMutations]);
 
   const queuePostCourtNote = useCallback(async (noteData: any) => {
     await queueMutation('upsert', 'post_court_notes', {
@@ -209,7 +213,7 @@ export function usePendingSync(
       updated_at: new Date().toISOString(),
     });
     await refreshPendingCount();
-    
+
     // HARDENING FIX: Precise offline language
     toast.success('Saved locally', {
       description: 'Personal notes will sync when online.',

@@ -32,9 +32,9 @@ export function useSubscriptionManager() {
     callback: SubscriptionCallback
   ): (() => void) => {
     const key = getSubscriptionKey(config);
-    
+
     let managed = subscriptionRegistry.get(key);
-    
+
     if (!managed) {
       // Create new channel with proper typing
       const channelConfig = {
@@ -92,8 +92,9 @@ export function useSubscriptionManager() {
 
   // Cleanup on unmount
   useEffect(() => {
+    const currentActive = activeSubscriptionsRef.current;
     return () => {
-      activeSubscriptionsRef.current.forEach((key) => {
+      currentActive.forEach((key) => {
         const sub = subscriptionRegistry.get(key);
         if (sub) {
           sub.refCount--;

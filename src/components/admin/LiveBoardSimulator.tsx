@@ -4,34 +4,37 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
-import { Activity, Play, Pause, SkipForward, AlertCircle, WifiLine, WifiOff } from 'lucide-react';
+import { Activity, Play, SkipForward, AlertCircle, WifiOff, Zap } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useLiveBoard } from '@/hooks/useLiveBoard';
+import type { LiveBoardCache } from '@/types/database';
 
 export default function LiveBoardSimulator() {
     const { data: boards } = useLiveBoard();
-    const [selectedBoardId, setSelectedBoardId] = useState<string | null>(null);
+    const [selectedBoardKey, setSelectedBoardKey] = useState<string | null>(null);
     const [isRunning, setIsRunning] = useState(false);
     const [intervalSecs, setIntervalSecs] = useState(10);
     const [autoIncrement, setAutoIncrement] = useState(true);
 
-    const selectedBoard = boards?.find(b => b.id === selectedBoardId);
+    const selectedBoard = boards?.find(b => `${b.court_location}-${b.court_no}` === selectedBoardKey);
 
     useEffect(() => {
         let timer: NodeJS.Timeout;
-        if (isRunning && selectedBoardId && autoIncrement) {
+        if (isRunning && selectedBoardKey && autoIncrement) {
             timer = setInterval(async () => {
-                const board = boards?.find(b => b.id === selectedBoardId);
+                const board = boards?.find(b => `${b.court_location}-${b.court_no}` === selectedBoardKey);
                 if (board) {
                     await incrementItem(board);
                 }
             }, intervalSecs * 1000);
         }
-        return () => clearInterval(timer);
-    }, [isRunning, selectedBoardId, intervalSecs, autoIncrement, boards]);
+        return () => {
+            if (timer) clearInterval(timer);
+        };
+    }, [isRunning, selectedBoardKey, autoIncrement, intervalSecs, boards]);
 
-    const incrementItem = async (board: any) => {
+    const incrementItem = async (board: LiveBoardCache) => {
         const nextItem = (board.current_item || 0) + 1;
         try {
             const { error } = await supabase
@@ -40,7 +43,8 @@ export default function LiveBoardSimulator() {
                     current_item: nextItem,
                     last_updated: new Date().toISOString()
                 })
-                .eq('id', board.id);
+                .eq('court_location', board.court_location)
+                .eq('court_no', board.court_no);
 
             if (error) throw error;
         } catch (err) {
@@ -50,7 +54,7 @@ export default function LiveBoardSimulator() {
         }
     };
 
-    const toggleStatus = async (board: any) => {
+    const toggleStatus = async (board: LiveBoardCache) => {
         const nextStatus = board.status === 'hearing' ? 'lunch' : 'hearing';
         try {
             await supabase
@@ -59,7 +63,8 @@ export default function LiveBoardSimulator() {
                     status: nextStatus,
                     last_updated: new Date().toISOString()
                 })
-                .eq('id', board.id);
+                .eq('court_location', board.court_location)
+                .eq('court_no', board.court_no);
         } catch (err) {
             toast.error('Sync Error');
         }
@@ -87,22 +92,25 @@ export default function LiveBoardSimulator() {
                     <div className="space-y-4">
                         <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Select Court</p>
                         <div className="grid grid-cols-1 gap-2">
-                            {boards?.map(board => (
-                                <button
-                                    key={board.id}
-                                    onClick={() => setSelectedBoardId(board.id)}
-                                    className={`text-left p-3 rounded-lg border transition-all ${selectedBoardId === board.id
+                            {boards?.map(board => {
+                                const key = `${board.court_location}-${board.court_no}`;
+                                return (
+                                    <button
+                                        key={key}
+                                        onClick={() => setSelectedBoardKey(key)}
+                                        className={`text-left p-3 rounded-lg border transition-all ${selectedBoardKey === key
                                             ? 'bg-primary/10 border-primary shadow-[0_0_10px_rgba(251,191,36,0.1)] text-primary'
                                             : 'bg-white/5 border-border/20 text-muted-foreground hover:bg-white/10'
-                                        }`}
-                                >
-                                    <div className="text-xs font-bold uppercase">Court {board.court_no}</div>
-                                    <div className="text-[10px] opacity-60">{board.court_location}</div>
-                                    <div className="mt-2 text-xl font-display font-bold tabular-nums">
-                                        #{board.current_item || 0}
-                                    </div>
-                                </button>
-                            ))}
+                                            }`}
+                                    >
+                                        <div className="text-xs font-bold uppercase">Court {board.court_no}</div>
+                                        <div className="text-[10px] opacity-60">{board.court_location}</div>
+                                        <div className="mt-2 text-xl font-display font-bold tabular-nums">
+                                            #{board.current_item || 0}
+                                        </div>
+                                    </button>
+                                );
+                            })}
                         </div>
                     </div>
 
