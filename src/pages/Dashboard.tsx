@@ -12,8 +12,8 @@ import { CourtMetadataWidget } from '@/components/dashboard/CourtMetadataWidget'
 import { CauseListNotesWidget } from '@/components/dashboard/CauseListNotesWidget';
 import { DateSelector } from '@/components/dashboard/DateSelector';
 import { DataConfidenceWarning } from '@/components/dashboard/DataConfidenceWarning';
-import { AppHeader } from '@/components/layout/AppHeader';
 import { AuthGuard } from '@/components/layout/AuthGuard';
+
 import { MorningBriefPanel } from '@/components/morning-brief/MorningBriefPanel';
 import { PostCourtCapturePanel } from '@/components/post-court/PostCourtCapturePanel';
 import { FreshnessIndicator } from '@/components/ui/FreshnessIndicator';
@@ -32,12 +32,37 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/kinetic-tabs';
-
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Scale, AlertCircle, Search, Sun, Gavel, Calendar, CheckCircle, Upload, MessageCircle, ClipboardList, Focus, FileDown, ChevronDown } from 'lucide-react';
+
+import {
+  Scale,
+  AlertCircle,
+  Search,
+  Sun,
+  Gavel,
+  Calendar,
+  CheckCircle,
+  Upload,
+  MessageCircle,
+  ClipboardList,
+  Focus,
+  FileDown,
+  ChevronDown,
+  Activity,
+  Brain,
+  Zap,
+  Clock,
+  LayoutGrid,
+  TrendingUp,
+  Shield
+} from 'lucide-react';
+
 import { LiveBoardSimulator } from '@/components/dashboard/LiveBoardSimulator';
 import { InternSupervisionPanel } from '@/components/intern-supervision';
-import { motion } from 'framer-motion';
+import { motion, Reorder } from 'framer-motion';
+import { SovereignWidget } from '@/components/layout/SovereignWidget';
+
+
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -64,6 +89,7 @@ export default function Dashboard() {
   // Role-based default tab: SENIOR -> brief (Today View), JUNIOR -> tasks (Assigned Work)
   const { role, profile, isAdmin } = useAuth();
   const defaultTab = role === 'JUNIOR' ? 'tasks' : 'brief';
+
   const tabFromUrl = searchParams.get('tab');
   const [activeTab, setActiveTab] = useState(tabFromUrl || defaultTab);
 
@@ -92,8 +118,10 @@ export default function Dashboard() {
   const { data: pendingCaptures } = usePendingCaptures();
   const { data: upcomingCases, isLoading: upcomingLoading, dataUpdatedAt: upcomingUpdatedAt, isFetching: upcomingFetching, refetch: refetchUpcoming } = useUpcomingCases();
   const { isCourtModeEnabled } = useCourtMode();
+  const [widgetOrder, setWidgetOrder] = useState(['live-court', 'time-estimator', 'ticker', 'notes', 'scanners', 'admin']);
 
   // PHASE 1.1: Persist data to IndexedDB when it changes (for offline access)
+
   useEffect(() => {
     if (docket && docket.length > 0) {
       saveDocketCache(docket, formattedDate);
@@ -185,7 +213,7 @@ export default function Dashboard() {
   return (
     <AuthGuard>
       <div className="min-h-screen bg-background pb-20 md:pb-0">
-        <AppHeader />
+
 
         {/* COURT-SAFETY: Pull-to-refresh hint for new users */}
         <PullToRefreshHint
@@ -205,11 +233,12 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Main Content - DECLUTTER: Normalized vertical rhythm with consistent spacing */}
-        <main className="container mx-auto px-4 py-8">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Left: Cause List with Tabs */}
-            <div className="lg:col-span-2 space-y-6">
+        {/* Main Content - Sovereign Three-Pane Flow */}
+        <main className="container-fluid px-6 py-8">
+          <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 h-full">
+            {/* Pane 2: Primary List (Docket/Brief) */}
+            <div className="xl:col-span-8 flex flex-col space-y-6">
+
               {/* COURT-SAFETY: Data freshness indicator - always visible */}
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
@@ -545,69 +574,112 @@ export default function Dashboard() {
               </Tabs>
             </div>
 
-            {/* Right: Live Court Widget & Ticker - DECLUTTER: Normalized spacing */}
+            {/* Pane 3: Active Context (Live Court, Tracker, AI Strategist) */}
             <motion.div
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.3, duration: 0.5, ease: 'easeOut' }}
-              className="lg:col-span-1 space-y-5"
+              className="xl:col-span-4"
             >
-              <div className="sticky top-24 space-y-5">
-                {/* Live Court Widget - Giant Status Display */}
-                {liveBoardLoading ? (
-                  <Skeleton className="h-80 w-full rounded-lg" />
-                ) : primaryLiveBoard ? (
-                  <LiveCourtWidget
-                    courtRoom={primaryLiveBoard.court_no}
-                    currentItem={primaryLiveBoard.current_item}
-                    myItemNumber={firstCase?.item_no}
-                    status={primaryLiveBoard.status || 'hearing'}
-                    courtLocation={primaryLiveBoard.court_location}
-                    liveBoard={primaryLiveBoard}
-                    isSupplementary={activeTab === 'supplementary' || firstCase?.list_type === 'SUPPLEMENTARY'}
-                  />
-                ) : null}
-
-                {/* Virtual Court Button - shows when VC data available */}
-                {primaryLiveBoard && (
-                  <VirtualCourtButton
-                    courtLocation={primaryLiveBoard.court_location}
-                    courtRoomNo={primaryLiveBoard.court_no}
-                    variant="default"
-                  />
-                )}
-
-                {/* Case Time Estimator - Shows estimated wait time for next case */}
-                {firstCase && primaryLiveBoard && (
-                  <CaseTimeEstimator
-                    docketItem={firstCase}
-                    liveBoard={primaryLiveBoard}
-                  />
-                )}
-
-                {/* Live Ticker */}
-                {liveBoardLoading ? (
-                  <Skeleton className="h-64 w-full rounded-lg" />
-                ) : (
-                  <LiveTicker liveBoards={filteredLiveBoards} />
-                )}
-
-                {/* Cause List Notes - Registry announcements */}
-                <CauseListNotesWidget
-                  date={formattedDate}
-                  bench={profile?.bench || undefined}
-                />
-
-                {/* Court Metadata Widget - Shows active courts */}
-                <CourtMetadataWidget bench={profile?.bench || undefined} />
-
-                {/* Intern Supervision Panel - For supervisors with interns */}
-                {isSenior && <InternSupervisionPanel />}
-
-                {/* Live Board Simulator - Admin Only */}
-                {isAdmin && <LiveBoardSimulator liveBoards={filteredLiveBoards} />}
-              </div>
+              <Reorder.Group
+                axis="y"
+                values={widgetOrder}
+                onReorder={setWidgetOrder}
+                className="sticky top-24 space-y-5"
+              >
+                {widgetOrder.map((widgetId) => {
+                  switch (widgetId) {
+                    case 'live-court':
+                      return (
+                        <Reorder.Item key="live-court" value="live-court">
+                          <SovereignWidget title="Active Session" icon={<Gavel className="h-4 w-4" />}>
+                            {liveBoardLoading ? (
+                              <Skeleton className="h-40 w-full rounded" />
+                            ) : primaryLiveBoard ? (
+                              <div className="space-y-4">
+                                <LiveCourtWidget
+                                  courtRoom={primaryLiveBoard.court_no}
+                                  currentItem={primaryLiveBoard.current_item}
+                                  myItemNumber={firstCase?.item_no}
+                                  status={primaryLiveBoard.status || 'hearing'}
+                                  courtLocation={primaryLiveBoard.court_location}
+                                  liveBoard={primaryLiveBoard}
+                                  isSupplementary={activeTab === 'supplementary' || firstCase?.list_type === 'SUPPLEMENTARY'}
+                                />
+                                <VirtualCourtButton
+                                  courtLocation={primaryLiveBoard.court_location}
+                                  courtRoomNo={primaryLiveBoard.court_no}
+                                  variant="compact"
+                                  className="w-full"
+                                />
+                              </div>
+                            ) : (
+                              <div className="text-center py-8 text-muted-foreground border border-dashed border-border rounded">
+                                <Activity className="h-8 w-8 mx-auto mb-2 opacity-20" />
+                                <p className="text-xs">No active session tracked</p>
+                              </div>
+                            )}
+                          </SovereignWidget>
+                        </Reorder.Item>
+                      );
+                    case 'time-estimator':
+                      return firstCase && primaryLiveBoard ? (
+                        <Reorder.Item key="time-estimator" value="time-estimator">
+                          <SovereignWidget title="Strategic Timer" icon={<Clock className="h-4 w-4" />}>
+                            <CaseTimeEstimator
+                              docketItem={firstCase}
+                              liveBoard={primaryLiveBoard}
+                            />
+                          </SovereignWidget>
+                        </Reorder.Item>
+                      ) : null;
+                    case 'ticker':
+                      return (
+                        <Reorder.Item key="ticker" value="ticker">
+                          <SovereignWidget title="Live Ticker" icon={<TrendingUp className="h-4 w-4" />}>
+                            {liveBoardLoading ? (
+                              <Skeleton className="h-32 w-full rounded" />
+                            ) : (
+                              <LiveTicker liveBoards={filteredLiveBoards} />
+                            )}
+                          </SovereignWidget>
+                        </Reorder.Item>
+                      );
+                    case 'notes':
+                      return (
+                        <Reorder.Item key="notes" value="notes">
+                          <SovereignWidget title="Registry Notes" icon={<ClipboardList className="h-4 w-4" />}>
+                            <CauseListNotesWidget
+                              date={formattedDate}
+                              bench={profile?.bench || undefined}
+                            />
+                          </SovereignWidget>
+                        </Reorder.Item>
+                      );
+                    case 'scanners':
+                      return (
+                        <Reorder.Item key="scanners" value="scanners">
+                          <SovereignWidget title="Court Scanner" icon={<LayoutGrid className="h-4 w-4" />}>
+                            <CourtMetadataWidget bench={profile?.bench || undefined} />
+                            {isSenior && <div className="mt-4 pt-4 border-t border-border/50"><InternSupervisionPanel /></div>}
+                          </SovereignWidget>
+                        </Reorder.Item>
+                      );
+                    case 'admin':
+                      return isAdmin ? (
+                        <Reorder.Item key="admin" value="admin">
+                          <SovereignWidget title="Console Admin" icon={<Shield className="h-4 w-4" />}>
+                            <LiveBoardSimulator liveBoards={filteredLiveBoards} />
+                          </SovereignWidget>
+                        </Reorder.Item>
+                      ) : null;
+                    default:
+                      return null;
+                  }
+                })}
+              </Reorder.Group>
             </motion.div>
+
           </div>
         </main>
       </div>

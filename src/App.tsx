@@ -35,6 +35,12 @@ import { KineticProvider } from "./components/layout/KineticProvider";
 import { SilkPreloader } from '@/components/layout/SilkPreloader';
 import { SmartPrefetcher } from './components/layout/SmartPrefetcher';
 import { GlobalCommandPalette } from './components/layout/GlobalCommandPalette';
+import { motion, AnimatePresence } from 'framer-motion';
+import { SovereignLayout } from "./components/layout/SovereignLayout";
+
+import { DensityProvider } from "./contexts/DensityContext";
+
+
 
 
 
@@ -69,69 +75,78 @@ function BeforeUnloadGuard() {
 
 const App = () => (
   <ErrorBoundary>
-    <SilkPreloader />
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        {/* FormDirtyProvider MUST wrap everything for safety checks */}
-        <FormDirtyProvider>
-          {/* SyncConflictProvider must wrap ForceUpdateChecker since it uses useSyncConflict */}
-          <SyncConflictProvider>
-            {/* PWA Force Update Kill Switch - with safety checks and dialog */}
-            <ForceUpdateChecker />
-            {/* SAFE PWA AUTO-UPDATE: Beforeunload safety net */}
-            <BeforeUnloadGuard />
-            {/* Branded Splash Screen - shows once per session */}
-            <SplashScreen />
-            <Toaster
-              position="top-center"
-              toastOptions={{
-                className: 'bg-background border-2 border-primary text-primary font-bold shadow-[0_0_20px_hsl(48_97%_54%/0.4)]',
-              }}
-            />
-            {/* HARDENING FIX: Global offline banner - single source of truth */}
-            <GlobalOfflineBanner />
-            {/* PWA Install Discovery - safe, non-intrusive, respects dismissal */}
-            <InstallDiscoveryBanner />
-            {/* PWA Post-Install Confirmation - shows once after first install launch */}
-            <PostInstallConfirmation />
-            {/* SAFE PWA AUTO-UPDATE: Manages update lifecycle with safety checks */}
-            <PWAUpdateManager />
-            <SmartPrefetcher />
-            <GlobalCommandPalette />
-            <BrowserRouter>
+    <DensityProvider>
+      <SilkPreloader />
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          {/* FormDirtyProvider MUST wrap everything for safety checks */}
+          <FormDirtyProvider>
+            {/* SyncConflictProvider must wrap ForceUpdateChecker since it uses useSyncConflict */}
+            <SyncConflictProvider>
+              {/* PWA Force Update Kill Switch - with safety checks and dialog */}
+              <ForceUpdateChecker />
+              {/* SAFE PWA AUTO-UPDATE: Beforeunload safety net */}
+              <BeforeUnloadGuard />
+              {/* Branded Splash Screen - shows once per session */}
+              <SplashScreen />
+              <Toaster
+                position="top-center"
+                toastOptions={{
+                  className: 'bg-background border-2 border-primary text-primary font-bold shadow-[0_0_20px_hsl(48_97%_54%/0.4)]',
+                }}
+              />
+              {/* HARDENING FIX: Global offline banner - single source of truth */}
+              <GlobalOfflineBanner />
+              {/* PWA Install Discovery - safe, non-intrusive, respects dismissal */}
+              <InstallDiscoveryBanner />
+              {/* PWA Post-Install Confirmation - shows once after first install launch */}
+              <PostInstallConfirmation />
+              {/* SAFE PWA AUTO-UPDATE: Manages update lifecycle with safety checks */}
+              <PWAUpdateManager />
+              <SmartPrefetcher />
+              <GlobalCommandPalette />
+              <BrowserRouter>
 
 
-              <KineticProvider>
-                {/* Court Focus Mode - Full screen overlay for critical court moments */}
-                <CourtFocusOverlay />
-                <Suspense fallback={
-                  <div className="flex items-center justify-center min-h-screen bg-background">
-                    <div className="h-12 w-12 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-                  </div>
-                }>
-                  <Routes>
-                    <Route path="/" element={<Dashboard />} />
-                    <Route path="/auth" element={<Auth />} />
-                    <Route path="/onboarding" element={<Onboarding />} />
-                    <Route path="/settings" element={<Settings />} />
-                    <Route path="/docs" element={<Documentation />} />
-                    <Route path="/dossier" element={<ProductDossier />} />
-                    <Route path="/technical-dossier" element={<TechnicalDossier />} />
-                    <Route path="/admin" element={<Admin />} />
-                    <Route path="/war-room/:caseId" element={<WarRoom />} />
-                    <Route path="/control-deck/:caseId" element={<ControlDeck />} />
-                    <Route path="/courtroom" element={<CourtroomMode />} />
-                    <Route path="/install" element={<Install />} />
-                    <Route path="*" element={<NotFound />} />
-                  </Routes>
-                </Suspense>
-              </KineticProvider>
-            </BrowserRouter>
-          </SyncConflictProvider>
-        </FormDirtyProvider>
-      </TooltipProvider>
-    </QueryClientProvider>
+                <KineticProvider>
+                  {/* Court Focus Mode - Full screen overlay for critical court moments */}
+                  <CourtFocusOverlay />
+                  <Suspense fallback={
+                    <div className="flex items-center justify-center min-h-screen bg-background">
+                      <div className="h-12 w-12 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+                    </div>
+                  }>
+                    <SovereignLayout>
+                      <AnimatePresence mode="wait">
+                        <Routes>
+                          <Route path="/" element={<Dashboard />} />
+                          <Route path="/auth" element={<Auth />} />
+                          <Route path="/onboarding" element={<Onboarding />} />
+                          <Route path="/settings" element={<Settings />} />
+                          <Route path="/docs" element={<Documentation />} />
+                          <Route path="/dossier" element={<ProductDossier />} />
+                          <Route path="/technical-dossier" element={<TechnicalDossier />} />
+                          <Route path="/admin" element={<Admin />} />
+                          <Route path="/war-room/:caseId" element={<WarRoom />} />
+                          <Route path="/control-deck/:caseId" element={<ControlDeck />} />
+                          <Route path="/courtroom" element={<CourtroomMode />} />
+                          <Route path="/install" element={<Install />} />
+                          <Route path="*" element={<NotFound />} />
+                        </Routes>
+                      </AnimatePresence>
+
+                    </SovereignLayout>
+                  </Suspense>
+
+                </KineticProvider>
+              </BrowserRouter>
+            </SyncConflictProvider>
+          </FormDirtyProvider>
+        </TooltipProvider>
+      </QueryClientProvider>
+    </DensityProvider>
   </ErrorBoundary>
 );
+
 
 export default App;

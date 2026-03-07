@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Scale, Calendar, FileText, Settings, Activity, FileCheck, Database, Gavel, Brain, ClipboardCheck, AlertTriangle, Gauge, Layers, Smartphone, Users } from 'lucide-react';
+import { ArrowLeft, Scale, Calendar, FileText, Settings, Activity, FileCheck, Database, Gavel, Brain, ClipboardCheck, AlertTriangle, Gauge, Layers, Smartphone, Users, Shield } from 'lucide-react';
 import { AuthGuard } from '@/components/layout/AuthGuard';
 import { useAuth } from '@/hooks/useAuth';
 import { DocketManager } from '@/components/admin/DocketManager';
@@ -52,40 +52,23 @@ export default function Admin() {
 
   return (
     <AuthGuard>
-      <div className="min-h-screen bg-background flex flex-col">
-        {/* Header */}
-        <header className="border-b border-border bg-card/95 backdrop-blur-sm sticky top-0 z-40">
-          <div className="container mx-auto px-4 py-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => navigate('/')}
-                  aria-label="Go back to dashboard"
-                >
-                  <ArrowLeft className="h-5 w-5" />
-                </Button>
-                
-                <div>
-                  <h1 className="font-display text-xl font-bold text-primary">
-                    Admin Panel
-                  </h1>
-                  <p className="text-sm text-muted-foreground">
-                    Manage cases, arguments, and court configuration
-                  </p>
-                </div>
-              </div>
-            </div>
+      <div className="min-h-screen bg-transparent flex flex-col p-6">
+        <div className="mb-6 flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-display font-bold text-foreground flex items-center gap-3">
+              <Shield className="h-8 w-8 text-primary" />
+              Sovereign Console
+            </h1>
+            <p className="text-muted-foreground mt-1 text-sm tracking-wide uppercase font-medium">System Administration & Oversight</p>
           </div>
-        </header>
+        </div>
 
         {/* Main Content */}
-        <main className="flex-1 container mx-auto px-4 py-6">
+        <main className="flex-1">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-            <div className="overflow-x-auto pb-2">
-              <TabsList className="inline-flex h-auto w-max gap-1 p-1">
-              <TabsTrigger value="user-cases" className="flex items-center gap-2 px-3 py-2">
+            <div className="overflow-x-auto pb-2 scrollbar-hide">
+              <TabsList className="inline-flex h-11 w-max gap-1 p-1 bg-muted/20 backdrop-blur-md border border-border/50 rounded-lg">
+                <TabsTrigger value="user-cases" className="flex items-center gap-2 px-3 py-2">
                   <Users className="h-4 w-4" />
                   <span className="hidden sm:inline">User Cases</span>
                 </TabsTrigger>

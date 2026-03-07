@@ -47,79 +47,44 @@ export function AppHeader() {
   };
 
   return (
-    <header 
-      className="border-b border-border glass-card rounded-none sticky top-0 z-40" 
+    <header
+      className="border-b border-border bg-background/50 backdrop-blur-xl sticky top-0 z-40 h-16 flex items-center"
       role="banner"
     >
-      <div className="container mx-auto px-4 py-3">
-        <div className="flex items-center justify-between">
-          {/* Logo & Brand */}
-          <div
-            className="flex items-center gap-3 cursor-pointer select-none"
-            onClick={handleLogoClick}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') handleLogoClick();
-            }}
-          >
-            <img src={logoImage} alt="Nyay-Hub Logo" className="h-8 w-8" />
-            <div className="hidden sm:block">
-              <h1 className="font-display text-xl font-bold text-foreground tracking-wide">
-                Nyay-Hub
-              </h1>
-              <p className="text-xs text-muted-foreground">
-                {t('rajasthan_high_court')}
-              </p>
-            </div>
+      <div className="container mx-auto px-4">
+        <div className="flex items-center justify-between gap-4">
+          {/* Left: Section Context / Breadcrumbs */}
+          <div className="hidden lg:flex items-center gap-2 text-sm">
+            <span className="text-muted-foreground">Workspace</span>
+            <span className="text-muted-foreground/50">/</span>
+            <span className="font-medium text-foreground">Rajasthan High Court</span>
           </div>
 
-          {/* Center: Persistent Live Board Status - ALWAYS VISIBLE */}
-          <div className="hidden md:block flex-1 max-w-md mx-4">
+          {/* Center: Persistent Live Board Status - Primary Focus */}
+          <div className="flex-1 max-w-xl">
             <PersistentLiveBoard />
           </div>
 
-          {/* Right: Critical Actions - One-Tap Rule */}
-          <div className="flex items-center gap-2 sm:gap-3">
-            {/* CP-5: Delegation Badge - Shows "Assisting Adv. X" for clerks */}
-            <DelegationBadge variant="compact" className="hidden sm:flex" />
-
-            {/* Language Toggle */}
-            <LanguageToggle />
-
-            {/* Court Mode Badge - Always visible */}
-            <CourtModeBadge />
-
-            {/* Network Status */}
-            <NetworkStatusPill />
-
-            {/* Notification Bell - Critical alerts */}
-            <NotificationBell
-              liveBoards={liveBoards ?? []}
-              userCases={docket ?? []}
-            />
-
-            {/* Today's Date - Context */}
-            <div className="hidden lg:flex items-center gap-1.5 text-sm text-muted-foreground">
-              <Calendar className="h-4 w-4" aria-hidden="true" />
-              <time dateTime={new Date().toISOString().split('T')[0]}>
-                {new Date().toLocaleDateString('en-IN', {
-                  weekday: 'short',
-                  day: 'numeric',
-                  month: 'short',
-                })}
-              </time>
+          {/* Right: Status Pills & User Menu */}
+          <div className="flex items-center gap-3">
+            <div className="hidden sm:flex items-center gap-3 pr-3 border-r border-border/50">
+              <LanguageToggle />
+              <NetworkStatusPill />
+              <NotificationBell
+                liveBoards={liveBoards ?? []}
+                userCases={docket ?? []}
+              />
             </div>
 
-            {/* User Menu - All non-urgent actions */}
             <UserMenu />
           </div>
         </div>
+      </div>
 
-        {/* Mobile: Persistent Live Board below header */}
-        <div className="md:hidden mt-3">
-          <PersistentLiveBoard />
-        </div>
+
+      {/* Mobile: Persistent Live Board below header */}
+      <div className="md:hidden mt-3">
+        <PersistentLiveBoard />
       </div>
 
       {/* Hidden Operations Console */}

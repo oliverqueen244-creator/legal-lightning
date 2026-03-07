@@ -4,17 +4,20 @@
 
 @layer base {
   :root {
-    /* Golden Gavel: Royal Cyberpunk Theme */
-    --background: 222 47% 9%; /* Deep Midnight #0f172a */
+    /* Sovereign Industrial Theme: Deeper Blacks & High Contrast */
+    --background: 222 84% 4.9%;
+    /* Richer Dark #020617 */
     --foreground: 210 40% 98%;
 
-    --card: 217 33% 12%;
+    --card: 222 84% 6%;
     --card-foreground: 210 40% 98%;
 
-    --popover: 217 33% 12%;
+    --popover: 222 84% 6%;
     --popover-foreground: 210 40% 98%;
 
-    --primary: 43 96% 56%; /* Royal Gold #fbbf24 */
+
+    --primary: 43 96% 56%;
+    /* Royal Gold #fbbf24 */
     --primary-foreground: 222 47% 9%;
     --primary-rgb: 251 191 36;
     --gold-rgb: 251 191 36;
@@ -24,7 +27,8 @@
     --secondary-foreground: 210 40% 98%;
 
     --muted: 215 28% 16%;
-    --muted-foreground: 215 20% 65%; /* Muted Slate #94a3b8 */
+    --muted-foreground: 215 20% 65%;
+    /* Muted Slate #94a3b8 */
 
     --accent: 43 96% 56%;
     --accent-foreground: 222 47% 9%;
@@ -47,7 +51,7 @@
     --court-danger-light: 0 84% 60%;
     --court-success: 142 76% 36%;
     --court-warning: 38 92% 50%;
-    
+
     /* Semantic urgency tokens (see docs/ui-semantics.md) */
     /* --court-positive-urgency: "My case is running" - distinct from panic/danger */
     /* Currently mapped to same visual as danger for beta; may diverge based on user feedback */
@@ -118,7 +122,12 @@
     @apply bg-background text-foreground font-sans antialiased;
   }
 
-  h1, h2, h3, h4, h5, h6 {
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
     @apply font-display tracking-wide;
   }
 
@@ -133,12 +142,15 @@
   }
 
   /* Touch target compliance - minimum 44px */
-  button, a, [role="button"] {
+  button,
+  a,
+  [role="button"] {
     @apply min-h-touch min-w-touch;
   }
 }
 
 @layer components {
+
   /* Glassmorphism card */
   .glass-card {
     @apply backdrop-blur-md bg-white/5 border border-white/10 rounded-lg shadow-xl;
@@ -158,7 +170,7 @@
     border: 2px solid hsl(var(--court-danger-light));
     box-shadow: 0 0 8px hsl(var(--court-danger-light) / 0.4);
   }
-  
+
   /* One-time panic pulse - only triggers once on state change */
   .panic-pulse-once {
     animation: panic-pulse-once 0.6s ease-out;
@@ -168,9 +180,11 @@
     0% {
       box-shadow: 0 0 0 0 hsl(var(--court-danger-light) / 0.7);
     }
+
     50% {
       box-shadow: 0 0 0 12px hsl(var(--court-danger-light) / 0.3);
     }
+
     100% {
       box-shadow: 0 0 0 0 hsl(var(--court-danger-light) / 0);
     }
@@ -191,6 +205,7 @@
       transform: translateY(-100%);
       opacity: 0;
     }
+
     to {
       transform: translateY(0);
       opacity: 1;
@@ -222,6 +237,7 @@
     0% {
       transform: translateX(0);
     }
+
     100% {
       transform: translateX(-50%);
     }
@@ -282,6 +298,7 @@
     0% {
       transform: translateX(-100%);
     }
+
     100% {
       transform: translateX(100%);
     }
@@ -323,6 +340,7 @@
 
   /* Reduced motion preference */
   @media (prefers-reduced-motion: reduce) {
+
     *,
     *::before,
     *::after {
@@ -330,5 +348,44 @@
       animation-iteration-count: 1 !important;
       transition-duration: 0.01ms !important;
     }
+  }
+}
+
+@layer base {
+  [data-density="compact"] {
+    --container-padding: 1rem;
+    --card-padding: 0.75rem;
+    font-size: 15px;
+  }
+
+  [data-density="high"] {
+    --container-padding: 0.5rem;
+    --card-padding: 0.5rem;
+    font-size: 14px;
+  }
+
+  /* Apply the variables to common elements */
+  [data-density="compact"] .container,
+  [data-density="compact"] .container-fluid {
+    padding-left: var(--container-padding);
+    padding-right: var(--container-padding);
+  }
+
+  [data-density="high"] .container,
+  [data-density="high"] .container-fluid {
+    padding-left: var(--container-padding);
+    padding-right: var(--container-padding);
+  }
+
+  [data-density="compact"] .glass-card,
+  [data-density="compact"] .bg-card,
+  [data-density="compact"] .border {
+    padding: var(--card-padding);
+  }
+
+  [data-density="high"] .glass-card,
+  [data-density="high"] .bg-card,
+  [data-density="high"] .border {
+    padding: var(--card-padding);
   }
 }

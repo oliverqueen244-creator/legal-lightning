@@ -11,12 +11,14 @@ import { DocumentReviewPanel } from '@/components/documents/DocumentReviewPanel'
 import { ListingHistoryPanel } from '@/components/case-history/ListingHistoryPanel';
 import { JudgmentReferencesPanel } from '@/components/war-room/JudgmentReferencesPanel';
 import { JudgeIntelligencePanel } from '@/components/judge-intelligence';
+import { Brain } from 'lucide-react';
 import { PostCourtNoteCard } from '@/components/post-court/PostCourtNoteCard';
 import { ClientUpdateButton } from '@/components/client-update/ClientUpdateButton';
 import { WhisperNotification } from '@/components/war-room/WhisperNotification';
 import { WhisperDrawer } from '@/components/war-room/WhisperDrawer';
 import { WarRoomUploadPanel } from '@/components/war-room/WarRoomUploadPanel';
 import { AuthGuard } from '@/components/layout/AuthGuard';
+import { AIInsightPanel } from '@/components/war-room/AIInsightPanel';
 import { NetworkStatusPill } from '@/components/layout/NetworkStatusPill';
 import { FreshnessIndicator } from '@/components/ui/FreshnessIndicator';
 import { useDocketItem } from '@/hooks/useDocket';
@@ -40,7 +42,7 @@ export default function WarRoom() {
   const [selectedArg, setSelectedArg] = useState<CaseArgument | null>(null);
   const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
   const [fontSize, setFontSize] = useState<'normal' | 'large' | 'xlarge'>('normal');
-  const [leftPanelTab, setLeftPanelTab] = useState<'arguments' | 'documents' | 'history'>('arguments');
+  const [leftPanelTab, setLeftPanelTab] = useState<'arguments' | 'documents' | 'history' | 'ai'>('arguments');
 
   const { role } = useAuth();
   const { data: docketItem, isLoading: docketLoading, dataUpdatedAt: docketUpdatedAt, refetch: refetchDocket, isFetching: docketFetching } = useDocketItem(caseId!);
@@ -88,7 +90,7 @@ export default function WarRoom() {
   const courtSession = useCourtSessionState(liveBoard);
   const currentItem = getCurrentItem(liveBoard);
   const distance = docketItem ? docketItem.item_no - currentItem : 0;
-  
+
   // CORRECTNESS PLAN 2: Canonical RUNNING - requires inSession && distance <= 0
   const isPanic = courtSession.inSession && distance > 0 && distance <= 5;
   const isRunning = isRunningState(courtSession, docketItem?.item_no, liveBoard);
@@ -136,8 +138,8 @@ export default function WarRoom() {
     <AuthGuard>
       <div className="min-h-screen bg-background flex flex-col">
         {/* Skip to main content link */}
-        <a 
-          href="#main-content" 
+        <a
+          href="#main-content"
           className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:px-4 focus:py-2 focus:bg-primary focus:text-primary-foreground focus:rounded"
         >
           Skip to main content
@@ -145,82 +147,43 @@ export default function WarRoom() {
 
         {/* Whisper Listener for toast notifications */}
         <WhisperNotification docketId={caseId!} />
-        
+
         {/* Whisper Chat Drawer */}
         <WhisperDrawer docketId={caseId!} />
 
-        {/* Header */}
-        <header
-          className={cn(
-            'border-b border-border glass-card rounded-none sticky top-0 z-40 transition-colors',
-            isPanic && 'bg-court-danger/20 border-court-danger-light',
-            isRunning && 'bg-primary/10 border-primary gold-glow'
-          )}
-          role="banner"
-        >
-          <div className="container mx-auto px-4 py-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => navigate('/')}
-                  aria-label="Go back to dashboard"
-                  className="min-h-touch min-w-touch"
-                >
-                  <ArrowLeft className="h-5 w-5" />
-                </Button>
-                
-                <div>
-                  <div className="flex items-center gap-3">
-                    <h1 className="font-display text-xl font-bold text-foreground tracking-wide">
-                      {docketItem.case_number}
-                    </h1>
-                    
-                    {isPanic && (
-                      <Badge variant="danger" className="flex items-center gap-1" role="status" aria-live="polite">
-                        <AlertTriangle className="h-3 w-3" aria-hidden="true" />
-                        {distance} ITEMS AWAY
-                      </Badge>
-                    )}
-                    
-                    {/* CORRECTNESS PLAN 2: Use MARKED RUNNING instead of RUNNING NOW */}
-                    {isRunning && (
-                      <Badge variant="running" role="status" aria-live="assertive">MARKED RUNNING</Badge>
-                    )}
-                  </div>
-                  
-                  <p className="text-sm text-muted-foreground">
-                    Court {docketItem.court_room_no} • {docketItem.court_location} • Item #{docketItem.item_no}
-                    {effectiveJudge.judgeName && (
-                      <span className="ml-2">• {effectiveJudge.judgeName.replace(/^(MR\. JUSTICE |MRS\. JUSTICE |MS\. JUSTICE )/gi, 'J. ')}</span>
-                    )}
-                  </p>
-                </div>
-              </div>
-              
-              <div className="flex items-center gap-3">
-                {/* COURT-SAFETY: Data freshness always visible */}
-                <FreshnessIndicator
-                  lastUpdated={new Date(Math.min(docketUpdatedAt || Date.now(), docsUpdatedAt || Date.now()))}
-                  onRefresh={() => { refetchDocket(); refetchDocs(); }}
-                  isRefetching={docketFetching || docsFetching}
-                  size="sm"
-                />
-                <NetworkStatusPill />
-                {effectiveJudge.isOverride && (
-                  <Badge variant="outline" className="text-amber-400 border-amber-400/50 flex items-center gap-1">
-                    <UserCheck className="h-3 w-3" />
-                    Substitute Judge
-                  </Badge>
-                )}
-                <Badge variant="secondary" className="text-sm">
-                  PREPARE
-                </Badge>
-              </div>
-            </div>
+        {/* War Room Specific Status Bar - Slimmer than a full header */}
+        <div className={cn(
+          "flex items-center justify-between px-6 py-2 border-b border-border/50 transition-colors",
+          isPanic && 'bg-court-danger/10 border-court-danger-light',
+          isRunning && 'bg-primary/5 border-primary shadow-[0_0_15px_rgba(251,191,36,0.1)]'
+        )}>
+          <div className="flex items-center gap-4">
+            <h1 className="font-display font-bold text-foreground tracking-tight">
+              {docketItem.case_number}
+            </h1>
+            {isPanic && (
+              <Badge variant="danger" className="animate-pulse">
+                {distance} ITEMS AWAY
+              </Badge>
+            )}
+            {isRunning && (
+              <Badge variant="running">MARKED RUNNING</Badge>
+            )}
           </div>
-        </header>
+
+          <div className="flex items-center gap-4 text-xs text-muted-foreground">
+            <span>Court {docketItem.court_room_no}</span>
+            <span>•</span>
+            <span>Item #{docketItem.item_no}</span>
+            {effectiveJudge.judgeName && (
+              <>
+                <span>•</span>
+                <span className="font-medium text-foreground">{effectiveJudge.judgeName.replace(/^(MR\. JUSTICE |MRS\. JUSTICE |MS\. JUSTICE )/gi, 'J. ')}</span>
+              </>
+            )}
+          </div>
+        </div>
+
 
         {/* Document Selector */}
         {documents && documents.length > 1 && (
@@ -237,34 +200,41 @@ export default function WarRoom() {
           <div className="w-[30%] border-r border-border flex flex-col">
             <Tabs
               value={leftPanelTab}
-              onValueChange={(v) => setLeftPanelTab(v as 'arguments' | 'documents' | 'history')}
+              onValueChange={(v) => setLeftPanelTab(v as 'arguments' | 'documents' | 'history' | 'ai')}
               className="flex flex-col h-full"
             >
-              <TabsList className="grid w-full grid-cols-3 m-2">
-                <TabsTrigger value="arguments" className="flex items-center gap-2">
-                  <List className="h-4 w-4" />
-                  Arguments
+              <TabsList className="grid w-full grid-cols-4 h-11 bg-muted/30 p-1">
+                <TabsTrigger value="arguments" className="text-xs flex items-center gap-1.5 focus:ring-0">
+                  <List className="h-3.5 w-3.5" />
+                  Args
                 </TabsTrigger>
-                <TabsTrigger value="documents" className="flex items-center gap-2 relative">
-                  <FileText className="h-4 w-4" />
-                  Documents
+                <TabsTrigger value="documents" className="text-xs flex items-center gap-1.5 relative focus:ring-0">
+                  <FileText className="h-3.5 w-3.5" />
+                  Docs
                   {pendingCount > 0 && (
-                    <Badge variant="danger" className="absolute -top-1 -right-1 h-5 w-5 p-0 flex items-center justify-center text-xs">
-                      {pendingCount}
-                    </Badge>
+                    <span className="absolute -top-1 -right-1 flex h-4 w-4">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-4 w-4 bg-red-500 text-[10px] items-center justify-center text-white font-bold">
+                        {pendingCount}
+                      </span>
+                    </span>
                   )}
                 </TabsTrigger>
-                <TabsTrigger value="history" className="flex items-center gap-2 relative">
-                  <History className="h-4 w-4" />
-                  Listings
+                <TabsTrigger value="ai" className="text-xs flex items-center gap-1.5 focus:ring-0">
+                  <Brain className="h-3.5 w-3.5 text-amber-500" />
+                  AI
+                </TabsTrigger>
+                <TabsTrigger value="history" className="text-xs flex items-center gap-1.5 relative focus:ring-0">
+                  <History className="h-3.5 w-3.5" />
+                  Hits
                   {hasListingsData?.hasListings && (
-                    <Badge variant="outline" className="absolute -top-1 -right-1 h-5 w-5 p-0 flex items-center justify-center text-xs text-muted-foreground">
+                    <span className="ml-1 text-[10px] text-muted-foreground bg-muted-foreground/10 px-1 rounded-full">
                       {hasListingsData.previousCount}
-                    </Badge>
+                    </span>
                   )}
                 </TabsTrigger>
               </TabsList>
-              
+
               <TabsContent value="arguments" className="flex-1 m-0 overflow-hidden">
                 <ArgumentsPanel
                   arguments={args ?? []}
@@ -274,7 +244,7 @@ export default function WarRoom() {
                   onFontSizeChange={setFontSize}
                 />
               </TabsContent>
-              
+
               <TabsContent value="documents" className="flex-1 m-0 overflow-hidden p-2">
                 {/* Upload Panel - SENIOR/ADMIN only */}
                 {(role === 'SENIOR' || role === 'ADMIN') && (
@@ -290,8 +260,12 @@ export default function WarRoom() {
                   isLoading={docsLoading}
                 />
               </TabsContent>
-              
-              <TabsContent value="history" className="flex-1 m-0 overflow-hidden p-2 space-y-3">
+
+              <TabsContent value="ai" className="flex-1 overflow-hidden m-0">
+                <AIInsightPanel docketId={caseId!} pdfUrl={pdfUrl} />
+              </TabsContent>
+
+              <TabsContent value="history" className="flex-1 overflow-hidden m-0">
                 {/* Client Update Generator Button - SENIOR only */}
                 <div className="flex justify-end">
                   <ClientUpdateButton
@@ -299,7 +273,7 @@ export default function WarRoom() {
                     caseNumber={docketItem.case_number || ''}
                   />
                 </div>
-                
+
                 {/* Latest post-court note - what happened last time */}
                 {latestNote && (
                   <PostCourtNoteCard note={latestNote} compact />
@@ -311,7 +285,7 @@ export default function WarRoom() {
                 />
               </TabsContent>
             </Tabs>
-            
+
             {/* Judge Intelligence Panel */}
             <div className="p-2 border-t border-border">
               <JudgeIntelligencePanel
@@ -322,7 +296,7 @@ export default function WarRoom() {
                 caseNumber={docketItem.case_number}
               />
             </div>
-            
+
             {/* Judgment References Panel - Collapsed by Default */}
             <div className="p-2 border-t border-border">
               <JudgmentReferencesPanel
