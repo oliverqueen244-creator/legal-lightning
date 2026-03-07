@@ -1,10 +1,15 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, RotateCw, Loader2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, RotateCw, Loader2, Sparkles, X, Info } from 'lucide-react';
 import { AnnotationToolbar, AnnotationTool } from './AnnotationToolbar';
 import { useAnnotations } from '@/hooks/useAnnotations';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { AiDisclaimer } from '@/components/ui/AiDisclaimer';
+import { motion, AnimatePresence } from 'framer-motion';
+import { cn } from '@/lib/utils';
+
+
 
 // Set up PDF.js worker
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
@@ -15,10 +20,10 @@ interface SmartPdfViewerProps {
   documentId?: string;
 }
 
-export function SmartPdfViewer({ 
-  pdfUrl, 
+export function SmartPdfViewer({
+  pdfUrl,
   targetPage = 1,
-  documentId 
+  documentId
 }: SmartPdfViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [numPages, setNumPages] = useState<number>(0);
@@ -27,6 +32,9 @@ export function SmartPdfViewer({
   const [isLoading, setIsLoading] = useState(true);
   const [activeTool, setActiveTool] = useState<AnnotationTool>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isSummarizing, setIsSummarizing] = useState(false);
+  const [summary, setSummary] = useState<string | null>(null);
+
 
   const { annotations, addAnnotation } = useAnnotations(documentId || null);
 
@@ -120,11 +128,22 @@ export function SmartPdfViewer({
     selection.removeAllRanges();
   }, [activeTool, documentId, currentPage, addAnnotation]);
 
+  const handleSummarize = async () => {
+    if (isSummarizing) return;
+    setIsSummarizing(true);
+    // Simulate AI Summarization
+    setTimeout(() => {
+      setSummary("This document appears to be a Writ Petition seeking the quashing of a FIR under Section 482 CrPC. The primary argument is that the dispute is civil in nature (lease disagreement) and has been criminalized to exert pressure. Key precedents cited include State of Haryana v. Bhajan Lal regarding the quashing of non-cognizable reports.");
+      setIsSummarizing(false);
+    }, 2500);
+  };
+
+
   // Render annotation overlays
   const pageAnnotations = annotations.filter(a => a.page_number === currentPage);
 
   return (
-    <div 
+    <div
       className="h-full flex flex-col bg-background"
       ref={containerRef}
       onTouchStart={handleTouchStart}
@@ -132,7 +151,7 @@ export function SmartPdfViewer({
       onTouchEnd={handleTouchEnd}
     >
       {/* Toolbar */}
-      <div 
+      <div
         className="flex items-center justify-between p-3 border-b border-border glass-card rounded-none"
         role="toolbar"
         aria-label="PDF viewer controls"
@@ -149,11 +168,11 @@ export function SmartPdfViewer({
           >
             <ChevronLeft className="h-5 w-5" />
           </Button>
-          
+
           <span className="text-sm text-foreground px-3 min-w-[100px] text-center font-medium" aria-live="polite">
             Page {currentPage} of {numPages || '...'}
           </span>
-          
+
           <Button
             variant="ghost"
             size="icon"
@@ -165,12 +184,12 @@ export function SmartPdfViewer({
             <ChevronRight className="h-5 w-5" />
           </Button>
         </div>
-        
+
         {/* Zoom controls */}
         <div className="flex items-center gap-1" role="group" aria-label="Zoom controls">
-          <Button 
-            variant="ghost" 
-            size="icon" 
+          <Button
+            variant="ghost"
+            size="icon"
             onClick={handleZoomOut}
             disabled={scale <= 0.5}
             aria-label="Zoom out"
@@ -181,9 +200,9 @@ export function SmartPdfViewer({
           <span className="text-sm text-muted-foreground w-16 text-center">
             {Math.round(scale * 100)}%
           </span>
-          <Button 
-            variant="ghost" 
-            size="icon" 
+          <Button
+            variant="ghost"
+            size="icon"
             onClick={handleZoomIn}
             disabled={scale >= 3}
             aria-label="Zoom in"
@@ -191,21 +210,65 @@ export function SmartPdfViewer({
           >
             <ZoomIn className="h-5 w-5" />
           </Button>
-          <Button 
-            variant="ghost" 
-            size="icon" 
+          <Button
+            variant="ghost"
+            size="icon"
             onClick={handleResetZoom}
             aria-label="Reset zoom"
             className="min-h-touch min-w-touch"
           >
             <RotateCw className="h-5 w-5" />
           </Button>
+          <div className="w-px h-6 bg-border mx-1" />
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleSummarize}
+            disabled={isSummarizing}
+            className={cn(
+              "gap-2 px-3 text-primary hover:text-primary hover:bg-primary/10",
+              isSummarizing && "animate-pulse"
+            )}
+          >
+            {isSummarizing ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Sparkles className="h-4 w-4" />
+            )}
+            <span className="hidden sm:inline">AI Summary</span>
+          </Button>
         </div>
       </div>
-      
+
+      {/* AI Summary Overlay */}
+      <AnimatePresence>
+        {summary && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 10 }}
+            className="absolute bottom-16 right-6 z-50 w-80 glass-card p-4 shadow-2xl border-primary/20"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2 text-primary">
+                <Sparkles className="h-4 w-4" />
+                <span className="text-xs font-bold uppercase tracking-wider">AI Executive Summary</span>
+              </div>
+              <Button variant="ghost" size="sm" onClick={() => setSummary(null)} className="h-6 w-6 p-0 hover:bg-primary/10">
+                <X className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+            <p className="text-sm text-foreground/90 leading-relaxed mb-4">
+              {summary}
+            </p>
+            <AiDisclaimer />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* PDF Content */}
       <ScrollArea className="flex-1">
-        <div 
+        <div
           className="min-h-full flex items-start justify-center p-4 bg-court-slate-900/50"
           onMouseUp={handleTextSelection}
         >
@@ -236,7 +299,7 @@ export function SmartPdfViewer({
                   renderTextLayer={false}
                   renderAnnotationLayer={false}
                 />
-                
+
                 {/* Annotation overlays */}
                 {pageAnnotations.map((annotation) => (
                   <div

@@ -33,6 +33,10 @@ import { useForceUpdate } from "./hooks/useForceUpdate";
 import { useBeforeUnloadGuard } from "./hooks/useBeforeUnloadGuard";
 import { KineticProvider } from "./components/layout/KineticProvider";
 import { SilkPreloader } from '@/components/layout/SilkPreloader';
+import { SmartPrefetcher } from './components/layout/SmartPrefetcher';
+import { GlobalCommandPalette } from './components/layout/GlobalCommandPalette';
+
+
 
 const queryClient = new QueryClient();
 
@@ -92,7 +96,11 @@ const App = () => (
             <PostInstallConfirmation />
             {/* SAFE PWA AUTO-UPDATE: Manages update lifecycle with safety checks */}
             <PWAUpdateManager />
+            <SmartPrefetcher />
+            <GlobalCommandPalette />
             <BrowserRouter>
+
+
               <KineticProvider>
                 {/* Court Focus Mode - Full screen overlay for critical court moments */}
                 <CourtFocusOverlay />
