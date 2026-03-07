@@ -126,6 +126,17 @@ export default {
           "0%, 100%": { boxShadow: "0 0 20px hsl(var(--court-gold) / 0.3)" },
           "50%": { boxShadow: "0 0 40px hsl(var(--court-gold) / 0.6)" },
         },
+        "float": {
+          "0%, 100%": { transform: "translateY(0)" },
+          "50%": { transform: "translateY(-5px)" },
+        },
+        "morph": {
+          "0%, 100%": { borderRadius: "60% 40% 30% 70% / 60% 30% 70% 40%" },
+          "50%": { borderRadius: "30% 60% 70% 40% / 50% 60% 30% 60%" },
+        },
+        "shimmer": {
+          "100%": { transform: "translateX(100%)" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
@@ -134,7 +145,14 @@ export default {
         "slide-in-right": "slide-in-right 0.3s ease-out",
         "pulse-ring": "pulse-ring 0.6s cubic-bezier(0.4, 0, 0.6, 1)",
         "number-change": "number-change 0.3s ease-out",
-        "glow-pulse": "glow-pulse 2s ease-in-out",
+        "glow-pulse": "glow-pulse 2s ease-in-out infinite",
+        "float": "float 3s ease-in-out infinite",
+        "morph": "morph 8s ease-in-out infinite",
+        "shimmer": "shimmer 2s infinite",
+      },
+      transitionTimingFunction: {
+        "out-expo": "cubic-bezier(0.19, 1, 0.22, 1)",
+        "momentum": "cubic-bezier(0.4, 0, 0.2, 1)",
       },
       minHeight: {
         touch: "44px",

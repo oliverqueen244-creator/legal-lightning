@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { motion } from 'framer-motion';
+
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useAudioRecorder, formatRecordingTime } from '@/hooks/useAudioRecorder';
@@ -93,7 +95,7 @@ function AudioPlayer({ src }: { src: string }) {
         )}
       </Button>
       <div className="flex-1 h-1 bg-muted rounded-full overflow-hidden">
-        <div 
+        <div
           className="h-full bg-primary transition-all duration-100"
           style={{ width: `${progress}%` }}
         />
@@ -113,12 +115,12 @@ export function WhisperDrawer({ docketId }: WhisperDrawerProps) {
   const holdTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isHoldingRef = useRef(false);
   const prevMessageCountRef = useRef(0);
-  
+
   // P1 FIX: Network status for connection indicator
   const { isOnline } = useNetworkStatus();
-  
+
   const { playNotification, setEnabled } = useNotificationSound();
-  
+
   const {
     isRecording,
     recordingTime,
@@ -145,7 +147,7 @@ export function WhisperDrawer({ docketId }: WhisperDrawerProps) {
     if (isUploading || isRecording) return;
     e.preventDefault();
     isHoldingRef.current = true;
-    
+
     // Start recording after 200ms hold
     holdTimerRef.current = setTimeout(async () => {
       if (isHoldingRef.current) {
@@ -160,12 +162,12 @@ export function WhisperDrawer({ docketId }: WhisperDrawerProps) {
 
   const handlePointerUp = useCallback(async () => {
     isHoldingRef.current = false;
-    
+
     if (holdTimerRef.current) {
       clearTimeout(holdTimerRef.current);
       holdTimerRef.current = null;
     }
-    
+
     if (isRecording && recordingTime >= 1) {
       // Stop and send if recorded at least 1 second
       await handleVoiceRecordComplete();
@@ -313,7 +315,7 @@ export function WhisperDrawer({ docketId }: WhisperDrawerProps) {
 
   const handleSend = (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     // HARDENING FIX: Precise offline language
     if (!isOnline) {
       toast.error('Connection required', {
@@ -321,7 +323,7 @@ export function WhisperDrawer({ docketId }: WhisperDrawerProps) {
       });
       return;
     }
-    
+
     if (newMessage.trim()) {
       sendMessage.mutate(newMessage.trim());
     }
@@ -339,7 +341,7 @@ export function WhisperDrawer({ docketId }: WhisperDrawerProps) {
       // Upload to Supabase storage
       const fileName = `voice-${docketId}-${Date.now()}.webm`;
       const filePath = `whispers/${fileName}`;
-      
+
       const { error: uploadError } = await supabase.storage
         .from('case-documents')
         .upload(filePath, audioBlob, {
@@ -361,7 +363,7 @@ export function WhisperDrawer({ docketId }: WhisperDrawerProps) {
       // Send message with voice memo URL
       await sendMessage.mutateAsync(`${VOICE_MESSAGE_PREFIX}${urlData.publicUrl}`);
       toast.success('Voice memo sent!');
-      
+
       // Vibrate on success
       if ('vibrate' in navigator) {
         navigator.vibrate([50, 50, 50]);
@@ -400,8 +402,8 @@ export function WhisperDrawer({ docketId }: WhisperDrawerProps) {
         >
           <MessageCircle className="h-6 w-6 text-primary" />
           {unreadCount > 0 && (
-            <Badge 
-              variant="destructive" 
+            <Badge
+              variant="destructive"
               className="absolute -top-1 -right-1 h-6 w-6 rounded-full p-0 flex items-center justify-center text-xs font-bold animate-pulse"
             >
               {unreadCount > 9 ? '9+' : unreadCount}
@@ -409,56 +411,56 @@ export function WhisperDrawer({ docketId }: WhisperDrawerProps) {
           )}
         </Button>
       </SheetTrigger>
-      
-        <SheetContent 
-          side="right" 
-          className="w-full sm:w-[400px] p-0 glass-card border-l border-border"
-          aria-describedby="whisper-chat-description"
-        >
-          <SheetHeader className="p-4 border-b border-border">
-            <SheetTitle className="font-display text-xl tracking-wide flex items-center justify-between">
-              <span className="flex items-center gap-2">
-                <MessageCircle className="h-5 w-5 text-primary" aria-hidden="true" />
-                Whisper Chat
-              </span>
-              <div className="flex items-center gap-2">
-                {/* COURT-SAFETY: Connection status always visible in modals */}
-                {isOnline ? (
-                  <Badge variant="outline" className="text-xs flex items-center gap-1 text-court-success border-court-success/30">
-                    <Wifi className="h-3 w-3" />
-                  </Badge>
+
+      <SheetContent
+        side="right"
+        className="w-full sm:w-[400px] p-0 glass-card border-l border-border"
+        aria-describedby="whisper-chat-description"
+      >
+        <SheetHeader className="p-4 border-b border-border">
+          <SheetTitle className="font-display text-xl tracking-wide flex items-center justify-between">
+            <span className="flex items-center gap-2">
+              <MessageCircle className="h-5 w-5 text-primary" aria-hidden="true" />
+              Whisper Chat
+            </span>
+            <div className="flex items-center gap-2">
+              {/* COURT-SAFETY: Connection status always visible in modals */}
+              {isOnline ? (
+                <Badge variant="outline" className="text-xs flex items-center gap-1 text-court-success border-court-success/30">
+                  <Wifi className="h-3 w-3" />
+                </Badge>
+              ) : (
+                <Badge variant="destructive" className="text-xs flex items-center gap-1">
+                  <WifiOff className="h-3 w-3" />
+                  Offline
+                </Badge>
+              )}
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setSoundEnabled(!soundEnabled)}
+                className="h-8 w-8"
+                aria-label={soundEnabled ? 'Mute notifications' : 'Unmute notifications'}
+                aria-pressed={soundEnabled}
+              >
+                {soundEnabled ? (
+                  <Volume2 className="h-4 w-4" aria-hidden="true" />
                 ) : (
-                  <Badge variant="destructive" className="text-xs flex items-center gap-1">
-                    <WifiOff className="h-3 w-3" />
-                    Offline
-                  </Badge>
+                  <VolumeX className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
                 )}
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setSoundEnabled(!soundEnabled)}
-                  className="h-8 w-8"
-                  aria-label={soundEnabled ? 'Mute notifications' : 'Unmute notifications'}
-                  aria-pressed={soundEnabled}
-                >
-                  {soundEnabled ? (
-                    <Volume2 className="h-4 w-4" aria-hidden="true" />
-                  ) : (
-                    <VolumeX className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-                  )}
-                </Button>
-              </div>
-            </SheetTitle>
-            {/* COURT-SAFETY: Cached data warning in modals */}
-            {!isOnline && (
-              <p className="text-xs text-destructive mt-1">
-                Viewing cached messages — sending requires connection
-              </p>
-            )}
-            <p id="whisper-chat-description" className="sr-only">
-              Real-time messaging for court communications. Hold the microphone button to record voice messages.
+              </Button>
+            </div>
+          </SheetTitle>
+          {/* COURT-SAFETY: Cached data warning in modals */}
+          {!isOnline && (
+            <p className="text-xs text-destructive mt-1">
+              Viewing cached messages — sending requires connection
             </p>
-          </SheetHeader>
+          )}
+          <p id="whisper-chat-description" className="sr-only">
+            Real-time messaging for court communications. Hold the microphone button to record voice messages.
+          </p>
+        </SheetHeader>
 
         <div className="flex flex-col h-[calc(100vh-80px)]">
           {/* Messages */}
@@ -469,13 +471,20 @@ export function WhisperDrawer({ docketId }: WhisperDrawerProps) {
                   No messages yet. Start a conversation!
                 </p>
               ) : (
-                messages.map((msg) => {
+                messages.map((msg, index) => {
                   const isOwn = msg.sender_id === user?.id;
                   const { isVoice, content } = parseMessage(msg.message);
-                  
+
                   return (
-                    <div
+                    <motion.div
                       key={msg.id}
+                      initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      transition={{
+                        duration: 0.4,
+                        delay: index > messages.length - 2 ? 0 : index * 0.05,
+                        ease: [0.23, 1, 0.32, 1]
+                      }}
                       className={cn(
                         'flex flex-col gap-1 max-w-[85%]',
                         isOwn ? 'ml-auto items-end' : 'items-start'
@@ -486,9 +495,9 @@ export function WhisperDrawer({ docketId }: WhisperDrawerProps) {
                       </span>
                       <div
                         className={cn(
-                          'rounded-lg px-4 py-2 text-sm',
+                          'rounded-lg px-4 py-2 text-sm transition-all',
                           isOwn
-                            ? 'bg-primary text-primary-foreground'
+                            ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/20'
                             : 'glass-card'
                         )}
                       >
@@ -504,9 +513,10 @@ export function WhisperDrawer({ docketId }: WhisperDrawerProps) {
                       <span className="text-xs text-muted-foreground">
                         {format(new Date(msg.created_at), 'HH:mm')}
                       </span>
-                    </div>
+                    </motion.div>
                   );
                 })
+
               )}
             </div>
           </ScrollArea>
@@ -535,7 +545,7 @@ export function WhisperDrawer({ docketId }: WhisperDrawerProps) {
           )}
 
           {/* Input */}
-          <form 
+          <form
             onSubmit={handleSend}
             className="p-4 border-t border-border flex gap-2"
           >
@@ -543,19 +553,19 @@ export function WhisperDrawer({ docketId }: WhisperDrawerProps) {
               value={newMessage}
               onChange={(e) => setNewMessage(e.target.value)}
               placeholder={
-                !isOnline 
-                  ? 'Viewing available — messaging requires connection' 
-                  : isRecording 
-                    ? 'Recording...' 
+                !isOnline
+                  ? 'Viewing available — messaging requires connection'
+                  : isRecording
+                    ? 'Recording...'
                     : 'Type a whisper...'
               }
               className="flex-1 bg-secondary/50 border-border"
               aria-label="Message input"
               disabled={isRecording || isUploading || !isOnline}
             />
-            
+
             {/* Voice Record Button - Hold to record on touch devices, click on desktop */}
-            <Button 
+            <Button
               type="button"
               size="icon"
               variant={isRecording ? 'destructive' : 'outline'}
@@ -582,10 +592,10 @@ export function WhisperDrawer({ docketId }: WhisperDrawerProps) {
                 <Mic className="h-4 w-4" aria-hidden="true" />
               )}
             </Button>
-            
+
             {/* Send Text Button */}
-            <Button 
-              type="submit" 
+            <Button
+              type="submit"
               size="icon"
               disabled={!newMessage.trim() || sendMessage.isPending || isRecording || isUploading || !isOnline}
               className="min-h-touch min-w-touch"

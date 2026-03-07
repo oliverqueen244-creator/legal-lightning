@@ -2,19 +2,25 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { lazy, Suspense } from "react";
+
+// Critical Pages (Immediate Load)
 import Dashboard from "./pages/Dashboard";
-import WarRoom from "./pages/WarRoom";
-import ControlDeck from "./pages/ControlDeck";
 import Auth from "./pages/Auth";
-import Admin from "./pages/Admin";
-import Documentation from "./pages/Documentation";
-import ProductDossier from "./pages/ProductDossier";
-import TechnicalDossier from "./pages/TechnicalDossier";
-import Onboarding from "./pages/Onboarding";
-import Settings from "./pages/Settings";
-import NotFound from "./pages/NotFound";
-import CourtroomMode from "./pages/CourtroomMode";
-import Install from "./pages/Install";
+
+// Lazy Loaded Pages (Performance Optimization)
+const WarRoom = lazy(() => import("./pages/WarRoom"));
+const ControlDeck = lazy(() => import("./pages/ControlDeck"));
+const Admin = lazy(() => import("./pages/Admin"));
+const Documentation = lazy(() => import("./pages/Documentation"));
+const ProductDossier = lazy(() => import("./pages/ProductDossier"));
+const TechnicalDossier = lazy(() => import("./pages/TechnicalDossier"));
+const Onboarding = lazy(() => import("./pages/Onboarding"));
+const Settings = lazy(() => import("./pages/Settings"));
+const NotFound = lazy(() => import("./pages/NotFound"));
+const CourtroomMode = lazy(() => import("./pages/CourtroomMode"));
+const Install = lazy(() => import("./pages/Install"));
+
 import { GlobalOfflineBanner } from "./components/layout/GlobalOfflineBanner";
 import { SyncConflictProvider } from "./contexts/SyncConflictContext";
 import { FormDirtyProvider } from "./contexts/FormDirtyContext";
@@ -25,6 +31,8 @@ import { PWAUpdateManager } from "./components/pwa/PWAUpdateManager";
 import { ErrorBoundary } from "./components/layout/ErrorBoundary";
 import { useForceUpdate } from "./hooks/useForceUpdate";
 import { useBeforeUnloadGuard } from "./hooks/useBeforeUnloadGuard";
+import { KineticProvider } from "./components/layout/KineticProvider";
+import { SilkPreloader } from '@/components/layout/SilkPreloader';
 
 const queryClient = new QueryClient();
 
@@ -35,7 +43,7 @@ const queryClient = new QueryClient();
  */
 function ForceUpdateChecker() {
   const { isBlocked, blockedConfig, setIsBlocked } = useForceUpdate();
-  
+
   return (
     <ForceUpdateBlockedDialog
       open={isBlocked}
@@ -57,55 +65,64 @@ function BeforeUnloadGuard() {
 
 const App = () => (
   <ErrorBoundary>
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      {/* FormDirtyProvider MUST wrap everything for safety checks */}
-      <FormDirtyProvider>
-        {/* SyncConflictProvider must wrap ForceUpdateChecker since it uses useSyncConflict */}
-        <SyncConflictProvider>
-          {/* PWA Force Update Kill Switch - with safety checks and dialog */}
-          <ForceUpdateChecker />
-          {/* SAFE PWA AUTO-UPDATE: Beforeunload safety net */}
-          <BeforeUnloadGuard />
-          {/* Branded Splash Screen - shows once per session */}
-          <SplashScreen />
-          <Toaster 
-            position="top-center"
-            toastOptions={{
-              className: 'bg-background border-2 border-primary text-primary font-bold shadow-[0_0_20px_hsl(48_97%_54%/0.4)]',
-            }}
-          />
-          {/* HARDENING FIX: Global offline banner - single source of truth */}
-          <GlobalOfflineBanner />
-          {/* PWA Install Discovery - safe, non-intrusive, respects dismissal */}
-          <InstallDiscoveryBanner />
-          {/* PWA Post-Install Confirmation - shows once after first install launch */}
-          <PostInstallConfirmation />
-          {/* SAFE PWA AUTO-UPDATE: Manages update lifecycle with safety checks */}
-          <PWAUpdateManager />
-          <BrowserRouter>
-            {/* Court Focus Mode - Full screen overlay for critical court moments */}
-            <CourtFocusOverlay />
-            <Routes>
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/auth" element={<Auth />} />
-              <Route path="/onboarding" element={<Onboarding />} />
-              <Route path="/settings" element={<Settings />} />
-              <Route path="/docs" element={<Documentation />} />
-              <Route path="/dossier" element={<ProductDossier />} />
-              <Route path="/technical-dossier" element={<TechnicalDossier />} />
-              <Route path="/admin" element={<Admin />} />
-              <Route path="/war-room/:caseId" element={<WarRoom />} />
-              <Route path="/control-deck/:caseId" element={<ControlDeck />} />
-              <Route path="/courtroom" element={<CourtroomMode />} />
-              <Route path="/install" element={<Install />} />
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </BrowserRouter>
-        </SyncConflictProvider>
-      </FormDirtyProvider>
-    </TooltipProvider>
-  </QueryClientProvider>
+    <SilkPreloader />
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        {/* FormDirtyProvider MUST wrap everything for safety checks */}
+        <FormDirtyProvider>
+          {/* SyncConflictProvider must wrap ForceUpdateChecker since it uses useSyncConflict */}
+          <SyncConflictProvider>
+            {/* PWA Force Update Kill Switch - with safety checks and dialog */}
+            <ForceUpdateChecker />
+            {/* SAFE PWA AUTO-UPDATE: Beforeunload safety net */}
+            <BeforeUnloadGuard />
+            {/* Branded Splash Screen - shows once per session */}
+            <SplashScreen />
+            <Toaster
+              position="top-center"
+              toastOptions={{
+                className: 'bg-background border-2 border-primary text-primary font-bold shadow-[0_0_20px_hsl(48_97%_54%/0.4)]',
+              }}
+            />
+            {/* HARDENING FIX: Global offline banner - single source of truth */}
+            <GlobalOfflineBanner />
+            {/* PWA Install Discovery - safe, non-intrusive, respects dismissal */}
+            <InstallDiscoveryBanner />
+            {/* PWA Post-Install Confirmation - shows once after first install launch */}
+            <PostInstallConfirmation />
+            {/* SAFE PWA AUTO-UPDATE: Manages update lifecycle with safety checks */}
+            <PWAUpdateManager />
+            <BrowserRouter>
+              <KineticProvider>
+                {/* Court Focus Mode - Full screen overlay for critical court moments */}
+                <CourtFocusOverlay />
+                <Suspense fallback={
+                  <div className="flex items-center justify-center min-h-screen bg-background">
+                    <div className="h-12 w-12 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+                  </div>
+                }>
+                  <Routes>
+                    <Route path="/" element={<Dashboard />} />
+                    <Route path="/auth" element={<Auth />} />
+                    <Route path="/onboarding" element={<Onboarding />} />
+                    <Route path="/settings" element={<Settings />} />
+                    <Route path="/docs" element={<Documentation />} />
+                    <Route path="/dossier" element={<ProductDossier />} />
+                    <Route path="/technical-dossier" element={<TechnicalDossier />} />
+                    <Route path="/admin" element={<Admin />} />
+                    <Route path="/war-room/:caseId" element={<WarRoom />} />
+                    <Route path="/control-deck/:caseId" element={<ControlDeck />} />
+                    <Route path="/courtroom" element={<CourtroomMode />} />
+                    <Route path="/install" element={<Install />} />
+                    <Route path="*" element={<NotFound />} />
+                  </Routes>
+                </Suspense>
+              </KineticProvider>
+            </BrowserRouter>
+          </SyncConflictProvider>
+        </FormDirtyProvider>
+      </TooltipProvider>
+    </QueryClientProvider>
   </ErrorBoundary>
 );
 

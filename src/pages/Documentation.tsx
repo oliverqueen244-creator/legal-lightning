@@ -3,15 +3,26 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import { 
-  ArrowLeft, Users, FileText, Bell, Shield, 
+import {
+  ArrowLeft, Users, FileText, Bell, Shield,
   Keyboard, Eye, Monitor, Zap, Download, Github, Code, ExternalLink,
-  Database, Server, Wifi, Lock, AlertTriangle, MessageSquare, 
+  Database, Server, Wifi, Lock, AlertTriangle, MessageSquare,
   Upload, Layers, Globe, Palette, Settings
 } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { documentationContent } from '@/data/docsData';
+import { appendix } from '@/data/appendix';
 import logoImage from '@/assets/logo.png';
 
+
+import { Magnetic } from '@/components/animations/Magnetic';
+import { BreathingType } from '@/components/animations/BreathingType';
+import { KineticProgress } from '@/components/animations/KineticProgress';
+
 export default function Documentation() {
+
+
+
   const navigate = useNavigate();
 
   const handlePrint = () => {
@@ -20,7 +31,9 @@ export default function Documentation() {
 
   return (
     <div className="min-h-screen bg-background">
+      <KineticProgress />
       {/* Header - hidden in print */}
+
       <header className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-40 print:hidden">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
@@ -33,10 +46,12 @@ export default function Documentation() {
                 Nyay-Hub Documentation
               </h1>
             </div>
-            <Button variant="gold" size="sm" onClick={handlePrint}>
-              <Download className="h-4 w-4 mr-2" aria-hidden="true" />
-              Save as PDF
-            </Button>
+            <Magnetic>
+              <Button variant="gold" size="sm" onClick={handlePrint}>
+                <Download className="h-4 w-4 mr-2" aria-hidden="true" />
+                Save as PDF
+              </Button>
+            </Magnetic>
           </div>
         </div>
       </header>
@@ -47,9 +62,12 @@ export default function Documentation() {
           {/* Title Section */}
           <div className="text-center mb-12">
             <img src={logoImage} alt="Nyay-Hub" className="h-16 w-16 mx-auto mb-4" />
-            <h1 className="font-display text-4xl font-bold text-foreground mb-2">
-              Nyay-Hub
-            </h1>
+            <BreathingType>
+              <h1 className="font-display text-4xl font-bold text-foreground mb-2">
+                Nyay-Hub
+              </h1>
+            </BreathingType>
+
             <p className="text-xl text-muted-foreground">
               Rajasthan High Court Case Management System
             </p>
@@ -116,37 +134,7 @@ export default function Documentation() {
                 </p>
                 <div className="p-4 rounded bg-muted/30 border border-border font-mono text-xs overflow-x-auto">
                   <pre className="text-muted-foreground whitespace-pre">
-{`┌─────────────────────────────────────────────────────────────────────────────┐
-│                               NYAY-HUB SYSTEM                                │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│   ┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐ │
-│   │   SENIOR    │    │   JUNIOR    │    │   CLERK     │    │   ADMIN     │ │
-│   │  ADVOCATE   │    │  ADVOCATE   │    │             │    │             │ │
-│   └──────┬──────┘    └──────┬──────┘    └──────┬──────┘    └──────┬──────┘ │
-│          │                  │                  │                  │        │
-│          ▼                  ▼                  ▼                  ▼        │
-│   ┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐ │
-│   │  WAR ROOM   │    │CONTROL DECK │    │  DASHBOARD  │    │ADMIN PANEL  │ │
-│   │             │◄──►│             │    │             │    │             │ │
-│   │ • View Docs │    │ • Upload    │    │ • View List │    │ • Manage    │ │
-│   │ • Arguments │    │ • Whisper   │    │ • Status    │    │ • Configure │ │
-│   │ • Receive   │    │ • Monitor   │    │             │    │ • Control   │ │
-│   └──────┬──────┘    └──────┬──────┘    └──────┬──────┘    └──────┬──────┘ │
-│          │                  │                  │                  │        │
-│          └──────────────────┴──────────────────┴──────────────────┘        │
-│                                      │                                      │
-│                           ┌──────────▼──────────┐                          │
-│                           │   SUPABASE CLOUD    │                          │
-│                           ├─────────────────────┤                          │
-│                           │ • PostgreSQL + RLS  │                          │
-│                           │ • Auth (JWT)        │                          │
-│                           │ • Storage (Files)   │                          │
-│                           │ • Realtime (WS)     │                          │
-│                           │ • Edge Functions    │                          │
-│                           └─────────────────────┘                          │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘`}
+                    {appendix.asciiArt.systemArchitecture}
                   </pre>
                 </div>
               </div>
@@ -161,64 +149,7 @@ export default function Documentation() {
                 </p>
                 <div className="p-4 rounded bg-muted/30 border border-border font-mono text-xs overflow-x-auto">
                   <pre className="text-muted-foreground whitespace-pre">
-{`┌──────────────────────────────────────────────────────────────────────────┐
-│                        AUTHENTICATION FLOW                                │
-└──────────────────────────────────────────────────────────────────────────┘
-
-    ┌─────────┐
-    │  USER   │
-    └────┬────┘
-         │
-         ▼
-    ┌─────────────┐     NO      ┌─────────────┐
-    │ Has Account?├────────────►│ /auth       │
-    └──────┬──────┘             │ (Sign Up)   │
-           │ YES                └──────┬──────┘
-           ▼                           │
-    ┌─────────────┐                    │
-    │ /auth       │                    │
-    │ (Sign In)   │                    │
-    └──────┬──────┘                    │
-           │                           │
-           ▼                           ▼
-    ┌─────────────────────────────────────────┐
-    │          SUPABASE AUTH                  │
-    │  • Email/Password verification          │
-    │  • JWT token generation                 │
-    │  • Session storage                      │
-    └───────────────────┬─────────────────────┘
-                        │
-                        ▼
-    ┌─────────────────────────────────────────┐
-    │      handle_new_user() TRIGGER          │
-    │  • Creates profile record               │
-    │  • Assigns role in user_roles table     │
-    └───────────────────┬─────────────────────┘
-                        │
-                        ▼
-    ┌─────────────────────────────────────────┐
-    │          ONBOARDING CHECK               │
-    │  Is onboarding_completed = true?        │
-    └───────────────────┬─────────────────────┘
-                        │
-           ┌────────────┴────────────┐
-           │ NO                      │ YES
-           ▼                         ▼
-    ┌─────────────┐           ┌─────────────┐
-    │ /onboarding │           │  DASHBOARD  │
-    │             │           │             │
-    └──────┬──────┘           └──────┬──────┘
-           │                         │
-           ▼                         ▼
-    ┌─────────────┐           ┌─────────────────────┐
-    │ Complete    │           │ ROLE-BASED ROUTING  │
-    │ Profile     │           ├─────────────────────┤
-    └──────┬──────┘           │ SENIOR → War Room   │
-           │                  │ JUNIOR → Ctrl Deck  │
-           ▼                  │ ADMIN  → Admin Panel│
-    ┌─────────────┐           └─────────────────────┘
-    │  DASHBOARD  │
-    └─────────────┘`}
+                    {appendix.asciiArt.authFlow}
                   </pre>
                 </div>
               </div>
@@ -233,7 +164,7 @@ export default function Documentation() {
                 </p>
                 <div className="p-4 rounded bg-muted/30 border border-border font-mono text-xs overflow-x-auto">
                   <pre className="text-muted-foreground whitespace-pre">
-{`┌──────────────────────────────────────────────────────────────────────────┐
+                    {`┌──────────────────────────────────────────────────────────────────────────┐
 │                     CASE HEARING DAY WORKFLOW                             │
 └──────────────────────────────────────────────────────────────────────────┘
 
@@ -319,7 +250,7 @@ export default function Documentation() {
                 </p>
                 <div className="p-4 rounded bg-muted/30 border border-border font-mono text-xs overflow-x-auto">
                   <pre className="text-muted-foreground whitespace-pre">
-{`┌──────────────────────────────────────────────────────────────────────────┐
+                    {`┌──────────────────────────────────────────────────────────────────────────┐
 │                     REAL-TIME SYNCHRONIZATION                             │
 └──────────────────────────────────────────────────────────────────────────┘
 
@@ -386,7 +317,7 @@ export default function Documentation() {
                 </p>
                 <div className="p-4 rounded bg-muted/30 border border-border font-mono text-xs overflow-x-auto">
                   <pre className="text-muted-foreground whitespace-pre">
-{`┌──────────────────────────────────────────────────────────────────────────┐
+                    {`┌──────────────────────────────────────────────────────────────────────────┐
 │                     DATABASE ENTITY RELATIONSHIPS                         │
 └──────────────────────────────────────────────────────────────────────────┘
 
@@ -486,7 +417,7 @@ export default function Documentation() {
                 </p>
                 <div className="p-4 rounded bg-muted/30 border border-border font-mono text-xs overflow-x-auto">
                   <pre className="text-muted-foreground whitespace-pre">
-{`┌──────────────────────────────────────────────────────────────────────────┐
+                    {`┌──────────────────────────────────────────────────────────────────────────┐
 │                     PANIC ALERT DECISION TREE                             │
 └──────────────────────────────────────────────────────────────────────────┘
 
@@ -557,7 +488,7 @@ export default function Documentation() {
                 </p>
                 <div className="p-4 rounded bg-muted/30 border border-border font-mono text-xs overflow-x-auto">
                   <pre className="text-muted-foreground whitespace-pre">
-{`┌──────────────────────────────────────────────────────────────────────────┐
+                    {`┌──────────────────────────────────────────────────────────────────────────┐
 │                     DOCUMENT UPLOAD FLOW                                  │
 └──────────────────────────────────────────────────────────────────────────┘
 
@@ -639,9 +570,9 @@ export default function Documentation() {
             </CardHeader>
             <CardContent className="prose prose-invert max-w-none">
               <p className="text-muted-foreground">
-                Nyay-Hub is a real-time court case management dashboard designed for advocates 
-                at the Rajasthan High Court. The system provides live case tracking, panic alerts 
-                for upcoming cases, document management, and seamless communication between 
+                Nyay-Hub is a real-time court case management dashboard designed for advocates
+                at the Rajasthan High Court. The system provides live case tracking, panic alerts
+                for upcoming cases, document management, and seamless communication between
                 senior advocates and their juniors.
               </p>
             </CardContent>
@@ -666,9 +597,9 @@ export default function Documentation() {
                   <li>Review all arguments with direct PDF page links</li>
                 </ul>
               </div>
-              
+
               <Separator />
-              
+
               <div>
                 <h3 className="font-semibold text-foreground mb-2">Junior Advocate (Control Deck View)</h3>
                 <ul className="list-disc list-inside text-muted-foreground space-y-1">
@@ -680,7 +611,7 @@ export default function Documentation() {
               </div>
 
               <Separator />
-              
+
               <div>
                 <h3 className="font-semibold text-foreground mb-2">Admin</h3>
                 <ul className="list-disc list-inside text-muted-foreground space-y-1">
@@ -705,8 +636,8 @@ export default function Documentation() {
               <div>
                 <h3 className="font-semibold text-foreground mb-2">1. Live Court Board</h3>
                 <p className="text-muted-foreground">
-                  Real-time tracking of current item numbers across all courtrooms. The system 
-                  automatically calculates distance from your case and triggers panic alerts 
+                  Real-time tracking of current item numbers across all courtrooms. The system
+                  automatically calculates distance from your case and triggers panic alerts
                   when your case is within 5 items of being called.
                 </p>
               </div>
@@ -714,8 +645,8 @@ export default function Documentation() {
               <div>
                 <h3 className="font-semibold text-foreground mb-2">2. Panic Alert System</h3>
                 <p className="text-muted-foreground">
-                  Visual and audio alerts when your case approaches. Cases pulse red when 
-                  within 5 items, and glow gold when currently running. Status badges 
+                  Visual and audio alerts when your case approaches. Cases pulse red when
+                  within 5 items, and glow gold when currently running. Status badges
                   update in real-time.
                 </p>
               </div>
@@ -723,7 +654,7 @@ export default function Documentation() {
               <div>
                 <h3 className="font-semibold text-foreground mb-2">3. War Room</h3>
                 <p className="text-muted-foreground">
-                  Split-screen view with arguments panel on the left and PDF viewer on the right. 
+                  Split-screen view with arguments panel on the left and PDF viewer on the right.
                   Click any argument to instantly jump to the relevant page in your case documents.
                 </p>
               </div>
@@ -731,8 +662,8 @@ export default function Documentation() {
               <div>
                 <h3 className="font-semibold text-foreground mb-2">4. Whisper System</h3>
                 <p className="text-muted-foreground">
-                  Real-time messaging between juniors in the control deck and seniors in the 
-                  courtroom. Messages appear as toast notifications without disrupting the 
+                  Real-time messaging between juniors in the control deck and seniors in the
+                  courtroom. Messages appear as toast notifications without disrupting the
                   hearing flow. Features include:
                 </p>
                 <ul className="list-disc list-inside text-muted-foreground mt-2 space-y-1 ml-4">
@@ -746,7 +677,7 @@ export default function Documentation() {
               <div>
                 <h3 className="font-semibold text-foreground mb-2">5. Document Management</h3>
                 <p className="text-muted-foreground">
-                  Drag-and-drop file upload for case documents. Supports PDF and other file 
+                  Drag-and-drop file upload for case documents. Supports PDF and other file
                   formats. Documents are securely stored and linked to specific cases.
                 </p>
               </div>
@@ -754,7 +685,7 @@ export default function Documentation() {
               <div>
                 <h3 className="font-semibold text-foreground mb-2">6. Admin Panel</h3>
                 <p className="text-muted-foreground">
-                  Complete case management interface for administrators. Manage docket entries, 
+                  Complete case management interface for administrators. Manage docket entries,
                   configure arguments, and control live board status for all courtrooms.
                 </p>
               </div>
@@ -777,7 +708,7 @@ export default function Documentation() {
                     Keyboard Navigation
                   </h4>
                   <p className="text-sm text-muted-foreground">
-                    Full keyboard support throughout the application. Use Tab to navigate, 
+                    Full keyboard support throughout the application. Use Tab to navigate,
                     Enter or Space to activate buttons, and Escape to close dialogs.
                   </p>
                 </div>
@@ -788,7 +719,7 @@ export default function Documentation() {
                     Screen Reader Support
                   </h4>
                   <p className="text-sm text-muted-foreground">
-                    ARIA labels on all interactive elements. Live regions announce 
+                    ARIA labels on all interactive elements. Live regions announce
                     status changes. Semantic HTML structure throughout.
                   </p>
                 </div>
@@ -796,7 +727,7 @@ export default function Documentation() {
                 <div className="p-4 rounded-lg bg-card border border-border">
                   <h4 className="font-semibold text-foreground mb-2">Focus Indicators</h4>
                   <p className="text-sm text-muted-foreground">
-                    Clear visible focus rings on all interactive elements. High contrast 
+                    Clear visible focus rings on all interactive elements. High contrast
                     gold outline ensures visibility against dark backgrounds.
                   </p>
                 </div>
@@ -804,7 +735,7 @@ export default function Documentation() {
                 <div className="p-4 rounded-lg bg-card border border-border">
                   <h4 className="font-semibold text-foreground mb-2">Reduced Motion</h4>
                   <p className="text-sm text-muted-foreground">
-                    Respects prefers-reduced-motion setting. Animations are disabled 
+                    Respects prefers-reduced-motion setting. Animations are disabled
                     for users who prefer minimal motion.
                   </p>
                 </div>
@@ -812,7 +743,7 @@ export default function Documentation() {
                 <div className="p-4 rounded-lg bg-card border border-border">
                   <h4 className="font-semibold text-foreground mb-2">Skip Links</h4>
                   <p className="text-sm text-muted-foreground">
-                    Skip to main content links allow keyboard users to bypass 
+                    Skip to main content links allow keyboard users to bypass
                     navigation and jump directly to page content.
                   </p>
                 </div>
@@ -820,7 +751,7 @@ export default function Documentation() {
                 <div className="p-4 rounded-lg bg-card border border-border">
                   <h4 className="font-semibold text-foreground mb-2">Color Contrast</h4>
                   <p className="text-sm text-muted-foreground">
-                    WCAG AA compliant color contrast ratios. Gold on dark backgrounds 
+                    WCAG AA compliant color contrast ratios. Gold on dark backgrounds
                     provides excellent readability.
                   </p>
                 </div>
@@ -828,7 +759,7 @@ export default function Documentation() {
                 <div className="p-4 rounded-lg bg-card border border-border">
                   <h4 className="font-semibold text-foreground mb-2">Touch Targets</h4>
                   <p className="text-sm text-muted-foreground">
-                    All interactive elements have minimum 44×44px touch targets for 
+                    All interactive elements have minimum 44×44px touch targets for
                     easy mobile interaction per WCAG guidelines.
                   </p>
                 </div>
@@ -836,7 +767,7 @@ export default function Documentation() {
                 <div className="p-4 rounded-lg bg-card border border-border">
                   <h4 className="font-semibold text-foreground mb-2">Audio Controls</h4>
                   <p className="text-sm text-muted-foreground">
-                    Notification sounds can be muted. Voice memos include visual 
+                    Notification sounds can be muted. Voice memos include visual
                     progress indicators. Haptic feedback on supported devices.
                   </p>
                 </div>
@@ -1045,7 +976,7 @@ export default function Documentation() {
                 <h3 className="font-semibold text-foreground mb-3">Architecture Diagram</h3>
                 <div className="p-4 rounded bg-muted/30 border border-border font-mono text-xs overflow-x-auto">
                   <pre className="text-muted-foreground whitespace-pre">
-{`┌─────────────────────────────────────────────────────────────────┐
+                    {`┌─────────────────────────────────────────────────────────────────┐
 │                         CLIENT (React)                          │
 ├─────────────────────────────────────────────────────────────────┤
 │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────────────┐ │
@@ -1118,7 +1049,7 @@ export default function Documentation() {
               <div className="p-4 rounded bg-muted/30 border border-border">
                 <h4 className="font-semibold text-foreground mb-2 font-mono">user_roles</h4>
                 <p className="text-sm text-muted-foreground mb-3">
-                  <span className="text-primary font-semibold">SECURITY CRITICAL:</span> Secure role storage table. 
+                  <span className="text-primary font-semibold">SECURITY CRITICAL:</span> Secure role storage table.
                   Roles MUST be stored here (not in profiles) to prevent privilege escalation attacks.
                 </p>
                 <div className="overflow-x-auto">
@@ -1299,7 +1230,7 @@ export default function Documentation() {
                 </div>
                 <div className="mt-3 p-2 bg-muted/50 rounded font-mono text-xs overflow-x-auto">
                   <pre className="text-muted-foreground">
-{`annotation_json: {
+                    {`annotation_json: {
   color?: string;           // e.g., '#FFEB3B' for highlight
   text?: string;            // For text annotations
   coordinates?: {x, y}[];   // For pen strokes
@@ -1324,7 +1255,7 @@ export default function Documentation() {
                 <h3 className="font-semibold text-foreground mb-3">Authentication Flow</h3>
                 <div className="p-4 rounded bg-muted/30 border border-border font-mono text-xs overflow-x-auto">
                   <pre className="text-muted-foreground whitespace-pre">
-{`┌────────────────┐      ┌──────────────────┐      ┌─────────────────┐
+                    {`┌────────────────┐      ┌──────────────────┐      ┌─────────────────┐
 │  User Signup   │ ───▶ │  Supabase Auth   │ ───▶ │ auth.users row  │
 │  (email/pass)  │      │  (auto-confirm)  │      │    created      │
 └────────────────┘      └────────┬─────────┘      └────────┬────────┘
@@ -1350,7 +1281,7 @@ export default function Documentation() {
 
               <div>
                 <h3 className="font-semibold text-foreground mb-3">Database Functions</h3>
-                
+
                 <div className="space-y-4">
                   <div className="p-3 rounded bg-muted/30 border border-border">
                     <h4 className="font-mono text-sm text-foreground mb-2">handle_new_user()</h4>
@@ -1359,7 +1290,7 @@ export default function Documentation() {
                     </p>
                     <div className="font-mono text-xs bg-muted/50 p-2 rounded overflow-x-auto">
                       <pre className="text-muted-foreground">
-{`RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER
+                        {`RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER
 -- Inserts into profiles (id, full_name)
 -- Inserts into user_roles (user_id, role)
 -- Role defaults to 'JUNIOR' if not specified`}
@@ -1374,7 +1305,7 @@ export default function Documentation() {
                     </p>
                     <div className="font-mono text-xs bg-muted/50 p-2 rounded overflow-x-auto">
                       <pre className="text-muted-foreground">
-{`RETURNS app_role LANGUAGE sql STABLE SECURITY DEFINER
+                        {`RETURNS app_role LANGUAGE sql STABLE SECURITY DEFINER
 SELECT role FROM user_roles WHERE user_id = _user_id LIMIT 1`}
                       </pre>
                     </div>
@@ -1387,7 +1318,7 @@ SELECT role FROM user_roles WHERE user_id = _user_id LIMIT 1`}
                     </p>
                     <div className="font-mono text-xs bg-muted/50 p-2 rounded overflow-x-auto">
                       <pre className="text-muted-foreground">
-{`RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER
+                        {`RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER
 SELECT EXISTS (SELECT 1 FROM user_roles WHERE user_id = _user_id AND role = _role)`}
                       </pre>
                     </div>
@@ -1401,7 +1332,7 @@ SELECT EXISTS (SELECT 1 FROM user_roles WHERE user_id = _user_id AND role = _rol
                 <h3 className="font-semibold text-foreground mb-3">Session Management (useAuth Hook)</h3>
                 <div className="p-3 rounded bg-muted/30 border border-border font-mono text-xs overflow-x-auto">
                   <pre className="text-muted-foreground">
-{`// Critical: Set up listener BEFORE checking session
+                    {`// Critical: Set up listener BEFORE checking session
 useEffect(() => {
   // 1. Subscribe to auth changes
   const { data: { subscription } } = supabase.auth.onAuthStateChange(
@@ -1430,7 +1361,7 @@ useEffect(() => {
                   </pre>
                 </div>
                 <div className="mt-3 p-2 bg-danger/10 border border-danger/30 rounded text-xs text-muted-foreground">
-                  <strong className="text-danger">Critical:</strong> Always use setTimeout(0) when calling Supabase functions 
+                  <strong className="text-danger">Critical:</strong> Always use setTimeout(0) when calling Supabase functions
                   inside onAuthStateChange to prevent authentication deadlocks.
                 </div>
               </div>
@@ -1482,7 +1413,7 @@ useEffect(() => {
                 </h4>
                 <div className="font-mono text-xs bg-muted/50 p-3 rounded overflow-x-auto">
                   <pre className="text-muted-foreground">
-{`const channel = supabase
+                    {`const channel = supabase
   .channel('live-board-changes')
   .on('postgres_changes', {
     event: '*',                    // INSERT, UPDATE, DELETE
@@ -1510,7 +1441,7 @@ useEffect(() => {
                 </h4>
                 <div className="font-mono text-xs bg-muted/50 p-3 rounded overflow-x-auto">
                   <pre className="text-muted-foreground">
-{`const channel = supabase
+                    {`const channel = supabase
   .channel(\`whisper-\${docketId}\`)
   .on('postgres_changes', {
     event: 'INSERT',               // Only new messages
@@ -1551,7 +1482,7 @@ useEffect(() => {
                 </h4>
                 <div className="font-mono text-xs bg-muted/50 p-3 rounded overflow-x-auto">
                   <pre className="text-muted-foreground">
-{`const channel = supabase
+                    {`const channel = supabase
   .channel(\`annotations-\${documentId}\`)
   .on('postgres_changes', {
     event: '*',                    // All changes
@@ -1614,7 +1545,7 @@ useEffect(() => {
                 <h3 className="font-semibold text-foreground mb-3">Distance Calculation Formula</h3>
                 <div className="p-4 rounded bg-muted/30 border border-border font-mono text-sm">
                   <pre className="text-muted-foreground">
-{`// Core calculation
+                    {`// Core calculation
 const myItemNumber = docketItem.item_no;        // Your case position
 const currentItem = liveBoard.current_item;     // Court's current item
 const distance = myItemNumber - currentItem;    // Items until your case
@@ -1639,7 +1570,7 @@ const isWaiting = distance > 5;`}
                       <p className="text-xs text-muted-foreground">Red pulsing glow, urgent badge, CSS: panic-pulse animation</p>
                     </div>
                   </div>
-                  
+
                   <div className="p-3 rounded border-2 border-primary bg-primary/10 flex items-center gap-3">
                     <div className="w-4 h-4 rounded-full bg-primary shadow-[0_0_10px_rgba(251,191,36,0.5)]"></div>
                     <div>
@@ -1647,7 +1578,7 @@ const isWaiting = distance > 5;`}
                       <p className="text-xs text-muted-foreground">Gold glow effect, "NOW" badge, CSS: gold-glow shadow</p>
                     </div>
                   </div>
-                  
+
                   <div className="p-3 rounded border border-border flex items-center gap-3">
                     <div className="w-4 h-4 rounded-full bg-muted"></div>
                     <div>
@@ -1684,7 +1615,7 @@ const isWaiting = distance > 5;`}
                 <h3 className="font-semibold text-foreground mb-3">CSS Animations</h3>
                 <div className="font-mono text-xs bg-muted/30 p-3 rounded overflow-x-auto">
                   <pre className="text-muted-foreground">
-{`/* Panic pulse animation */
+                    {`/* Panic pulse animation */
 @keyframes panic-pulse {
   0%, 100% { 
     box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
@@ -1724,7 +1655,7 @@ const isWaiting = distance > 5;`}
                 <h3 className="font-semibold text-foreground mb-3">Text Message Flow</h3>
                 <div className="p-4 rounded bg-muted/30 border border-border font-mono text-xs overflow-x-auto">
                   <pre className="text-muted-foreground whitespace-pre">
-{`┌───────────────┐     ┌─────────────────────┐     ┌─────────────────┐
+                    {`┌───────────────┐     ┌─────────────────────┐     ┌─────────────────┐
 │ Junior types  │ ──▶ │ useSendWhisper      │ ──▶ │ INSERT into     │
 │ message       │     │ mutation            │     │ live_courtroom  │
 └───────────────┘     └─────────────────────┘     │ _feed table     │
@@ -1745,7 +1676,7 @@ const isWaiting = distance > 5;`}
                 <h3 className="font-semibold text-foreground mb-3">Voice Memo Flow</h3>
                 <div className="p-4 rounded bg-muted/30 border border-border font-mono text-xs overflow-x-auto">
                   <pre className="text-muted-foreground whitespace-pre">
-{`┌─────────────────┐     ┌───────────────────┐     ┌─────────────────────┐
+                    {`┌─────────────────┐     ┌───────────────────┐     ┌─────────────────────┐
 │ Hold mic button │ ──▶ │ MediaRecorder API │ ──▶ │ WebM Blob created   │
 │ (200ms minimum) │     │ starts recording  │     │ (on release)        │
 └─────────────────┘     └───────────────────┘     └──────────┬──────────┘
@@ -1783,7 +1714,7 @@ const isWaiting = distance > 5;`}
                 <h3 className="font-semibold text-foreground mb-3">Notification Sound System (Web Audio API)</h3>
                 <div className="font-mono text-xs bg-muted/30 p-3 rounded overflow-x-auto">
                   <pre className="text-muted-foreground">
-{`// useNotificationSound hook
+                    {`// useNotificationSound hook
 const playNotification = (type: 'message' | 'urgent') => {
   const audioContext = audioContextRef.current;
   const oscillator = audioContext.createOscillator();
@@ -1812,7 +1743,7 @@ const playNotification = (type: 'message' | 'urgent') => {
                   </pre>
                 </div>
                 <div className="mt-3 p-2 bg-primary/10 rounded text-xs text-muted-foreground">
-                  <strong className="text-foreground">Note:</strong> AudioContext is initialized on first user interaction 
+                  <strong className="text-foreground">Note:</strong> AudioContext is initialized on first user interaction
                   (click/touch) to comply with browser autoplay policies.
                 </div>
               </div>
@@ -1824,7 +1755,7 @@ const playNotification = (type: 'message' | 'urgent') => {
                 <h3 className="font-semibold text-foreground mb-3">Haptic Feedback (Mobile)</h3>
                 <div className="font-mono text-xs bg-muted/30 p-3 rounded">
                   <pre className="text-muted-foreground">
-{`// Recording start vibration
+                    {`// Recording start vibration
 navigator.vibrate(50);              // Short 50ms pulse
 
 // Message sent success
@@ -1849,7 +1780,7 @@ navigator.vibrate([50, 50, 50]);    // Triple pulse pattern`}
                 <h3 className="font-semibold text-foreground mb-3">Document Upload Flow</h3>
                 <div className="p-4 rounded bg-muted/30 border border-border font-mono text-xs overflow-x-auto">
                   <pre className="text-muted-foreground whitespace-pre">
-{`┌──────────────────┐     ┌──────────────────────┐     ┌───────────────────┐
+                    {`┌──────────────────┐     ┌──────────────────────┐     ┌───────────────────┐
 │ File selected    │ ──▶ │ supabase.storage     │ ──▶ │ Public URL        │
 │ (drag-drop/pick) │     │ .upload()            │     │ generated         │
 └──────────────────┘     └──────────────────────┘     └─────────┬─────────┘
@@ -1939,7 +1870,7 @@ Storage Path: case-documents/{docketId}/{timestamp}.{ext}       │
                 <h3 className="font-semibold text-foreground mb-3">IndexedDB Schema (useOfflineCache hook)</h3>
                 <div className="font-mono text-xs bg-muted/30 p-3 rounded overflow-x-auto">
                   <pre className="text-muted-foreground">
-{`// Database: nyayhub-cache
+                    {`// Database: nyayhub-cache
 // Version: 1
 
 Object Stores:
@@ -1970,7 +1901,7 @@ Pending Mutation Format:
                 <h3 className="font-semibold text-foreground mb-3">Network Detection</h3>
                 <div className="font-mono text-xs bg-muted/30 p-3 rounded">
                   <pre className="text-muted-foreground">
-{`// Browser events for online/offline detection
+                    {`// Browser events for online/offline detection
 window.addEventListener('online', () => {
   setIsOnline(true);
   // Sync pending mutations
@@ -1994,7 +1925,7 @@ const [isOnline, setIsOnline] = useState(navigator.onLine);`}
                 <h3 className="font-semibold text-foreground mb-3">Offline-First Write Pattern</h3>
                 <div className="p-4 rounded bg-muted/30 border border-border font-mono text-xs overflow-x-auto">
                   <pre className="text-muted-foreground whitespace-pre">
-{`┌──────────────┐     ┌─────────────────────┐
+                    {`┌──────────────┐     ┌─────────────────────┐
 │ User action  │ ──▶ │ Is online?          │
 │ (write data) │     └──────────┬──────────┘
 └──────────────┘                │
@@ -2089,7 +2020,7 @@ const [isOnline, setIsOnline] = useState(navigator.onLine);`}
                 <h3 className="font-semibold text-foreground mb-3">Cache Invalidation Strategy</h3>
                 <div className="font-mono text-xs bg-muted/30 p-3 rounded">
                   <pre className="text-muted-foreground">
-{`// Automatic invalidation on realtime events
+                    {`// Automatic invalidation on realtime events
 supabase.channel('...').on('postgres_changes', {...}, () => {
   queryClient.invalidateQueries({ queryKey: ['liveBoard'] });
 });
@@ -2123,7 +2054,7 @@ const mutation = useMutation({
                 </p>
                 <div className="font-mono text-xs bg-muted/30 p-3 rounded overflow-x-auto">
                   <pre className="text-muted-foreground">
-{`// Endpoint: /functions/v1/simulate-live-board
+                    {`// Endpoint: /functions/v1/simulate-live-board
 // Method: POST
 // Auth: Supabase anon key (public)
 
@@ -2152,7 +2083,7 @@ Response:
                 <h3 className="font-semibold text-foreground mb-3">CORS Configuration</h3>
                 <div className="font-mono text-xs bg-muted/30 p-3 rounded">
                   <pre className="text-muted-foreground">
-{`const corsHeaders = {
+                    {`const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 
     'authorization, x-client-info, apikey, content-type',
@@ -2247,7 +2178,7 @@ if (req.method === 'OPTIONS') {
                 <h3 className="font-semibold text-foreground mb-3">Custom CSS Classes</h3>
                 <div className="font-mono text-xs bg-muted/30 p-3 rounded overflow-x-auto">
                   <pre className="text-muted-foreground">
-{`/* Glassmorphism card effect */
+                    {`/* Glassmorphism card effect */
 .glass-card {
   background: rgba(var(--card), 0.8);
   backdrop-filter: blur(12px);
@@ -2409,7 +2340,7 @@ if (req.method === 'OPTIONS') {
                 <h3 className="font-semibold text-foreground mb-3">ARIA Implementation</h3>
                 <div className="font-mono text-xs bg-muted/30 p-3 rounded overflow-x-auto">
                   <pre className="text-muted-foreground">
-{`<!-- Live regions for status updates -->
+                    {`<!-- Live regions for status updates -->
 <div aria-live="polite" aria-atomic="true">
   {statusMessage}
 </div>
@@ -2438,7 +2369,7 @@ if (req.method === 'OPTIONS') {
                 <h3 className="font-semibold text-foreground mb-3">Touch & Click Targets</h3>
                 <div className="font-mono text-xs bg-muted/30 p-3 rounded">
                   <pre className="text-muted-foreground">
-{`/* Minimum 44x44px touch targets (WCAG 2.5.5) */
+                    {`/* Minimum 44x44px touch targets (WCAG 2.5.5) */
 .min-touch-target {
   min-width: 44px;
   min-height: 44px;
@@ -2457,7 +2388,7 @@ if (req.method === 'OPTIONS') {
                 <h3 className="font-semibold text-foreground mb-3">Reduced Motion Support</h3>
                 <div className="font-mono text-xs bg-muted/30 p-3 rounded">
                   <pre className="text-muted-foreground">
-{`@media (prefers-reduced-motion: reduce) {
+                    {`@media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
@@ -2476,7 +2407,7 @@ if (req.method === 'OPTIONS') {
                 <h3 className="font-semibold text-foreground mb-3">Focus Management</h3>
                 <div className="font-mono text-xs bg-muted/30 p-3 rounded">
                   <pre className="text-muted-foreground">
-{`/* Visible focus indicators */
+                    {`/* Visible focus indicators */
 :focus-visible {
   outline: 2px solid hsl(var(--primary));
   outline-offset: 2px;
@@ -2506,8 +2437,8 @@ if (req.method === 'OPTIONS') {
             </CardHeader>
             <CardContent className="space-y-8">
               <p className="text-muted-foreground">
-                This section documents all the approaches attempted to scrape court causelists 
-                from the Rajasthan High Court website, including the errors encountered and 
+                This section documents all the approaches attempted to scrape court causelists
+                from the Rajasthan High Court website, including the errors encountered and
                 the technical challenges that prevented successful PDF extraction.
               </p>
 
@@ -2546,7 +2477,7 @@ if (req.method === 'OPTIONS') {
                 </p>
                 <div className="p-4 rounded bg-muted/30 border border-border font-mono text-xs overflow-x-auto">
                   <pre className="text-muted-foreground whitespace-pre">
-{`┌──────────────────────────────────────────────────────────────────────────┐
+                    {`┌──────────────────────────────────────────────────────────────────────────┐
 │                    APPROACH 1: DIRECT PDF URL FETCH                       │
 └──────────────────────────────────────────────────────────────────────────┘
 
@@ -2598,7 +2529,7 @@ ERROR: "Access Denied" - Server blocks direct URL access without session`}
                 </p>
                 <div className="p-4 rounded bg-muted/30 border border-border font-mono text-xs overflow-x-auto">
                   <pre className="text-muted-foreground whitespace-pre">
-{`┌──────────────────────────────────────────────────────────────────────────┐
+                    {`┌──────────────────────────────────────────────────────────────────────────┐
 │                 APPROACH 2: BASE64 PATH DECODING                          │
 └──────────────────────────────────────────────────────────────────────────┘
 
@@ -2659,7 +2590,7 @@ ERROR: Session validation blocks even decoded direct paths`}
                 </p>
                 <div className="p-4 rounded bg-muted/30 border border-border font-mono text-xs overflow-x-auto">
                   <pre className="text-muted-foreground whitespace-pre">
-{`┌──────────────────────────────────────────────────────────────────────────┐
+                    {`┌──────────────────────────────────────────────────────────────────────────┐
 │               APPROACH 3: FIRECRAWL WITH ACTIONS                          │
 └──────────────────────────────────────────────────────────────────────────┘
 
@@ -2728,7 +2659,7 @@ ERROR: Firecrawl actions limited, cannot execute custom JS`}
                 </p>
                 <div className="p-4 rounded bg-muted/30 border border-border font-mono text-xs overflow-x-auto">
                   <pre className="text-muted-foreground whitespace-pre">
-{`┌──────────────────────────────────────────────────────────────────────────┐
+                    {`┌──────────────────────────────────────────────────────────────────────────┐
 │            APPROACH 4: SCREENSHOT + AI VISION EXTRACTION                  │
 └──────────────────────────────────────────────────────────────────────────┘
 
@@ -2783,7 +2714,7 @@ PARTIAL: Extracts court metadata, but NOT PDF case data`}
                 </p>
                 <div className="p-4 rounded bg-muted/30 border border-border font-mono text-xs overflow-x-auto">
                   <pre className="text-muted-foreground whitespace-pre">
-{`┌──────────────────────────────────────────────────────────────────────────┐
+                    {`┌──────────────────────────────────────────────────────────────────────────┐
 │              APPROACH 5: BROWSERLESS.IO HEADLESS CHROME                   │
 └──────────────────────────────────────────────────────────────────────────┘
 
@@ -2839,7 +2770,7 @@ ERROR: API format issues and rate limiting`}
                 </h3>
                 <div className="p-4 rounded bg-muted/30 border border-border font-mono text-xs overflow-x-auto">
                   <pre className="text-muted-foreground whitespace-pre">
-{`┌──────────────────────────────────────────────────────────────────────────┐
+                    {`┌──────────────────────────────────────────────────────────────────────────┐
 │                      ROOT CAUSE: WEBSITE ARCHITECTURE                     │
 └──────────────────────────────────────────────────────────────────────────┘
 
@@ -2921,7 +2852,7 @@ ERROR: API format issues and rate limiting`}
                 </h3>
                 <div className="p-4 rounded bg-muted/30 border border-border font-mono text-xs overflow-x-auto">
                   <pre className="text-muted-foreground whitespace-pre">
-{`┌──────────────────────────────────────────────────────────────────────────┐
+                    {`┌──────────────────────────────────────────────────────────────────────────┐
 │                        SUCCESSFUL FUNCTIONALITY                           │
 └──────────────────────────────────────────────────────────────────────────┘
 
@@ -2994,7 +2925,7 @@ ERROR: API format issues and rate limiting`}
                       Option 1: Manual PDF Upload
                     </h4>
                     <p className="text-sm text-muted-foreground">
-                      Build a feature where users can manually download PDFs from the HC website 
+                      Build a feature where users can manually download PDFs from the HC website
                       and upload them to Nyay-Hub. AI vision (Gemini) extracts case data.
                     </p>
                     <div className="mt-2 text-xs text-green-400">
@@ -3007,7 +2938,7 @@ ERROR: API format issues and rate limiting`}
                       Option 2: Self-Hosted Puppeteer
                     </h4>
                     <p className="text-sm text-muted-foreground">
-                      Deploy a self-hosted Puppeteer instance that can maintain browser sessions 
+                      Deploy a self-hosted Puppeteer instance that can maintain browser sessions
                       and execute JavaScript to navigate and download PDFs.
                     </p>
                     <div className="mt-2 text-xs text-yellow-400">

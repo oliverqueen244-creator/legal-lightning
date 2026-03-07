@@ -31,17 +31,36 @@ import { useCacheHydration } from '@/hooks/useCacheIntegration';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/kinetic-tabs';
+
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Scale, AlertCircle, Search, Sun, Gavel, Calendar, CheckCircle, Upload, MessageCircle, ClipboardList, Focus, FileDown, ChevronDown } from 'lucide-react';
 import { LiveBoardSimulator } from '@/components/dashboard/LiveBoardSimulator';
 import { InternSupervisionPanel } from '@/components/intern-supervision';
+import { motion } from 'framer-motion';
+
+const containerVariants = {
+  hidden: { opacity: 0 },
+  show: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.05,
+      delayChildren: 0.1
+    }
+  }
+};
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 20 },
+  show: { opacity: 1, y: 0, transition: { type: 'spring' as const, stiffness: 260, damping: 20 } }
+};
+
 
 export default function Dashboard() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
-  
+
   // Role-based default tab: SENIOR -> brief (Today View), JUNIOR -> tasks (Assigned Work)
   const { role, profile, isAdmin } = useAuth();
   const defaultTab = role === 'JUNIOR' ? 'tasks' : 'brief';
@@ -59,14 +78,14 @@ export default function Dashboard() {
     setActiveTab(tab);
     setSearchParams({ tab });
   };
-  
+
   // Format date for API calls - must be before useDocket
   const formattedDate = format(selectedDate, 'yyyy-MM-dd');
-  
+
   // PHASE 1.1: Cache hydration and persistence
   const { user } = useAuth();
   const { saveDocketCache, saveLiveBoardCache, saveMorningBriefCache, saveUpcomingCache } = useCacheHydration(user?.id);
-  
+
   const { data: docket, isLoading: docketLoading, refetch, dataUpdatedAt: docketUpdatedAt, isFetching: docketFetching } = useDocket(formattedDate);
   const { data: liveBoards, isLoading: liveBoardLoading, dataUpdatedAt: liveBoardUpdatedAt, isFetching: liveBoardFetching, refetch: refetchLiveBoard } = useLiveBoard();
   const { data: morningBrief, isLoading: briefLoading, refetch: refetchBrief, dataUpdatedAt: briefUpdatedAt, isFetching: briefFetching } = useMorningBrief(formattedDate);
@@ -105,7 +124,7 @@ export default function Dashboard() {
   // Filter live boards by user's selected bench(es)
   const filteredLiveBoards = liveBoards?.filter((board) => {
     if (userBenches.length === 0) return true; // Show all if no bench selected
-    return userBenches.some(bench => 
+    return userBenches.some(bench =>
       board.court_location?.toUpperCase().includes(bench)
     );
   }) ?? [];
@@ -113,7 +132,7 @@ export default function Dashboard() {
   // Filter docket items by user's selected bench(es)
   const filteredDocket = docket?.filter((item) => {
     if (userBenches.length === 0) return true;
-    return userBenches.some(bench => 
+    return userBenches.some(bench =>
       item.court_location?.toUpperCase().includes(bench)
     );
   }) ?? [];
@@ -121,7 +140,7 @@ export default function Dashboard() {
   // Filter upcoming cases by user's selected bench(es)
   const filteredUpcoming = upcomingCases?.filter((item) => {
     if (userBenches.length === 0) return true;
-    return userBenches.some(bench => 
+    return userBenches.some(bench =>
       item.court_location?.toUpperCase().includes(bench)
     );
   }) ?? [];
@@ -169,8 +188,8 @@ export default function Dashboard() {
         <AppHeader />
 
         {/* COURT-SAFETY: Pull-to-refresh hint for new users */}
-        <PullToRefreshHint 
-          onRefresh={handleRefreshAll} 
+        <PullToRefreshHint
+          onRefresh={handleRefreshAll}
           isRefetching={isAnyFetching}
         />
 
@@ -194,7 +213,7 @@ export default function Dashboard() {
               {/* COURT-SAFETY: Data freshness indicator - always visible */}
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
-                  <DateSelector 
+                  <DateSelector
                     selectedDate={selectedDate}
                     onDateChange={setSelectedDate}
                   />
@@ -205,8 +224,8 @@ export default function Dashboard() {
                   />
                 </div>
                 <div className="flex items-center gap-3">
-                  <ScraperStatusWidget 
-                    bench={profile?.bench || undefined} 
+                  <ScraperStatusWidget
+                    bench={profile?.bench || undefined}
                     selectedDate={formattedDate}
                     onRefreshComplete={refetch}
                   />
@@ -225,7 +244,7 @@ export default function Dashboard() {
                   </Button>
                 </div>
               </div>
-              
+
               <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
                 <TabsList className={`grid w-full gap-1 mb-4 h-auto p-1.5 ${isJunior ? 'grid-cols-5' : 'grid-cols-5'}`}>
                   {/* Junior-First: Assigned Work Tab */}
@@ -235,7 +254,7 @@ export default function Dashboard() {
                       <span className="hidden xs:inline">Tasks</span>
                     </TabsTrigger>
                   )}
-                  
+
                   {/* Senior-First: Morning Brief */}
                   <TabsTrigger value="brief" className="flex items-center gap-1.5 px-2 py-2 text-xs sm:text-sm">
                     <Sun className="h-3 w-3 shrink-0" />
@@ -246,7 +265,7 @@ export default function Dashboard() {
                       </span>
                     )}
                   </TabsTrigger>
-                  
+
                   <TabsTrigger value="daily" className="flex items-center gap-1.5 px-2 py-2 text-xs sm:text-sm">
                     <div className="h-2 w-2 rounded-full bg-primary shrink-0" />
                     <span className="hidden xs:inline">Cases</span>
@@ -254,7 +273,7 @@ export default function Dashboard() {
                       {dailyItems.length}
                     </span>
                   </TabsTrigger>
-                  
+
                   <TabsTrigger value="supplementary" className="flex items-center gap-1.5 px-2 py-2 text-xs sm:text-sm">
                     <div className="h-2 w-2 rounded-full bg-court-warning shrink-0" />
                     <span className="hidden xs:inline">Urgent</span>
@@ -264,14 +283,14 @@ export default function Dashboard() {
                       </span>
                     )}
                   </TabsTrigger>
-                  
+
                   {!isJunior && (
                     <TabsTrigger value="upcoming" className="flex items-center gap-1.5 px-2 py-2 text-xs sm:text-sm">
                       <Calendar className="h-3 w-3 shrink-0" />
                       <span className="hidden xs:inline">Later</span>
                     </TabsTrigger>
                   )}
-                  
+
                   <TabsTrigger value="search" className="flex items-center gap-1.5 px-2 py-2 text-xs sm:text-sm">
                     <Search className="h-3 w-3 shrink-0" />
                     <span className="hidden xs:inline">Find</span>
@@ -293,7 +312,7 @@ export default function Dashboard() {
                         </p>
                       </div>
                     </div>
-                    
+
                     {/* Today's Cases as Tasks */}
                     <div className="space-y-3">
                       {docketLoading ? (
@@ -309,50 +328,58 @@ export default function Dashboard() {
                           <p className="text-xs mt-2">Pull down to refresh or check with your senior for new assignments</p>
                         </div>
                       ) : (
-                        dailyItems.map((item) => (
-                          <div 
-                            key={item.id}
-                            className="glass-card p-4 rounded-lg space-y-2 cursor-pointer hover:bg-secondary/50 transition-colors"
-                            onClick={() => navigate(`/control-deck/${item.id}`)}
-                          >
-                            <div className="flex items-center justify-between">
-                              <Badge variant="outline" className="text-xs">
-                                Item #{item.item_no}
-                              </Badge>
-                              <Badge variant="secondary" className="text-xs">
-                                Court {item.court_room_no}
-                              </Badge>
-                            </div>
-                            <h3 className="font-medium text-foreground">
-                              {item.case_number}
-                            </h3>
-                            <p className="text-sm text-muted-foreground line-clamp-1">
-                              {item.petitioner} vs {item.respondent}
-                            </p>
-                            <p className="text-xs text-primary mt-2">
-                              Tap to view case details →
-                            </p>
-                          </div>
-                        ))
+                        <motion.div
+                          variants={containerVariants}
+                          initial="hidden"
+                          animate="show"
+                          className="space-y-3"
+                        >
+                          {dailyItems.map((item) => (
+                            <motion.div
+                              key={item.id}
+                              variants={itemVariants}
+                              className="glass-card p-4 rounded-lg space-y-2 cursor-pointer hover:bg-secondary/50 transition-colors"
+                              onClick={() => navigate(`/control-deck/${item.id}`)}
+                            >
+                              <div className="flex items-center justify-between">
+                                <Badge variant="outline" className="text-xs">
+                                  Item #{item.item_no}
+                                </Badge>
+                                <Badge variant="secondary" className="text-xs">
+                                  Court {item.court_room_no}
+                                </Badge>
+                              </div>
+                              <h3 className="font-medium text-foreground">
+                                {item.case_number}
+                              </h3>
+                              <p className="text-sm text-muted-foreground line-clamp-1">
+                                {item.petitioner} vs {item.respondent}
+                              </p>
+                              <p className="text-xs text-primary mt-2">
+                                Tap to view case details →
+                              </p>
+                            </motion.div>
+                          ))}
+                        </motion.div>
                       )}
                     </div>
                   </TabsContent>
                 )}
 
                 <TabsContent value="brief" className="mt-0 space-y-6">
-                {/* DECLUTTER: Status strip - demoted to subtle inline text, no border/background */}
-                {isSenior && (
-                  <p className="text-xs text-muted-foreground mb-4">
-                    <span className="opacity-70">As of last sync:</span> {dailyItems.length} cases scheduled, {supplementaryItems.length} supplementary
-                  </p>
-                )}
+                  {/* DECLUTTER: Status strip - demoted to subtle inline text, no border/background */}
+                  {isSenior && (
+                    <p className="text-xs text-muted-foreground mb-4">
+                      <span className="opacity-70">As of last sync:</span> {dailyItems.length} cases scheduled, {supplementaryItems.length} supplementary
+                    </p>
+                  )}
                   <MorningBriefPanel
                     brief={morningBrief}
                     isLoading={briefLoading}
                     onRefresh={refetchBrief}
                     liveBoards={filteredLiveBoards}
                   />
-                  
+
                   {/* Case Export Panel - For profile/CV exports */}
                   {isSenior && (
                     <Collapsible className="mt-6">
@@ -381,7 +408,7 @@ export default function Dashboard() {
                       ({dailyItems.length} matters)
                     </span>
                   </div>
-                  
+
                   {docketLoading ? (
                     <div className="space-y-3">
                       {[1, 2, 3].map((i) => (
@@ -395,17 +422,23 @@ export default function Dashboard() {
                       <p className="text-xs mt-2">Pull down to refresh or check the Supplementary tab</p>
                     </div>
                   ) : (
-                    <div className="space-y-3">
+                    <motion.div
+                      variants={containerVariants}
+                      initial="hidden"
+                      animate="show"
+                      className="space-y-3"
+                    >
                       {dailyItems.map((item) => (
-                        <DocketCard
-                          key={item.id}
-                          item={item}
-                          liveBoard={getLiveBoardForItem(item)}
-                          userRole={role}
-                          onForceActive={handleForceActive}
-                        />
+                        <motion.div key={item.id} variants={itemVariants}>
+                          <DocketCard
+                            item={item}
+                            liveBoard={getLiveBoardForItem(item)}
+                            userRole={role}
+                            onForceActive={handleForceActive}
+                          />
+                        </motion.div>
                       ))}
-                    </div>
+                    </motion.div>
                   )}
                 </TabsContent>
 
@@ -424,7 +457,7 @@ export default function Dashboard() {
                   <p className="text-xs text-muted-foreground mb-4">
                     ⚡ Supplementary lists move faster! Panic alerts trigger at 10 items away.
                   </p>
-                  
+
                   {docketLoading ? (
                     <div className="space-y-3">
                       {[1, 2].map((i) => (
@@ -438,17 +471,23 @@ export default function Dashboard() {
                       <p className="text-xs mt-2">Pull down to refresh — supplementary lists are published around 9:30 AM</p>
                     </div>
                   ) : (
-                    <div className="space-y-3">
+                    <motion.div
+                      variants={containerVariants}
+                      initial="hidden"
+                      animate="show"
+                      className="space-y-3"
+                    >
                       {supplementaryItems.map((item) => (
-                        <DocketCard
-                          key={item.id}
-                          item={item}
-                          liveBoard={getLiveBoardForItem(item)}
-                          userRole={role}
-                          onForceActive={handleForceActive}
-                        />
+                        <motion.div key={item.id} variants={itemVariants}>
+                          <DocketCard
+                            item={item}
+                            liveBoard={getLiveBoardForItem(item)}
+                            userRole={role}
+                            onForceActive={handleForceActive}
+                          />
+                        </motion.div>
                       ))}
-                    </div>
+                    </motion.div>
                   )}
                 </TabsContent>
 
@@ -465,7 +504,7 @@ export default function Dashboard() {
                   <p className="text-xs text-muted-foreground mb-4">
                     📅 Cases scheduled for future dates from published causelists
                   </p>
-                  
+
                   {upcomingLoading ? (
                     <div className="space-y-3">
                       {[1, 2, 3].map((i) => (
@@ -479,18 +518,24 @@ export default function Dashboard() {
                       <p className="text-xs mt-2">Pull down to refresh — cases appear when future causelists are published</p>
                     </div>
                   ) : (
-                    <div className="space-y-3">
+                    <motion.div
+                      variants={containerVariants}
+                      initial="hidden"
+                      animate="show"
+                      className="space-y-3"
+                    >
                       {filteredUpcoming.map((item) => (
-                        <DocketCard
-                          key={item.id}
-                          item={item}
-                          liveBoard={undefined}
-                          userRole={role}
-                          onForceActive={handleForceActive}
-                          showDate={true}
-                        />
+                        <motion.div key={item.id} variants={itemVariants}>
+                          <DocketCard
+                            item={item}
+                            liveBoard={undefined}
+                            userRole={role}
+                            onForceActive={handleForceActive}
+                            showDate={true}
+                          />
+                        </motion.div>
                       ))}
-                    </div>
+                    </motion.div>
                   )}
                 </TabsContent>
 
@@ -501,7 +546,12 @@ export default function Dashboard() {
             </div>
 
             {/* Right: Live Court Widget & Ticker - DECLUTTER: Normalized spacing */}
-            <div className="lg:col-span-1 space-y-5">
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.3, duration: 0.5, ease: 'easeOut' }}
+              className="lg:col-span-1 space-y-5"
+            >
               <div className="sticky top-24 space-y-5">
                 {/* Live Court Widget - Giant Status Display */}
                 {liveBoardLoading ? (
@@ -529,8 +579,8 @@ export default function Dashboard() {
 
                 {/* Case Time Estimator - Shows estimated wait time for next case */}
                 {firstCase && primaryLiveBoard && (
-                  <CaseTimeEstimator 
-                    docketItem={firstCase} 
+                  <CaseTimeEstimator
+                    docketItem={firstCase}
                     liveBoard={primaryLiveBoard}
                   />
                 )}
@@ -541,23 +591,23 @@ export default function Dashboard() {
                 ) : (
                   <LiveTicker liveBoards={filteredLiveBoards} />
                 )}
-                
+
                 {/* Cause List Notes - Registry announcements */}
-                <CauseListNotesWidget 
-                  date={formattedDate} 
-                  bench={profile?.bench || undefined} 
+                <CauseListNotesWidget
+                  date={formattedDate}
+                  bench={profile?.bench || undefined}
                 />
-                
+
                 {/* Court Metadata Widget - Shows active courts */}
                 <CourtMetadataWidget bench={profile?.bench || undefined} />
-                
+
                 {/* Intern Supervision Panel - For supervisors with interns */}
                 {isSenior && <InternSupervisionPanel />}
-                
+
                 {/* Live Board Simulator - Admin Only */}
                 {isAdmin && <LiveBoardSimulator liveBoards={filteredLiveBoards} />}
               </div>
-            </div>
+            </motion.div>
           </div>
         </main>
       </div>

@@ -16,6 +16,9 @@
 
     --primary: 43 96% 56%; /* Royal Gold #fbbf24 */
     --primary-foreground: 222 47% 9%;
+    --primary-rgb: 251 191 36;
+    --gold-rgb: 251 191 36;
+
 
     --secondary: 215 28% 17%;
     --secondary-foreground: 210 40% 98%;

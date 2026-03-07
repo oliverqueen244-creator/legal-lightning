@@ -3,6 +3,10 @@ import { ArrowLeft, Download, Database, Server, Code, Shield, Users, Zap, FileTe
 import { useNavigate } from "react-router-dom";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { BreathingType } from "@/components/animations/BreathingType";
+import { KineticProgress } from "@/components/animations/KineticProgress";
+import { Magnetic } from "@/components/animations/Magnetic";
+
 
 const TechnicalDossier = () => {
   const navigate = useNavigate();
@@ -12,8 +16,10 @@ const TechnicalDossier = () => {
   };
 
   return (
-    <div className="min-h-screen bg-white text-black print:bg-white print:text-black">
+    <div className="min-h-screen bg-transparent text-foreground">
+      <KineticProgress />
       {/* Header - hidden in print */}
+
       <header className="sticky top-0 z-50 bg-white border-b border-gray-300 print:hidden">
         <div className="container mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -25,26 +31,32 @@ const TechnicalDossier = () => {
               <p className="text-xs text-gray-500">Complete System Documentation</p>
             </div>
           </div>
-          <Button onClick={handlePrint} className="gap-2 bg-black text-white hover:bg-gray-800">
-            <Download className="h-4 w-4" />
-            Save as PDF
-          </Button>
+          <Magnetic>
+            <Button onClick={handlePrint} className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90">
+              <Download className="h-4 w-4" />
+              Save as PDF
+            </Button>
+          </Magnetic>
+
         </div>
       </header>
 
       <ScrollArea className="h-[calc(100vh-64px)] print:h-auto">
         <div className="container mx-auto px-4 py-8 max-w-5xl print:max-w-none print:px-8">
-          
+
           {/* Title Page */}
           <div className="text-center mb-12 print:mb-8 print:page-break-after">
-            <h1 className="text-4xl font-bold text-black mb-4">NYAY-HUB</h1>
-            <h2 className="text-2xl text-gray-600 mb-2">Technical Dossier</h2>
-            <p className="text-lg text-black font-medium mb-4">Complete Technical & Workflow Documentation</p>
+            <BreathingType>
+              <h1 className="text-4xl font-bold text-foreground mb-4">NYAY-HUB</h1>
+            </BreathingType>
+            <h2 className="text-2xl text-muted-foreground mb-2">Technical Dossier</h2>
+            <p className="text-lg text-foreground font-medium mb-4">Complete Technical & Workflow Documentation</p>
+
             <p className="text-sm text-gray-500">
-              Generated: {new Date().toLocaleDateString('en-IN', { 
-                year: 'numeric', 
-                month: 'long', 
-                day: 'numeric' 
+              Generated: {new Date().toLocaleDateString('en-IN', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
               })}
             </p>
             <p className="text-xs text-gray-500 mt-2">
@@ -112,7 +124,7 @@ const TechnicalDossier = () => {
               <Layers className="h-6 w-6" />
               1. System Architecture Overview
             </h2>
-            
+
             <div className="space-y-6">
               <div>
                 <h3 className="font-semibold text-black mb-2">Technology Stack</h3>
@@ -149,7 +161,7 @@ const TechnicalDossier = () => {
                 <h3 className="font-semibold text-black mb-2">High-Level Architecture Diagram</h3>
                 <div className="bg-gray-100 p-4 rounded-lg border border-gray-300 font-mono text-xs overflow-x-auto">
                   <pre className="text-gray-700 whitespace-pre">
-{`┌─────────────────────────────────────────────────────────────────────────────────┐
+                    {`┌─────────────────────────────────────────────────────────────────────────────────┐
 │                              NYAY-HUB ARCHITECTURE                               │
 ├─────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                  │
@@ -529,7 +541,7 @@ const TechnicalDossier = () => {
                 <h3 className="font-semibold text-black mb-2">Authentication Flow</h3>
                 <div className="bg-gray-100 p-4 rounded-lg border border-gray-300 font-mono text-xs overflow-x-auto">
                   <pre className="text-gray-700 whitespace-pre">
-{`User → /auth (Email/Password)
+                    {`User → /auth (Email/Password)
      ↓
 Supabase Auth (signUp/signIn)
      ↓
@@ -693,7 +705,7 @@ queryClient.setQueryData(['notifications'], (old) => [...old, newNotif]);`}</pre
                 <h3 className="font-semibold text-black mb-2">Job Queue Architecture</h3>
                 <div className="bg-gray-100 p-4 rounded-lg border border-gray-300 font-mono text-xs overflow-x-auto">
                   <pre className="text-gray-700 whitespace-pre">
-{`┌─────────────────────────────────────────────────────────────┐
+                    {`┌─────────────────────────────────────────────────────────────┐
 │                    JOB PROCESSING                            │
 └─────────────────────────────────────────────────────────────┘
 
@@ -845,7 +857,7 @@ queryClient.setQueryData(['notifications'], (old) => [...old, newNotif]);`}</pre
             <div className="space-y-4">
               <div className="bg-gray-100 p-4 rounded-lg border border-gray-300 font-mono text-xs overflow-x-auto">
                 <pre className="text-gray-700 whitespace-pre">
-{`┌────────────────────────────────────────────────────────────────────────────┐
+                  {`┌────────────────────────────────────────────────────────────────────────────┐
 │                         USER ONBOARDING FLOW                                │
 └────────────────────────────────────────────────────────────────────────────┘
 
@@ -938,7 +950,7 @@ queryClient.setQueryData(['notifications'], (old) => [...old, newNotif]);`}</pre
             <div className="space-y-4">
               <div className="bg-gray-100 p-4 rounded-lg border border-gray-300 font-mono text-xs overflow-x-auto">
                 <pre className="text-gray-700 whitespace-pre">
-{`┌────────────────────────────────────────────────────────────────────────────┐
+                  {`┌────────────────────────────────────────────────────────────────────────────┐
 │                     CAUSE LIST INGESTION PIPELINE                           │
 └────────────────────────────────────────────────────────────────────────────┘
 
@@ -1037,7 +1049,7 @@ queryClient.setQueryData(['notifications'], (old) => [...old, newNotif]);`}</pre
 
               <div className="bg-gray-100 p-4 rounded-lg border border-gray-300 font-mono text-xs overflow-x-auto">
                 <pre className="text-gray-700 whitespace-pre">
-{`┌────────────────────────────────────────────────────────────────────────────┐
+                  {`┌────────────────────────────────────────────────────────────────────────────┐
 │                         CASE MATCHING ALGORITHM                             │
 └────────────────────────────────────────────────────────────────────────────┘
 
@@ -1121,7 +1133,7 @@ queryClient.setQueryData(['notifications'], (old) => [...old, newNotif]);`}</pre
             <div className="space-y-4">
               <div className="bg-gray-100 p-4 rounded-lg border border-gray-300 font-mono text-xs overflow-x-auto">
                 <pre className="text-gray-700 whitespace-pre">
-{`┌────────────────────────────────────────────────────────────────────────────┐
+                  {`┌────────────────────────────────────────────────────────────────────────────┐
 │                       LIVE BOARD MONITORING                                 │
 └────────────────────────────────────────────────────────────────────────────┘
 
@@ -1201,7 +1213,7 @@ queryClient.setQueryData(['notifications'], (old) => [...old, newNotif]);`}</pre
             <div className="space-y-4">
               <div className="bg-gray-100 p-4 rounded-lg border border-gray-300 font-mono text-xs overflow-x-auto">
                 <pre className="text-gray-700 whitespace-pre">
-{`┌────────────────────────────────────────────────────────────────────────────┐
+                  {`┌────────────────────────────────────────────────────────────────────────────┐
 │                    NOTIFICATION & ESCALATION SYSTEM                         │
 └────────────────────────────────────────────────────────────────────────────┘
 
@@ -1310,7 +1322,7 @@ queryClient.setQueryData(['notifications'], (old) => [...old, newNotif]);`}</pre
 
               <div className="bg-gray-100 p-4 rounded-lg border border-gray-300 font-mono text-xs overflow-x-auto">
                 <pre className="text-gray-700 whitespace-pre">
-{`┌────────────────────────────────────────────────────────────────────────────┐
+                  {`┌────────────────────────────────────────────────────────────────────────────┐
 │                        CHAMBER MANAGEMENT                                   │
 └────────────────────────────────────────────────────────────────────────────┘
 
@@ -1380,7 +1392,7 @@ queryClient.setQueryData(['notifications'], (old) => [...old, newNotif]);`}</pre
             <div className="space-y-4">
               <div className="bg-gray-100 p-4 rounded-lg border border-gray-300 font-mono text-xs overflow-x-auto">
                 <pre className="text-gray-700 whitespace-pre">
-{`┌────────────────────────────────────────────────────────────────────────────┐
+                  {`┌────────────────────────────────────────────────────────────────────────────┐
 │                      OFFLINE-FIRST ARCHITECTURE                             │
 └────────────────────────────────────────────────────────────────────────────┘
 
@@ -1450,7 +1462,7 @@ queryClient.setQueryData(['notifications'], (old) => [...old, newNotif]);`}</pre
             <div className="space-y-4">
               <div className="bg-gray-100 p-4 rounded-lg border border-gray-300 font-mono text-xs overflow-x-auto">
                 <pre className="text-gray-700 whitespace-pre">
-{`┌────────────────────────────────────────────────────────────────────────────┐
+                  {`┌────────────────────────────────────────────────────────────────────────────┐
 │                        PWA UPDATE STRATEGY                                  │
 └────────────────────────────────────────────────────────────────────────────┘
 
@@ -1539,7 +1551,7 @@ queryClient.setQueryData(['notifications'], (old) => [...old, newNotif]);`}</pre
 
               <div className="bg-gray-100 p-4 rounded-lg border border-gray-300 font-mono text-xs overflow-x-auto">
                 <pre className="text-gray-700 whitespace-pre">
-{`┌────────────────────────────────────────────────────────────────────────────┐
+                  {`┌────────────────────────────────────────────────────────────────────────────┐
 │                          COURT FOCUS MODE                                   │
 └────────────────────────────────────────────────────────────────────────────┘
 
@@ -1619,7 +1631,7 @@ queryClient.setQueryData(['notifications'], (old) => [...old, newNotif]);`}</pre
 
               <div className="bg-gray-100 p-4 rounded-lg border border-gray-300 font-mono text-xs overflow-x-auto">
                 <pre className="text-gray-700 whitespace-pre">
-{`┌────────────────────────────────────────────────────────────────────────────┐
+                  {`┌────────────────────────────────────────────────────────────────────────────┐
 │                     INDIAN KANOON INTEGRATION                               │
 └────────────────────────────────────────────────────────────────────────────┘
 
@@ -1687,7 +1699,7 @@ queryClient.setQueryData(['notifications'], (old) => [...old, newNotif]);`}</pre
 
               <div className="bg-gray-100 p-4 rounded-lg border border-gray-300 font-mono text-xs overflow-x-auto">
                 <pre className="text-gray-700 whitespace-pre">
-{`┌────────────────────────────────────────────────────────────────────────────┐
+                  {`┌────────────────────────────────────────────────────────────────────────────┐
 │                       SYNC CONFLICT RESOLUTION                              │
 └────────────────────────────────────────────────────────────────────────────┘
 
@@ -1769,7 +1781,7 @@ queryClient.setQueryData(['notifications'], (old) => [...old, newNotif]);`}</pre
 
               <div className="bg-gray-100 p-4 rounded-lg border border-gray-300 font-mono text-xs overflow-x-auto">
                 <pre className="text-gray-700 whitespace-pre">
-{`┌────────────────────────────────────────────────────────────────────────────┐
+                  {`┌────────────────────────────────────────────────────────────────────────────┐
 │                      NETWORK STATUS MONITORING                              │
 └────────────────────────────────────────────────────────────────────────────┘
 
@@ -1867,7 +1879,7 @@ queryClient.setQueryData(['notifications'], (old) => [...old, newNotif]);`}</pre
 
               <div className="bg-gray-100 p-4 rounded-lg border border-gray-300 font-mono text-xs overflow-x-auto">
                 <pre className="text-gray-700 whitespace-pre">
-{`┌────────────────────────────────────────────────────────────────────────────┐
+                  {`┌────────────────────────────────────────────────────────────────────────────┐
 │                    HEARING LIKELIHOOD DERIVATION                            │
 └────────────────────────────────────────────────────────────────────────────┘
 
@@ -1965,7 +1977,7 @@ queryClient.setQueryData(['notifications'], (old) => [...old, newNotif]);`}</pre
 
               <div className="bg-gray-100 p-4 rounded-lg border border-gray-300 font-mono text-xs overflow-x-auto">
                 <pre className="text-gray-700 whitespace-pre">
-{`┌────────────────────────────────────────────────────────────────────────────┐
+                  {`┌────────────────────────────────────────────────────────────────────────────┐
 │                      CONFIDENCE SCORING ENGINE                              │
 └────────────────────────────────────────────────────────────────────────────┘
 
@@ -2056,7 +2068,7 @@ queryClient.setQueryData(['notifications'], (old) => [...old, newNotif]);`}</pre
 
               <div className="bg-gray-100 p-4 rounded-lg border border-gray-300 font-mono text-xs overflow-x-auto">
                 <pre className="text-gray-700 whitespace-pre">
-{`┌────────────────────────────────────────────────────────────────────────────┐
+                  {`┌────────────────────────────────────────────────────────────────────────────┐
 │                        PARSER FALLBACK SYSTEM                               │
 └────────────────────────────────────────────────────────────────────────────┘
 
@@ -2146,7 +2158,7 @@ queryClient.setQueryData(['notifications'], (old) => [...old, newNotif]);`}</pre
 
               <div className="bg-gray-100 p-4 rounded-lg border border-gray-300 font-mono text-xs overflow-x-auto">
                 <pre className="text-gray-700 whitespace-pre">
-{`┌────────────────────────────────────────────────────────────────────────────┐
+                  {`┌────────────────────────────────────────────────────────────────────────────┐
 │                        ERROR REPORTING SYSTEM                               │
 └────────────────────────────────────────────────────────────────────────────┘
 
@@ -2244,7 +2256,7 @@ queryClient.setQueryData(['notifications'], (old) => [...old, newNotif]);`}</pre
 
               <div className="bg-gray-100 p-4 rounded-lg border border-gray-300 font-mono text-xs overflow-x-auto">
                 <pre className="text-gray-700 whitespace-pre">
-{`┌────────────────────────────────────────────────────────────────────────────┐
+                  {`┌────────────────────────────────────────────────────────────────────────────┐
 │                      HTML CAUSE LIST PARSING                                │
 └────────────────────────────────────────────────────────────────────────────┘
 
@@ -2352,7 +2364,7 @@ queryClient.setQueryData(['notifications'], (old) => [...old, newNotif]);`}</pre
               {/* Detailed Breakdown */}
               <div className="bg-gray-100 p-4 rounded-lg border border-gray-300 font-mono text-xs overflow-x-auto">
                 <pre className="text-gray-700 whitespace-pre">
-{`┌────────────────────────────────────────────────────────────────────────────┐
+                  {`┌────────────────────────────────────────────────────────────────────────────┐
 │                         CODEBASE STATISTICS                                 │
 └────────────────────────────────────────────────────────────────────────────┘
 
