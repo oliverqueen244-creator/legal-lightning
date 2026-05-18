@@ -89,7 +89,9 @@ export function useAuth() {
         
         // If no session but localStorage has auth data, try to recover
         if (!session && !error) {
-          const storedSession = localStorage.getItem('sb-pwpnnixoscppfzjogcgj-auth-token');
+          const projectRef = (import.meta.env.VITE_SUPABASE_PROJECT_ID || '').trim();
+          const storageKey = projectRef ? `sb-${projectRef}-auth-token` : null;
+          const storedSession = storageKey ? localStorage.getItem(storageKey) : null;
           if (storedSession) {
             console.log('[useAuth] Attempting session recovery from localStorage');
             try {

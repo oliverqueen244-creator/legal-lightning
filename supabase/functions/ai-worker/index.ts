@@ -97,23 +97,16 @@ serve(async (req) => {
       });
     }
 
-    // Get next job (priority DESC, then oldest first)
-    // Also check retry jobs that are due
-    const now = new Date().toISOString();
-    
-    const { data: nextJob, error: fetchError } = await supabase
-      .from('ai_jobs')
-      .select('*')
-      .or(`status.eq.pending,and(status.eq.retry,next_retry_at.lte.${now})`)
-      .order('priority', { ascending: false })
-      .order('created_at', { ascending: true })
-      .limit(1)
-      .maybeSingle();
+    // Atomic claim: SELECT FOR UPDATE SKIP LOCKED via RPC so two concurrent
+    // workers can never grab the same job.
+    const { data: claimed, error: fetchError } = await supabase
+      .rpc('claim_next_ai_job');
 
     if (fetchError) {
-      throw new Error(`Failed to fetch job: ${fetchError.message}`);
+      throw new Error(`Failed to claim job: ${fetchError.message}`);
     }
 
+    const nextJob = Array.isArray(claimed) ? claimed[0] : claimed;
     if (!nextJob) {
       console.log('[AI-WORKER] No pending jobs');
       return new Response(JSON.stringify({ success: true, message: 'No pending jobs' }), {
@@ -122,13 +115,7 @@ serve(async (req) => {
     }
 
     const job = nextJob as AiJob;
-    console.log(`[AI-WORKER] Processing job ${job.id} (${job.job_type}), retry: ${job.retries}`);
-
-    // Mark as processing
-    await supabase
-      .from('ai_jobs')
-      .update({ status: 'processing', started_at: new Date().toISOString() })
-      .eq('id', job.id);
+    console.log(`[AI-WORKER] Claimed job ${job.id} (${job.job_type}), retry: ${job.retries}`);
 
     try {
       // Process the job

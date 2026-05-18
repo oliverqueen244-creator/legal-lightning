@@ -1,6 +1,7 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { AlertTriangle, RefreshCw, Home } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { reportHighError } from '@/lib/errorReporting';
 
 interface Props {
   children: ReactNode;
@@ -30,21 +31,14 @@ export class ErrorBoundary extends Component<Props, State> {
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('[ErrorBoundary] Caught error:', error);
-    console.error('[ErrorBoundary] Component stack:', errorInfo.componentStack);
-    
     this.setState({ errorInfo });
-
-    // Report to error tracking (if available)
-    try {
-      // Could integrate with Sentry, LogRocket, etc.
-      console.error('[ErrorBoundary] Error details:', {
-        message: error.message,
-        stack: error.stack,
-        componentStack: errorInfo.componentStack,
-      });
-    } catch (reportingError) {
-      console.error('[ErrorBoundary] Failed to report error:', reportingError);
-    }
+    // Persist to admin_error_events so on-call can see this without
+    // shoulder-surfing the user's browser console.
+    void reportHighError(
+      'UNKNOWN',
+      'REACT_RENDER_ERROR',
+      `${error.name}: ${error.message}`,
+    );
   }
 
   private handleReload = () => {

@@ -350,26 +350,14 @@ serve(async (req) => {
       console.log(`[check-case-judgment] Judgment found: ${judgmentInfo.found}`);
 
       // ═══════════════════════════════════════════════════════════════
-      // STEP 7: Update tracked_case status
+      // STEP 7: Update tracked_case status via server-side RPC so all
+      // timestamps come from Postgres NOW() (no edge-runtime clock skew).
       // ═══════════════════════════════════════════════════════════════
-      const nextCheckAfter = new Date();
-      nextCheckAfter.setDate(nextCheckAfter.getDate() + 7); // 7-day cooldown
-
-      const updateData: Record<string, any> = {
-        last_judgment_check_at: new Date().toISOString(),
-        judgment_check_attempts: (caseData.judgment_check_attempts || 0) + 1,
-        next_judgment_check_after: nextCheckAfter.toISOString(),
-        judgment_status: judgmentInfo.found ? 'found' : 'not_found',
-      };
-
-      if (judgmentInfo.found) {
-        updateData.judgment_found_at = new Date().toISOString();
-      }
-
-      await supabase
-        .from('tracked_cases')
-        .update(updateData)
-        .eq('id', caseId);
+      await supabase.rpc('record_judgment_check_result', {
+        p_case_id: caseId,
+        p_judgment_found: judgmentInfo.found,
+        p_cooldown_days: 7,
+      });
 
       // ═══════════════════════════════════════════════════════════════
       // STEP 8: Store judgment metadata (if found)
