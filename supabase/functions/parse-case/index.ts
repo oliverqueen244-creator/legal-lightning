@@ -18,15 +18,13 @@ declare const EdgeRuntime: {
  * 
  * Tries AI providers in order:
  * 1. Google AI API (gemini-2.0-flash) - Primary
- * 2. OpenAI (gpt-4o-mini) - Fallback  
+ * 2. OpenAI (gpt-4o-mini) - Fallback
  * 3. OpenRouter - Secondary fallback
- * 4. Lovable AI (last resort only)
  */
 
 // Throttling configuration
 const MIN_REQUEST_INTERVAL_MS = 2000; // 2 seconds between AI calls
 const MAX_RETRIES = 3;
-const ENABLE_LOVABLE_AI_FALLBACK = Deno.env.get('ENABLE_LOVABLE_AI_FALLBACK') === 'true';
 
 interface ParsedCase {
   court_room_no: string;
@@ -113,80 +111,6 @@ async function saveToCache(supabase: any, textHash: string, promptHash: string, 
   } catch (e) {
     console.log('[CACHE] Error saving to cache:', e);
   }
-}
-
-// Call Lovable AI Gateway (Last resort fallback - only used when all other providers fail)
-async function callLovableAI(systemPrompt: string, userPrompt: string): Promise<AICallResult> {
-  const apiKey = Deno.env.get('LOVABLE_API_KEY');
-  if (!apiKey) {
-    return { success: false, content: '', provider: 'lovable', error: 'LOVABLE_API_KEY not configured' };
-  }
-
-  const maxRetries = 2;
-  const baseDelayMs = 1000;
-
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    try {
-      if (attempt === 0) {
-        console.log('[AI] Trying Lovable AI...');
-      } else {
-        console.log(`[AI] Lovable AI retry attempt ${attempt}/${maxRetries}...`);
-      }
-
-      const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          model: 'google/gemini-2.5-flash',
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt }
-          ]
-        })
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text().catch(() => '');
-        const status = response.status;
-
-        // Rate limit - retry with backoff
-        if (status === 429 && attempt < maxRetries) {
-          const delayMs = baseDelayMs * Math.pow(2, attempt);
-          console.log(`[AI] Lovable AI rate limited (429), waiting ${delayMs}ms before retry...`);
-          await sleep(delayMs);
-          continue;
-        }
-
-        // Payment required - skip to next provider
-        if (status === 402) {
-          console.log(`[AI] Lovable AI payment required (402), skipping to next provider`);
-          return { success: false, content: '', provider: 'lovable', error: 'Payment required' };
-        }
-
-        console.log(`[AI] Lovable AI failed: ${status} - ${errorText.substring(0, 200)}`);
-        return { success: false, content: '', provider: 'lovable', error: `HTTP ${status}` };
-      }
-
-      const result = await response.json();
-      const content = result.choices?.[0]?.message?.content || '';
-      console.log(`[AI] Lovable AI success, got ${content.length} chars`);
-      return { success: true, content, provider: 'lovable' };
-    } catch (error) {
-      if (attempt < maxRetries) {
-        const delayMs = baseDelayMs * Math.pow(2, attempt);
-        console.log(`[AI] Lovable AI network error, waiting ${delayMs}ms before retry...`, error);
-        await sleep(delayMs);
-        continue;
-      }
-      console.error('[AI] Lovable AI error after all retries:', error);
-      return { success: false, content: '', provider: 'lovable', error: error instanceof Error ? error.message : 'Unknown error' };
-    }
-  }
-
-  return { success: false, content: '', provider: 'lovable', error: 'Max retries exceeded' };
 }
 
 // Call Google AI API directly (Primary provider) with exponential backoff retry
@@ -423,16 +347,12 @@ async function callAIWithFallback(
   }
   lastRequestTime = Date.now();
 
-  // Provider fallback chain: Google → OpenAI → OpenRouter (optional Lovable fallback)
+  // Provider fallback chain: Google → OpenAI → OpenRouter
   const providers: Array<() => Promise<AICallResult>> = [
     () => callGoogleAI(systemPrompt, userPrompt),
     () => callOpenAI(systemPrompt, userPrompt),
     () => callOpenRouter(systemPrompt, userPrompt)
   ];
-
-  if (ENABLE_LOVABLE_AI_FALLBACK) {
-    providers.push(() => callLovableAI(systemPrompt, userPrompt));
-  }
 
   const failedProviders: string[] = [];
 

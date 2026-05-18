@@ -674,7 +674,7 @@ async function extractCasesFromScreenshot(screenshotBase64: string, openRouterKe
       headers: {
         'Authorization': `Bearer ${openRouterKey}`,
         'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://lovable.dev',
+        'HTTP-Referer': 'https://app.nyayhub.com',
         'X-Title': 'Court Cause List Scraper'
       },
       body: JSON.stringify({
@@ -889,7 +889,7 @@ async function extractCasesFromPdfWithGemini(base64Pdf: string, openRouterKey: s
       headers: {
         'Authorization': `Bearer ${openRouterKey}`,
         'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://lovable.dev',
+        'HTTP-Referer': 'https://app.nyayhub.com',
         'X-Title': 'Court Cause List Scraper'
       },
       body: JSON.stringify({
@@ -976,7 +976,7 @@ async function extractCasesFromTextWithAI(text: string, openRouterKey: string): 
       headers: {
         'Authorization': `Bearer ${openRouterKey}`,
         'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://lovable.dev',
+        'HTTP-Referer': 'https://app.nyayhub.com',
         'X-Title': 'Court Cause List Scraper'
       },
       body: JSON.stringify({

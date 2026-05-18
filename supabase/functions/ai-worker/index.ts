@@ -10,7 +10,7 @@ import { getCorsHeaders } from "../_shared/cors.ts";
  * - Processes ONE job at a time
  * - Enforces token budget per hour
  * - Handles retries with exponential backoff
- * - Multi-provider fallback (Google → OpenAI → OpenRouter → Lovable AI last resort)
+ * - Multi-provider fallback (Google → OpenAI → OpenRouter)
  * - Exits immediately after processing one job (cron calls repeatedly)
  */
 
@@ -18,7 +18,6 @@ import { getCorsHeaders } from "../_shared/cors.ts";
 const MIN_JOB_INTERVAL_MS = 3000; // 3 seconds between jobs
 const MAX_TOKENS_PER_HOUR = 250000; // Token budget (increased for larger causelists)
 const RETRY_DELAYS = [60, 300, 900]; // 1min, 5min, 15min
-const ENABLE_LOVABLE_AI_FALLBACK = Deno.env.get('ENABLE_LOVABLE_AI_FALLBACK') === 'true';
 
 interface AiJob {
   id: string;
@@ -337,16 +336,12 @@ async function processJob(job: AiJob, supabase: any): Promise<{ cases: ParsedCas
 }
 
 async function callAIProviders(prompt: string, courtNo: string, parseType: 'daily' | 'search'): Promise<{ cases: ParsedCase[]; provider: string; tokensUsed: number }> {
-  // Provider fallback chain: Google → OpenAI → OpenRouter (optional Lovable fallback)
+  // Provider fallback chain: Google → OpenAI → OpenRouter
   const providers: Array<{ name: string; fn: () => Promise<{ success: boolean; content: string; tokensUsed?: number }> }> = [
     { name: 'google', fn: () => callGoogleAI(prompt) },
     { name: 'openai', fn: () => callOpenAI(prompt) },
     { name: 'openrouter', fn: () => callOpenRouter(prompt) }
   ];
-
-  if (ENABLE_LOVABLE_AI_FALLBACK) {
-    providers.push({ name: 'lovable', fn: () => callLovableAI(prompt) });
-  }
 
   let lastError: Error | null = null;
   const failedProviders: string[] = [];
@@ -395,75 +390,6 @@ async function callAIProviders(prompt: string, courtNo: string, parseType: 'dail
   // All providers failed - log summary
   console.error(`[AI-WORKER] ALL PROVIDERS FAILED: [${failedProviders.join(' → ')}]`);
   throw lastError || new Error(`All AI providers failed: ${failedProviders.join(', ')}`);
-}
-
-// Lovable AI Gateway - Last resort fallback (for when all other providers fail)
-async function callLovableAI(prompt: string): Promise<{ success: boolean; content: string; tokensUsed?: number }> {
-  const apiKey = Deno.env.get('LOVABLE_API_KEY');
-  if (!apiKey) {
-    console.log('[AI-WORKER] LOVABLE_API_KEY not configured, skipping Lovable AI');
-    return { success: false, content: '' };
-  }
-
-  const maxRetries = 2;
-  const baseDelayMs = 1000;
-
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    try {
-      if (attempt > 0) {
-        const delayMs = baseDelayMs * Math.pow(2, attempt - 1);
-        console.log(`[AI-WORKER] Lovable AI retry ${attempt}/${maxRetries} after ${delayMs}ms...`);
-        await new Promise(r => setTimeout(r, delayMs));
-      }
-
-      const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          model: 'google/gemini-2.5-flash',
-          messages: [
-            { role: 'system', content: 'You extract case information from legal causelists. Return only valid JSON.' },
-            { role: 'user', content: prompt }
-          ]
-        })
-      });
-
-      if (!response.ok) {
-        const status = response.status;
-        const errorText = await response.text().catch(() => '');
-        
-        // Rate limit - retry with backoff
-        if (status === 429 && attempt < maxRetries) {
-          console.log(`[AI-WORKER] Lovable AI rate limited (429), will retry...`);
-          continue;
-        }
-        
-        // Payment required - don't retry, move to next provider
-        if (status === 402) {
-          console.log(`[AI-WORKER] Lovable AI payment required (402), moving to next provider`);
-          return { success: false, content: '' };
-        }
-        
-        throw new Error(`Lovable AI error: ${status} - ${errorText.substring(0, 100)}`);
-      }
-
-      const data = await response.json();
-      const content = data.choices?.[0]?.message?.content || '';
-      const tokensUsed = data.usage?.total_tokens || 0;
-
-      console.log(`[AI-WORKER] Lovable AI success: ${content.length} chars, ${tokensUsed} tokens`);
-      return { success: true, content, tokensUsed };
-    } catch (error) {
-      if (attempt >= maxRetries) {
-        throw error;
-      }
-    }
-  }
-
-  return { success: false, content: '' };
 }
 
 // Rule-based extraction for SUPPLEMENTARY/NOTICE lists
