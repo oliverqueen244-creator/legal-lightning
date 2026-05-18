@@ -8,6 +8,7 @@ interface ProfileStepProps {
   data: {
     full_name: string;
     bar_registration_number: string;
+    bar_council_state: string;
     bench: 'JAIPUR' | 'JODHPUR' | 'BOTH' | '';
   };
   onChange: (data: ProfileStepProps['data']) => void;
@@ -65,7 +66,21 @@ export default function ProfileStep({ data, onChange }: ProfileStepProps) {
           onChange={(e) => onChange({ ...data, bar_registration_number: e.target.value })}
           className="bg-background/50"
         />
-        <p className="text-xs text-muted-foreground">Optional but helps with verification</p>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="bar_council_state">State Bar Council</Label>
+        <Input
+          id="bar_council_state"
+          placeholder="e.g., Bar Council of Rajasthan"
+          value={data.bar_council_state}
+          onChange={(e) => onChange({ ...data, bar_council_state: e.target.value })}
+          className="bg-background/50"
+        />
+        <p className="text-xs text-muted-foreground">
+          We submit this for manual verification. You can use the app immediately; verified accounts
+          get the "Verified Advocate" badge.
+        </p>
       </div>
 
       <div className="space-y-3">

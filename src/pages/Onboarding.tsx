@@ -33,6 +33,7 @@ export default function Onboarding() {
   const [profileData, setProfileData] = useState({
     full_name: '',
     bar_registration_number: '',
+    bar_council_state: '',
     bench: '' as 'JAIPUR' | 'JODHPUR' | 'BOTH' | '',
   });
 
@@ -66,6 +67,7 @@ export default function Onboarding() {
       setProfileData({
         full_name: profile.full_name || '',
         bar_registration_number: profile.bar_registration_number || '',
+        bar_council_state: (profile as { bar_council_state?: string }).bar_council_state || '',
         bench: (profile.bench as 'JAIPUR' | 'JODHPUR' | 'BOTH' | '') || '',
       });
     }
@@ -79,14 +81,18 @@ export default function Onboarding() {
     // For database, we store 'JAIPUR' or 'JODHPUR' - if BOTH, we'll use JAIPUR as primary
     const benchForDb = profileData.bench === 'BOTH' ? 'JAIPUR' : profileData.bench;
 
-    const { error } = await supabase
-      .from('profiles')
-      .update({
-        full_name: profileData.full_name,
-        bar_registration_number: profileData.bar_registration_number,
-        bench: benchForDb || null,
-      })
-      .eq('id', user.id);
+    const hasBciData = profileData.bar_registration_number && profileData.bar_council_state;
+    const update: Record<string, unknown> = {
+      full_name: profileData.full_name,
+      bar_registration_number: profileData.bar_registration_number,
+      bench: benchForDb || null,
+    };
+    if (hasBciData) {
+      // Lawyer supplied BCI details -> mark as submitted, awaiting admin verification.
+      update.bar_council_state = profileData.bar_council_state;
+      update.bci_verification_status = 'submitted';
+    }
+    const { error } = await supabase.from('profiles').update(update).eq('id', user.id);
 
     if (error) {
       toast.error('Failed to update profile');

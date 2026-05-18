@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Scale, Calendar, FileText, Settings, Activity, FileCheck, Database, Gavel, Brain, ClipboardCheck, AlertTriangle, Gauge, Layers, Smartphone, Users, Shield } from 'lucide-react';
+import { ArrowLeft, Scale, Calendar, FileText, Settings, Activity, FileCheck, Database, Gavel, Brain, ClipboardCheck, AlertTriangle, Gauge, Layers, Smartphone, Users, Shield, ScrollText } from 'lucide-react';
 import { AuthGuard } from '@/components/layout/AuthGuard';
 import { useAuth } from '@/hooks/useAuth';
 import { DocketManager } from '@/components/admin/DocketManager';
@@ -19,6 +19,7 @@ import { ConfidenceDashboard } from '@/components/admin/ConfidenceDashboard';
 import { FallbackDashboard } from '@/components/admin/FallbackDashboard';
 import { ForceUpdateControl } from '@/components/admin/ForceUpdateControl';
 import { UserCasesViewer } from '@/components/admin/UserCasesViewer';
+import { BciVerificationQueue } from '@/components/admin/BciVerificationQueue';
 
 export default function Admin() {
   const navigate = useNavigate();
@@ -124,11 +125,19 @@ export default function Admin() {
                   <Smartphone className="h-4 w-4" />
                   <span className="hidden sm:inline">PWA</span>
                 </TabsTrigger>
+                <TabsTrigger value="bci" className="flex items-center gap-2 px-3 py-2">
+                  <ScrollText className="h-4 w-4" />
+                  <span className="hidden sm:inline">BCI</span>
+                </TabsTrigger>
               </TabsList>
             </div>
 
             <TabsContent value="user-cases" className="space-y-4">
               <UserCasesViewer />
+            </TabsContent>
+
+            <TabsContent value="bci" className="space-y-4">
+              <BciVerificationQueue />
             </TabsContent>
 
             <TabsContent value="errors" className="space-y-4">

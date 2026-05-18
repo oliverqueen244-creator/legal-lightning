@@ -27,6 +27,7 @@ export default function Settings() {
   const [profileData, setProfileData] = useState({
     full_name: '',
     bar_registration_number: '',
+    bar_council_state: '',
     bench: '' as 'JAIPUR' | 'JODHPUR' | 'BOTH' | '',
   });
 
@@ -38,6 +39,7 @@ export default function Settings() {
       setProfileData({
         full_name: profile.full_name || '',
         bar_registration_number: profile.bar_registration_number || '',
+        bar_council_state: (profile as { bar_council_state?: string }).bar_council_state || '',
         bench: (profile.bench as 'JAIPUR' | 'JODHPUR' | 'BOTH' | '') || '',
       });
     }

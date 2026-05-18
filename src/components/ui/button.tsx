@@ -20,12 +20,15 @@ const buttonVariants = cva(
         court: "bg-court-slate-700 text-foreground border border-court-slate-700 hover:border-primary hover:bg-court-slate-800",
         whisper: "bg-background border-2 border-primary text-primary font-semibold hover:bg-primary hover:text-primary-foreground transition-all duration-200",
       },
+      // Sizes: default+ meet the 44x44 px WCAG touch-target minimum on mobile.
+      // 'sm' is reserved for desktop-only contexts; do not use it for primary
+      // touch targets on phones.
       size: {
-        default: "h-10 px-4 py-2",
+        default: "h-11 min-w-11 px-4 py-2",
         sm: "h-9 rounded-md px-3",
-        lg: "h-11 rounded-md px-8",
+        lg: "h-12 rounded-md px-8",
         xl: "h-14 rounded-lg px-10 text-lg",
-        icon: "h-10 w-10",
+        icon: "h-11 w-11",
       },
     },
     defaultVariants: {
