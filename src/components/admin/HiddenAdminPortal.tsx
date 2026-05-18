@@ -100,7 +100,7 @@ export default function HiddenAdminPortal({ isOpen, onClose }: HiddenAdminPortal
           table: 'case_parse_queue'
         },
         (payload) => {
-          console.log('Queue change:', payload);
+          if (import.meta.env.DEV) console.log('Queue change:', payload);
           if (payload.eventType === 'INSERT') {
             setQueueItems(prev => [payload.new as QueueItem, ...prev.slice(0, 49)]);
           } else if (payload.eventType === 'UPDATE') {
@@ -125,7 +125,7 @@ export default function HiddenAdminPortal({ isOpen, onClose }: HiddenAdminPortal
           table: 'raw_causelists'
         },
         (payload) => {
-          console.log('Causelist change:', payload);
+          if (import.meta.env.DEV) console.log('Causelist change:', payload);
           if (payload.eventType === 'INSERT') {
             setCauselists(prev => [payload.new as RawCauselist, ...prev.slice(0, 19)]);
           } else if (payload.eventType === 'UPDATE') {

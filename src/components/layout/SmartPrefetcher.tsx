@@ -16,9 +16,9 @@ export function SmartPrefetcher() {
         if (navigator.storage && navigator.storage.persist) {
             navigator.storage.persist().then(persistent => {
                 if (persistent) {
-                    console.log('[SmartPrefetcher] Storage is persistent');
+                    if (import.meta.env.DEV) console.log('[SmartPrefetcher] Storage is persistent');
                 } else {
-                    console.log('[SmartPrefetcher] Storage is not persistent');
+                    if (import.meta.env.DEV) console.log('[SmartPrefetcher] Storage is not persistent');
                 }
             });
         }
@@ -61,7 +61,7 @@ export function SmartPrefetcher() {
             }
 
             if (cachedCount > 0) {
-                console.log(`[SmartPrefetcher] ${cachedCount} documents pre-warmed for today.`);
+                if (import.meta.env.DEV) console.log(`[SmartPrefetcher] ${cachedCount} documents pre-warmed for today.`);
             }
         };
 
