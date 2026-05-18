@@ -5,29 +5,55 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { Scale, User, Search, CheckCircle2, ArrowRight, ArrowLeft, Users } from 'lucide-react';
+import { Scale, User, Search, CheckCircle2, ArrowRight, ArrowLeft, Users, ShieldCheck } from 'lucide-react';
 import ProfileStep from '@/components/onboarding/ProfileStep';
 import AliasManager from '@/components/onboarding/AliasManager';
 import CourtScan from '@/components/onboarding/CourtScan';
 import { ChamberOnboardingStep } from '@/components/onboarding/ChamberOnboardingStep';
+import { ConsentStep, CONSENT_VERSION, ConsentSelections } from '@/components/onboarding/ConsentStep';
 import { toast } from 'sonner';
 
 const STEPS = [
-  { id: 1, title: 'Profile Setup', icon: User },
-  { id: 2, title: 'Name Variations', icon: Scale },
-  { id: 3, title: 'Chamber', icon: Users },
-  { id: 4, title: 'Court Sync', icon: Search },
+  { id: 1, title: 'Consent & Privacy', icon: ShieldCheck },
+  { id: 2, title: 'Profile Setup', icon: User },
+  { id: 3, title: 'Name Variations', icon: Scale },
+  { id: 4, title: 'Chamber', icon: Users },
+  { id: 5, title: 'Court Sync', icon: Search },
 ];
 
 export default function Onboarding() {
   const { user, profile, loading } = useAuth();
   const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState(1);
+  const [consent, setConsent] = useState<ConsentSelections>({
+    privacyPolicy: false,
+    thirdPartyAi: false,
+    telegramAlerts: false,
+  });
   const [profileData, setProfileData] = useState({
     full_name: '',
     bar_registration_number: '',
     bench: '' as 'JAIPUR' | 'JODHPUR' | 'BOTH' | '',
   });
+
+  const recordConsent = async () => {
+    if (!user?.id) return false;
+    const rows = [
+      { user_id: user.id, consent_type: 'PRIVACY_POLICY', consent_version: CONSENT_VERSION, granted: consent.privacyPolicy },
+      { user_id: user.id, consent_type: 'THIRD_PARTY_AI', consent_version: CONSENT_VERSION, granted: consent.thirdPartyAi },
+      { user_id: user.id, consent_type: 'TELEGRAM_ALERTS', consent_version: CONSENT_VERSION, granted: consent.telegramAlerts },
+    ];
+    // user_consents is new; types.ts will pick it up after `supabase gen types`.
+    const from = supabase.from as unknown as (table: string) => {
+      insert: (rows: unknown) => Promise<{ error: { message: string } | null }>;
+    };
+    const { error } = await from('user_consents').insert(rows);
+    if (error) {
+      toast.error('Could not record consent');
+      return false;
+    }
+    return true;
+  };
 
   useEffect(() => {
     if (!loading && !user) {
@@ -71,6 +97,15 @@ export default function Onboarding() {
 
   const handleNext = async () => {
     if (currentStep === 1) {
+      if (!consent.privacyPolicy || !consent.thirdPartyAi) {
+        toast.error('Privacy policy and AI processing consent are required.');
+        return;
+      }
+      const ok = await recordConsent();
+      if (!ok) return;
+    }
+
+    if (currentStep === 2) {
       if (!profileData.full_name || !profileData.bench) {
         toast.error('Please fill in all required fields');
         return;
@@ -78,7 +113,7 @@ export default function Onboarding() {
       const success = await handleProfileUpdate();
       if (!success) return;
     }
-    
+
     if (currentStep < STEPS.length) {
       setCurrentStep(currentStep + 1);
     }
@@ -168,29 +203,33 @@ export default function Onboarding() {
               {STEPS[currentStep - 1].title}
             </CardTitle>
             <CardDescription>
-              {currentStep === 1 && 'Tell us about yourself and your practice'}
-              {currentStep === 2 && 'Add the name variations used in court records'}
-              {currentStep === 3 && 'Set up or join a chamber for coordination'}
-              {currentStep === 4 && 'Find your cases in the High Court records'}
+              {currentStep === 1 && 'Review and accept the privacy policy before we set up your account'}
+              {currentStep === 2 && 'Tell us about yourself and your practice'}
+              {currentStep === 3 && 'Add the name variations used in court records'}
+              {currentStep === 4 && 'Set up or join a chamber for coordination'}
+              {currentStep === 5 && 'Find your cases in the High Court records'}
             </CardDescription>
           </CardHeader>
           <CardContent>
             {currentStep === 1 && (
+              <ConsentStep value={consent} onChange={setConsent} />
+            )}
+            {currentStep === 2 && (
               <ProfileStep
                 data={profileData}
                 onChange={setProfileData}
               />
             )}
-            {currentStep === 2 && (
+            {currentStep === 3 && (
               <AliasManager defaultName={profileData.full_name} />
             )}
-            {currentStep === 3 && (
-              <ChamberOnboardingStep 
+            {currentStep === 4 && (
+              <ChamberOnboardingStep
                 role={profile?.role || null}
                 onComplete={handleNext}
               />
             )}
-            {currentStep === 4 && (
+            {currentStep === 5 && (
               <CourtScan bench={profileData.bench as 'JAIPUR' | 'JODHPUR' | 'BOTH'} />
             )}
           </CardContent>

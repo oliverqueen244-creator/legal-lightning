@@ -20,6 +20,7 @@ const Settings = lazy(() => import("./pages/Settings"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const CourtroomMode = lazy(() => import("./pages/CourtroomMode"));
 const Install = lazy(() => import("./pages/Install"));
+const Privacy = lazy(() => import("./pages/Privacy"));
 
 import { GlobalOfflineBanner } from "./components/layout/GlobalOfflineBanner";
 import { SyncConflictProvider } from "./contexts/SyncConflictContext";
@@ -29,6 +30,7 @@ import { CourtFocusOverlay } from "./components/court-focus";
 import { SplashScreen } from "./components/layout/SplashScreen";
 import { PWAUpdateManager } from "./components/pwa/PWAUpdateManager";
 import { ErrorBoundary } from "./components/layout/ErrorBoundary";
+import { IdleLogoutGuard } from "./components/layout/IdleLogoutGuard";
 import { useForceUpdate } from "./hooks/useForceUpdate";
 import { useBeforeUnloadGuard } from "./hooks/useBeforeUnloadGuard";
 import { KineticProvider } from "./components/layout/KineticProvider";
@@ -97,6 +99,7 @@ const App = () => (
               />
               {/* HARDENING FIX: Global offline banner - single source of truth */}
               <GlobalOfflineBanner />
+              <IdleLogoutGuard />
               {/* PWA Install Discovery - safe, non-intrusive, respects dismissal */}
               <InstallDiscoveryBanner />
               {/* PWA Post-Install Confirmation - shows once after first install launch */}
@@ -129,6 +132,7 @@ const App = () => (
                           <Route path="/control-deck/:caseId" element={<ControlDeck />} />
                           <Route path="/courtroom" element={<CourtroomMode />} />
                           <Route path="/install" element={<Install />} />
+                          <Route path="/privacy" element={<Privacy />} />
                           <Route path="*" element={<NotFound />} />
                         </Routes>
                       </AnimatePresence>

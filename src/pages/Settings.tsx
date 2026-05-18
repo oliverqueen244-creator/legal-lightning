@@ -12,9 +12,10 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Scale, User, Fingerprint, ArrowLeft, Save, Loader2 } from 'lucide-react';
+import { Scale, User, Fingerprint, ArrowLeft, Save, Loader2, Shield } from 'lucide-react';
 import ProfileStep from '@/components/onboarding/ProfileStep';
 import AliasManager from '@/components/onboarding/AliasManager';
+import { PrivacySettings } from '@/components/settings/PrivacySettings';
 import { AuthGuard } from '@/components/layout/AuthGuard';
 import { toast } from 'sonner';
 
@@ -94,7 +95,7 @@ export default function Settings() {
 
           {/* Settings Tabs */}
           <Tabs defaultValue={defaultTab} className="space-y-6">
-            <TabsList className="grid w-full grid-cols-2">
+            <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="profile" className="flex items-center gap-2">
                 <User className="h-4 w-4" />
                 Profile
@@ -102,6 +103,10 @@ export default function Settings() {
               <TabsTrigger value="aliases" className="flex items-center gap-2">
                 <Fingerprint className="h-4 w-4" />
                 Name Aliases
+              </TabsTrigger>
+              <TabsTrigger value="privacy" className="flex items-center gap-2">
+                <Shield className="h-4 w-4" />
+                Privacy & Data
               </TabsTrigger>
             </TabsList>
 
@@ -156,6 +161,24 @@ export default function Settings() {
                 </CardHeader>
                 <CardContent>
                   <AliasManager defaultName={profileData.full_name || profile?.full_name || ''} />
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* Privacy Tab */}
+            <TabsContent value="privacy">
+              <Card className="border-primary/20">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Shield className="h-5 w-5 text-primary" />
+                    Privacy &amp; Data Rights
+                  </CardTitle>
+                  <CardDescription>
+                    Your rights under India's Digital Personal Data Protection Act, 2023.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <PrivacySettings />
                 </CardContent>
               </Card>
             </TabsContent>
