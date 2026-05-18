@@ -24,7 +24,8 @@ export interface SyncHealthState {
 
 const STALE_THRESHOLD_LIVE = 30; // seconds
 const STALE_THRESHOLD_DELAYED = 60; // seconds
-const CHECK_INTERVAL = 5000; // 5 seconds
+const CHECK_INTERVAL_IN_SESSION = 10_000; // 10s while court is in session
+const CHECK_INTERVAL_OFF_HOURS = 60_000; // 60s outside court hours
 
 export function useSyncHealth(liveBoards: LiveBoardCache[] | undefined) {
   const [syncHealth, setSyncHealth] = useState<SyncHealthState>({
@@ -123,11 +124,13 @@ export function useSyncHealth(liveBoards: LiveBoardCache[] | undefined) {
     });
   }, [liveBoards]);
 
-  // Check staleness every 5 seconds
+  // Throttle staleness checks: faster in court hours, much slower off-hours
   useEffect(() => {
     calculateSyncHealth();
-    
-    const interval = setInterval(calculateSyncHealth, CHECK_INTERVAL);
+    const interval = setInterval(
+      calculateSyncHealth,
+      isCourtHours().inSession ? CHECK_INTERVAL_IN_SESSION : CHECK_INTERVAL_OFF_HOURS,
+    );
     return () => clearInterval(interval);
   }, [calculateSyncHealth]);
 
@@ -180,7 +183,10 @@ export function useCourtSyncHealth(courtLocation: string, courtNo: string, liveB
     };
 
     checkHealth();
-    const interval = setInterval(checkHealth, CHECK_INTERVAL);
+    const interval = setInterval(
+      checkHealth,
+      isCourtHours().inSession ? CHECK_INTERVAL_IN_SESSION : CHECK_INTERVAL_OFF_HOURS,
+    );
     return () => clearInterval(interval);
   }, [liveBoard]);
 

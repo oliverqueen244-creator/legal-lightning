@@ -29,3 +29,7 @@ dist-ssr
 .env.development
 .env.production
 .env.*.local
+
+# Stale build/lint artifacts that shouldn't be tracked
+bun.lockb
+lint_output.txt
