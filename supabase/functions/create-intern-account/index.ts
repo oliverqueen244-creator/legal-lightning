@@ -190,8 +190,7 @@ Deno.serve(async (req) => {
         chamber_id: chamberId,
         intern_name: name,
         institution: institution || null,
-        expires_at: expiresAt.toISOString(),
-        is_revoked: false
+        expires_at: expiresAt.toISOString()
       });
 
     if (internInsertError) {
