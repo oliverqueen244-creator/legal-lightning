@@ -18,6 +18,7 @@
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getCorsHeaders } from "../_shared/cors.ts";
 import { 
   ECOURTS_CONFIG, 
   buildCaseOrdersUrl, 
@@ -27,11 +28,6 @@ import {
   recordRequest,
   type Bench 
 } from "../_shared/courtScraper.ts";
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
 
 interface FetchOrdersRequest {
   tracked_case_id: string;
@@ -44,6 +40,7 @@ interface FetchOrdersRequest {
 }
 
 Deno.serve(async (req) => {
+  const corsHeaders = getCorsHeaders(req.headers.get('origin'));
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }

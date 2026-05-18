@@ -37,6 +37,7 @@ import {
 } from '@/components/ui/select';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useCreateInternAccount, type InternCredentials } from '@/hooks/useInternSupervision';
+import { useOwnedChambers } from '@/hooks/useChambers';
 import { toast } from 'sonner';
 
 const formSchema = z.object({
@@ -44,6 +45,7 @@ const formSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
   institution: z.string().optional(),
   durationDays: z.string().min(1, 'Please select access duration'),
+  chamberId: z.string().min(1, 'Please select a chamber'),
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -57,6 +59,7 @@ export function InternInviteDialog({ open, onOpenChange }: InternInviteDialogPro
   const [credentials, setCredentials] = useState<InternCredentials | null>(null);
   const [copied, setCopied] = useState(false);
   const createIntern = useCreateInternAccount();
+  const { data: ownedChambers = [], isLoading: chambersLoading } = useOwnedChambers();
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -65,6 +68,7 @@ export function InternInviteDialog({ open, onOpenChange }: InternInviteDialogPro
       name: '',
       institution: '',
       durationDays: '30',
+      chamberId: '',
     },
   });
 
@@ -75,6 +79,7 @@ export function InternInviteDialog({ open, onOpenChange }: InternInviteDialogPro
         name: values.name,
         institution: values.institution || undefined,
         durationDays: parseInt(values.durationDays, 10),
+        chamberId: values.chamberId,
       });
       
       setCredentials(result);
@@ -261,6 +266,34 @@ export function InternInviteDialog({ open, onOpenChange }: InternInviteDialogPro
                   </Select>
                   <FormDescription>
                     Account will auto-expire after this period
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="chamberId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Chamber</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder={chambersLoading ? 'Loading…' : 'Select a chamber'} />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {ownedChambers.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormDescription>
+                    Intern access is scoped to this chamber
                   </FormDescription>
                   <FormMessage />
                 </FormItem>

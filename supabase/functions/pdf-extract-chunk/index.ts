@@ -3,11 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 // @ts-ignore - pdfjs-serverless types
 import { getDocument } from "https://esm.sh/pdfjs-serverless";
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
-
+import { getCorsHeaders } from "../_shared/cors.ts";
 const PAGES_PER_CHUNK = 30;
 const MAX_ERROR_COUNT = 3;
 const STALE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
@@ -27,6 +23,7 @@ interface ChunkRequest {
 }
 
 serve(async (req) => {
+  const corsHeaders = getCorsHeaders(req.headers.get('origin'));
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }

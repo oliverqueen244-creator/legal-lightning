@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { reportBackendError, abstractBenchCode, ERROR_CODES } from "../_shared/errorReporting.ts";
 
+import { getCorsHeaders } from "../_shared/cors.ts";
 /**
  * AI WORKER - Processes AI jobs slowly and reliably
  * 
@@ -12,11 +13,6 @@ import { reportBackendError, abstractBenchCode, ERROR_CODES } from "../_shared/e
  * - Multi-provider fallback (Google → OpenAI → OpenRouter → Lovable AI last resort)
  * - Exits immediately after processing one job (cron calls repeatedly)
  */
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
 
 // Rate limiting config
 const MIN_JOB_INTERVAL_MS = 3000; // 3 seconds between jobs
@@ -68,6 +64,7 @@ interface CourtOverride {
 }
 
 serve(async (req) => {
+  const corsHeaders = getCorsHeaders(req.headers.get('origin'));
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }

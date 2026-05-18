@@ -89,21 +89,10 @@ export default defineConfig(({ mode }) => ({
             urlPattern: /^https:\/\/.*supabase.*\/realtime\//i,
             handler: "NetworkOnly",
           },
-          // Auth endpoints - NetworkFirst with fallback (preserves session on reload)
+          // Auth endpoints - never cache (shared devices in court complexes)
           {
             urlPattern: /^https:\/\/.*supabase.*\/auth\//i,
-            handler: "NetworkFirst",
-            options: {
-              cacheName: "supabase-auth-cache",
-              networkTimeoutSeconds: 5,
-              expiration: {
-                maxEntries: 5,
-                maxAgeSeconds: 60 * 60, // 1 hour
-              },
-              cacheableResponse: {
-                statuses: [0, 200],
-              },
-            },
+            handler: "NetworkOnly",
           },
           // P1 FIX: Live Board endpoints - NetworkFirst with short cache
           {

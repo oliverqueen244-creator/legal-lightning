@@ -366,19 +366,21 @@ export function useCreateInternAccount() {
   const queryClient = useQueryClient();
   
   return useMutation({
-    mutationFn: async ({ 
-      email, 
-      name, 
+    mutationFn: async ({
+      email,
+      name,
       institution,
-      durationDays 
-    }: { 
-      email: string; 
+      durationDays,
+      chamberId
+    }: {
+      email: string;
       name: string;
       institution?: string;
       durationDays: number;
+      chamberId: string;
     }): Promise<InternCredentials> => {
       const { data, error } = await supabase.functions.invoke('create-intern-account', {
-        body: { email, name, institution, durationDays }
+        body: { email, name, institution, durationDays, chamberId }
       });
       
       if (error) throw error;

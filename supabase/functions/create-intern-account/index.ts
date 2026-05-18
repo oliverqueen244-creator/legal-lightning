@@ -13,19 +13,17 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
-
+import { getCorsHeaders } from "../_shared/cors.ts";
 interface CreateInternRequest {
   email: string;
   name: string;
   institution?: string;
   durationDays: number;
+  chamberId: string;
 }
 
 Deno.serve(async (req) => {
+  const corsHeaders = getCorsHeaders(req.headers.get('origin'));
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -87,13 +85,28 @@ Deno.serve(async (req) => {
 
     // Parse request body
     const body: CreateInternRequest = await req.json();
-    const { email, name, institution, durationDays } = body;
+    const { email, name, institution, durationDays, chamberId } = body;
 
     // Validate required fields
-    if (!email || !name || !durationDays) {
+    if (!email || !name || !durationDays || !chamberId) {
       return new Response(
-        JSON.stringify({ error: 'Missing required fields: email, name, durationDays' }),
+        JSON.stringify({ error: 'Missing required fields: email, name, durationDays, chamberId' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Verify supervisor owns the chamber
+    const { data: chamber, error: chamberError } = await supabaseAdmin
+      .from('chambers')
+      .select('id')
+      .eq('id', chamberId)
+      .eq('owner_id', user.id)
+      .single();
+
+    if (chamberError || !chamber) {
+      return new Response(
+        JSON.stringify({ error: 'Chamber not found or you are not the owner' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -174,6 +187,7 @@ Deno.serve(async (req) => {
       .insert({
         user_id: internUserId,
         supervisor_id: user.id,
+        chamber_id: chamberId,
         intern_name: name,
         institution: institution || null,
         expires_at: expiresAt.toISOString(),

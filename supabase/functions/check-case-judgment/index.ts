@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+import { getCorsHeaders } from "../_shared/cors.ts";
 /**
  * check-case-judgment
  * 
@@ -24,11 +25,6 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
  * 7. Store metadata only (no auto-download)
  * 8. Update tracked_case status
  */
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
 
 // eCourts configuration for Rajasthan High Court
 const ECOURTS_CONFIG = {
@@ -63,6 +59,7 @@ interface JudgmentInfo {
 }
 
 serve(async (req) => {
+  const corsHeaders = getCorsHeaders(req.headers.get('origin'));
   // CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -114,6 +111,22 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ error: 'case_id is required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Rate-limit: 5 judgment checks per hour per lawyer (B-5)
+    const { data: rateOk, error: rateErr } = await supabase.rpc('check_rate_limit', {
+      p_user_id: lawyerId,
+      p_action: 'judgment_check',
+      p_max_requests: 5,
+      p_window_minutes: 60,
+    });
+    if (rateErr) {
+      console.error('[check-case-judgment] rate limit RPC failed:', rateErr);
+    } else if (rateOk === false) {
+      return new Response(
+        JSON.stringify({ error: 'Rate limit exceeded. Try again in an hour.' }),
+        { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 

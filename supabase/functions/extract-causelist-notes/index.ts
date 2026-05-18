@@ -2,11 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { extractText } from "https://esm.sh/unpdf@0.12.1";
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
-
+import { getCorsHeaders } from "../_shared/cors.ts";
 // Note patterns to extract from causelist PDFs
 const NOTE_PATTERNS = [
   { pattern: /NOTE\s*[:\-]\s*([^\n]+(?:\n(?![A-Z]{2,})[^\n]+)*)/gi, type: 'NOTE' },
@@ -100,6 +96,7 @@ async function extractTextFromPDF(pdfArrayBuffer: ArrayBuffer): Promise<string> 
 }
 
 serve(async (req) => {
+  const corsHeaders = getCorsHeaders(req.headers.get('origin'));
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
