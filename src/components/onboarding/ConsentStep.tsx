@@ -1,23 +1,13 @@
-import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ExternalLink, ShieldCheck } from 'lucide-react';
-
-export interface ConsentSelections {
-  privacyPolicy: boolean;
-  thirdPartyAi: boolean;
-  telegramAlerts: boolean;
-}
+import { CONSENT_VERSION, type ConsentSelections } from './consentTypes';
 
 interface Props {
   value: ConsentSelections;
   onChange: (next: ConsentSelections) => void;
 }
-
-const PRIVACY_VERSION = 'v1';
-
-export const CONSENT_VERSION = PRIVACY_VERSION;
 
 export function ConsentStep({ value, onChange }: Props) {
   const set = (k: keyof ConsentSelections) => (checked: boolean) =>
@@ -45,7 +35,7 @@ export function ConsentStep({ value, onChange }: Props) {
           <Link to="/privacy" target="_blank" className="text-primary underline inline-flex items-center gap-1">
             Privacy Policy <ExternalLink className="h-3 w-3" />
           </Link>
-          <span> (version {PRIVACY_VERSION}).</span>
+          <span> (version {CONSENT_VERSION}).</span>
           <br />
           <span className="text-muted-foreground text-xs">
             Required. Without this we cannot create your account.

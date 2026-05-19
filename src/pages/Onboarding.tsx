@@ -10,7 +10,8 @@ import ProfileStep from '@/components/onboarding/ProfileStep';
 import AliasManager from '@/components/onboarding/AliasManager';
 import CourtScan from '@/components/onboarding/CourtScan';
 import { ChamberOnboardingStep } from '@/components/onboarding/ChamberOnboardingStep';
-import { ConsentStep, CONSENT_VERSION, ConsentSelections } from '@/components/onboarding/ConsentStep';
+import { ConsentStep } from '@/components/onboarding/ConsentStep';
+import { CONSENT_VERSION, type ConsentSelections } from '@/components/onboarding/consentTypes';
 import { toast } from 'sonner';
 
 const STEPS = [
