@@ -172,4 +172,10 @@ export default defineConfig(({ mode }) => ({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  // In production builds, strip console.log / console.debug so debug noise
+  // doesn't ship. console.error / console.warn are preserved so legitimate
+  // logs reaching the admin error console still appear in the browser.
+  esbuild: mode === "production"
+    ? { pure: ["console.log", "console.debug", "console.info"] }
+    : undefined,
 }));
