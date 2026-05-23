@@ -10,8 +10,8 @@ interface Props {
 }
 
 export function ConsentStep({ value, onChange }: Props) {
-  const set = (k: keyof ConsentSelections) => (checked: boolean) =>
-    onChange({ ...value, [k]: checked });
+  const set = (k: keyof ConsentSelections) => (checked: boolean | 'indeterminate') =>
+    onChange({ ...value, [k]: checked === true });
 
   return (
     <div className="space-y-5">

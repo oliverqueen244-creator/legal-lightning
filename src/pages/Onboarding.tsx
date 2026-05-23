@@ -46,10 +46,8 @@ export default function Onboarding() {
       { user_id: user.id, consent_type: 'TELEGRAM_ALERTS', consent_version: CONSENT_VERSION, granted: consent.telegramAlerts },
     ];
     // user_consents is new; types.ts will pick it up after `supabase gen types`.
-    const from = supabase.from as unknown as (table: string) => {
-      insert: (rows: unknown) => Promise<{ error: { message: string } | null }>;
-    };
-    const { error } = await from('user_consents').insert(rows);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error } = await (supabase as any).from('user_consents').insert(rows);
     if (error) {
       toast.error('Could not record consent');
       return false;

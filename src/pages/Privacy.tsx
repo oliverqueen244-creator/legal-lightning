@@ -14,7 +14,7 @@ export default function Privacy() {
   return (
     <div className="min-h-screen bg-background py-8 px-4">
       <div className="max-w-3xl mx-auto space-y-6">
-        <Button variant="ghost" size="sm" onClick={() => navigate(-1)} className="gap-2">
+        <Button variant="ghost" size="sm" onClick={() => window.history.length > 1 ? navigate(-1) : navigate('/')} className="gap-2">
           <ArrowLeft className="h-4 w-4" /> Back
         </Button>
 

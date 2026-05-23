@@ -28,9 +28,9 @@ export function PrivacySettings() {
     setExporting(true);
     try {
       // New RPC; types.ts will pick it up after the next `supabase gen types` run.
-      const rpc = supabase.rpc as unknown as (name: string) => Promise<{ data: unknown; error: { message: string } | null }>;
-      const { data, error } = await rpc('request_data_export');
-      if (error) throw error;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any).rpc('request_data_export');
+      if (error) throw new Error(error.message);
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -50,7 +50,7 @@ export function PrivacySettings() {
     setDeleting(true);
     try {
       const { error } = await supabase.functions.invoke('account-deletion', { body: {} });
-      if (error) throw error;
+      if (error) throw new Error(error.message);
       toast.success('Account deleted. Goodbye.');
       await supabase.auth.signOut();
       window.location.href = '/';

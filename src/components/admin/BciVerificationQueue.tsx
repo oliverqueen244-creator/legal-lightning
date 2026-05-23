@@ -26,14 +26,9 @@ export function BciVerificationQueue() {
     queryKey: ['admin', 'bci-pending'],
     queryFn: async () => {
       // bci_* columns are new; types.ts will catch up after `supabase gen types`.
-      const from = supabase.from as unknown as (table: string) => {
-        select: (cols: string) => {
-          eq: (col: string, val: string) => {
-            order: (col: string, opts: { ascending: boolean }) => Promise<{ data: unknown; error: { message: string } | null }>;
-          };
-        };
-      };
-      const { data, error } = await from('profiles')
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from('profiles')
         .select('id, full_name, bar_registration_number, bar_council_state, bci_verification_status, created_at')
         .eq('bci_verification_status', 'submitted')
         .order('created_at', { ascending: true });
@@ -44,11 +39,8 @@ export function BciVerificationQueue() {
   });
 
   async function setStatus(userId: string, status: 'verified' | 'rejected', reason?: string) {
-    const rpc = supabase.rpc as unknown as (
-      name: string,
-      args: Record<string, unknown>,
-    ) => Promise<{ error: { message: string } | null }>;
-    const { error } = await rpc('set_bci_verification_status', {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error } = await (supabase as any).rpc('set_bci_verification_status', {
       p_user_id: userId,
       p_status: status,
       p_reason: reason ?? null,

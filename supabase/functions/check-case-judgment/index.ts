@@ -236,7 +236,7 @@ serve(async (req) => {
       // Download CAPTCHA image
       const captchaImageResponse = await fetch(captchaImageUrl);
       const captchaImageBuffer = await captchaImageResponse.arrayBuffer();
-      const captchaBase64 = btoa(String.fromCharCode(...new Uint8Array(captchaImageBuffer)));
+      const captchaBase64 = btoa(Array.from(new Uint8Array(captchaImageBuffer), (b) => String.fromCharCode(b)).join(''));
 
       // Submit to 2Captcha
       const submitResponse = await fetch(`${TWOCAPTCHA_CONFIG.apiUrl}/in.php`, {
@@ -395,7 +395,7 @@ serve(async (req) => {
           message: judgmentInfo.found 
             ? 'Judgment found on eCourts portal' 
             : 'No judgment uploaded yet',
-          next_check_after: nextCheckAfter.toISOString(),
+          next_check_after: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
           captcha_solved: true,
           retrieved_via: 'captcha_2captcha',
           source: 'official_court',

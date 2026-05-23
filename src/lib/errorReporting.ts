@@ -82,6 +82,11 @@ export const ERROR_CODES = {
   
   // General
   UNKNOWN_ERROR: 'UNKNOWN_ERROR',
+
+  // Frontend crash capture (main.tsx + ErrorBoundary)
+  FRONTEND_UNCAUGHT_ERROR: 'FRONTEND_UNCAUGHT_ERROR',
+  FRONTEND_UNHANDLED_REJECTION: 'FRONTEND_UNHANDLED_REJECTION',
+  REACT_RENDER_ERROR: 'REACT_RENDER_ERROR',
 } as const;
 
 export type ErrorCode = typeof ERROR_CODES[keyof typeof ERROR_CODES];
