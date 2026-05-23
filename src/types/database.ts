@@ -4,6 +4,11 @@ export interface Profile {
   full_name: string | null;
   whatsapp_number: string | null;
   bar_registration_number: string | null;
+  bar_council_state: string | null;
+  bci_verification_status: 'pending' | 'submitted' | 'verified' | 'rejected';
+  bci_verified_at: string | null;
+  bci_verified_by: string | null;
+  bci_rejection_reason: string | null;
   bench: string | null;
   is_verified: boolean | null;
   onboarding_completed: boolean | null;

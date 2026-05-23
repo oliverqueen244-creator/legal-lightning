@@ -45,9 +45,7 @@ export default function Onboarding() {
       { user_id: user.id, consent_type: 'THIRD_PARTY_AI', consent_version: CONSENT_VERSION, granted: consent.thirdPartyAi },
       { user_id: user.id, consent_type: 'TELEGRAM_ALERTS', consent_version: CONSENT_VERSION, granted: consent.telegramAlerts },
     ];
-    // user_consents is new; types.ts will pick it up after `supabase gen types`.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error } = await (supabase as any).from('user_consents').insert(rows);
+    const { error } = await supabase.from('user_consents').insert(rows);
     if (error) {
       toast.error('Could not record consent');
       return false;
@@ -66,7 +64,7 @@ export default function Onboarding() {
       setProfileData({
         full_name: profile.full_name || '',
         bar_registration_number: profile.bar_registration_number || '',
-        bar_council_state: (profile as { bar_council_state?: string }).bar_council_state || '',
+        bar_council_state: profile.bar_council_state || '',
         bench: (profile.bench as 'JAIPUR' | 'JODHPUR' | 'BOTH' | '') || '',
       });
     }

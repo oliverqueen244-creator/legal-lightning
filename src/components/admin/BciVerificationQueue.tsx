@@ -25,9 +25,7 @@ export function BciVerificationQueue() {
   const { data: pending = [], isLoading } = useQuery({
     queryKey: ['admin', 'bci-pending'],
     queryFn: async () => {
-      // bci_* columns are new; types.ts will catch up after `supabase gen types`.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from('profiles')
         .select('id, full_name, bar_registration_number, bar_council_state, bci_verification_status, created_at')
         .eq('bci_verification_status', 'submitted')
@@ -39,8 +37,7 @@ export function BciVerificationQueue() {
   });
 
   async function setStatus(userId: string, status: 'verified' | 'rejected', reason?: string) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error } = await (supabase as any).rpc('set_bci_verification_status', {
+    const { error } = await supabase.rpc('set_bci_verification_status', {
       p_user_id: userId,
       p_status: status,
       p_reason: reason ?? null,
