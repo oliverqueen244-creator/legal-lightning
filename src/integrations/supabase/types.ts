@@ -7,30 +7,10 @@ export type Json =
   | Json[]
 
 export type Database = {
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: "13.0.5"
   }
   public: {
     Tables: {
@@ -487,39 +467,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
-      }
-      case_access_audit: {
-        Row: {
-          action: string
-          actor_id: string | null
-          actor_role: string | null
-          case_id: string
-          changed_at: string
-          diff: Json | null
-          id: number
-          table_name: string
-        }
-        Insert: {
-          action: string
-          actor_id?: string | null
-          actor_role?: string | null
-          case_id: string
-          changed_at?: string
-          diff?: Json | null
-          id?: number
-          table_name: string
-        }
-        Update: {
-          action?: string
-          actor_id?: string | null
-          actor_role?: string | null
-          case_id?: string
-          changed_at?: string
-          diff?: Json | null
-          id?: number
-          table_name?: string
-        }
-        Relationships: []
       }
       case_arguments: {
         Row: {
@@ -3017,12 +2964,7 @@ export type Database = {
       }
       profiles: {
         Row: {
-          bar_council_state: string | null
           bar_registration_number: string | null
-          bci_rejection_reason: string | null
-          bci_verification_status: string
-          bci_verified_at: string | null
-          bci_verified_by: string | null
           bench: string | null
           created_at: string | null
           full_name: string | null
@@ -3033,12 +2975,7 @@ export type Database = {
           whatsapp_number: string | null
         }
         Insert: {
-          bar_council_state?: string | null
           bar_registration_number?: string | null
-          bci_rejection_reason?: string | null
-          bci_verification_status?: string
-          bci_verified_at?: string | null
-          bci_verified_by?: string | null
           bench?: string | null
           created_at?: string | null
           full_name?: string | null
@@ -3049,12 +2986,7 @@ export type Database = {
           whatsapp_number?: string | null
         }
         Update: {
-          bar_council_state?: string | null
           bar_registration_number?: string | null
-          bci_rejection_reason?: string | null
-          bci_verification_status?: string
-          bci_verified_at?: string | null
-          bci_verified_by?: string | null
           bench?: string | null
           created_at?: string | null
           full_name?: string | null
@@ -3063,27 +2995,6 @@ export type Database = {
           onboarding_completed?: boolean | null
           role?: string | null
           whatsapp_number?: string | null
-        }
-        Relationships: []
-      }
-      rate_limit_counters: {
-        Row: {
-          action_key: string
-          request_count: number
-          user_id: string
-          window_start: string
-        }
-        Insert: {
-          action_key: string
-          request_count?: number
-          user_id: string
-          window_start: string
-        }
-        Update: {
-          action_key?: string
-          request_count?: number
-          user_id?: string
-          window_start?: string
         }
         Relationships: []
       }
@@ -3561,39 +3472,6 @@ export type Database = {
           },
         ]
       }
-      user_consents: {
-        Row: {
-          consent_type: string
-          consent_version: string
-          granted: boolean
-          granted_at: string
-          id: string
-          metadata: Json | null
-          revoked_at: string | null
-          user_id: string
-        }
-        Insert: {
-          consent_type: string
-          consent_version: string
-          granted: boolean
-          granted_at?: string
-          id?: string
-          metadata?: Json | null
-          revoked_at?: string | null
-          user_id: string
-        }
-        Update: {
-          consent_type?: string
-          consent_version?: string
-          granted?: boolean
-          granted_at?: string
-          id?: string
-          metadata?: Json | null
-          revoked_at?: string | null
-          user_id?: string
-        }
-        Relationships: []
-      }
       user_roles: {
         Row: {
           created_at: string | null
@@ -3967,41 +3845,6 @@ export type Database = {
         Args: { _chamber_id: string; _user_id: string }
         Returns: boolean
       }
-      check_rate_limit: {
-        Args: {
-          p_action: string
-          p_max_requests: number
-          p_user_id: string
-          p_window_minutes: number
-        }
-        Returns: boolean
-      }
-      claim_next_ai_job: {
-        Args: never
-        Returns: {
-          completed_at: string | null
-          created_at: string
-          error_message: string | null
-          id: string
-          job_type: string
-          max_retries: number
-          next_retry_at: string | null
-          payload: Json
-          priority: number
-          provider: string | null
-          result: Json | null
-          retries: number
-          started_at: string | null
-          status: string
-          tokens_used: number | null
-        }[]
-        SetofOptions: {
-          from: "*"
-          to: "ai_jobs"
-          isOneToOne: false
-          isSetofReturn: true
-        }
-      }
       cleanup_old_scraper_logs: { Args: never; Returns: number }
       clerk_can_edit_case: {
         Args: { _case_owner_id: string; _clerk_id: string }
@@ -4185,54 +4028,6 @@ export type Database = {
         Args: { p_case_id: string; p_lawyer_id: string }
         Returns: Json
       }
-      record_judgment_check_result: {
-        Args: {
-          p_case_id: string
-          p_cooldown_days?: number
-          p_judgment_found: boolean
-        }
-        Returns: {
-          bench: Database["public"]["Enums"]["rhc_bench"]
-          case_number: number
-          case_status: string | null
-          case_type: string
-          case_year: number
-          created_at: string
-          document_sync_attempts: number | null
-          document_sync_status:
-            | Database["public"]["Enums"]["document_sync_status"]
-            | null
-          id: string
-          is_active: boolean
-          judgment_check_attempts: number | null
-          judgment_found_at: string | null
-          judgment_status: Database["public"]["Enums"]["judgment_status"] | null
-          last_document_sync_at: string | null
-          last_judgment_check_at: string | null
-          last_listed_date: string | null
-          last_orders_check_at: string | null
-          listed_today: boolean
-          next_document_sync_after: string | null
-          next_judgment_check_after: string | null
-          orders_count: number
-          petitioner: string | null
-          petitioner_advocate: string | null
-          proceeding_status:
-            | Database["public"]["Enums"]["case_proceeding_status"]
-            | null
-          profile_id: string
-          respondent: string | null
-          respondent_advocate: string | null
-          total_documents_synced: number | null
-          updated_at: string
-        }
-        SetofOptions: {
-          from: "*"
-          to: "tracked_cases"
-          isOneToOne: true
-          isSetofReturn: false
-        }
-      }
       refresh_court_averages: { Args: never; Returns: number }
       release_document_sync_lock: {
         Args: {
@@ -4242,20 +4037,11 @@ export type Database = {
         }
         Returns: undefined
       }
-      request_account_deletion: {
-        Args: { p_reason?: string }
-        Returns: boolean
-      }
-      request_data_export: { Args: never; Returns: Json }
       review_intern_draft: {
         Args: { p_draft_id: string; p_notes?: string; p_status: string }
         Returns: boolean
       }
       revoke_expired_intern_accounts: { Args: never; Returns: Json }
-      set_bci_verification_status: {
-        Args: { p_reason?: string; p_status: string; p_user_id: string }
-        Returns: boolean
-      }
       try_lock_case_for_job: {
         Args: { p_case_id: string; p_job_type: string }
         Returns: string
@@ -4504,9 +4290,6 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {
       app_role: ["SENIOR", "JUNIOR", "CLERK", "ADMIN", "INTERN"],
@@ -4633,4 +4416,3 @@ export const Constants = {
     },
   },
 } as const
-
