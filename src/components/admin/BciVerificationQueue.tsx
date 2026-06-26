@@ -25,19 +25,19 @@ export function BciVerificationQueue() {
   const { data: pending = [], isLoading } = useQuery({
     queryKey: ['admin', 'bci-pending'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from('profiles')
         .select('id, full_name, bar_registration_number, bar_council_state, bci_verification_status, created_at')
         .eq('bci_verification_status', 'submitted')
         .order('created_at', { ascending: true });
       if (error) throw new Error(error.message);
-      return (data as PendingProfile[]) ?? [];
+      return ((data as unknown) as PendingProfile[]) ?? [];
     },
     refetchInterval: 60_000,
   });
 
   async function setStatus(userId: string, status: 'verified' | 'rejected', reason?: string) {
-    const { error } = await supabase.rpc('set_bci_verification_status', {
+    const { error } = await (supabase.rpc as any)('set_bci_verification_status', {
       p_user_id: userId,
       p_status: status,
       p_reason: reason ?? null,

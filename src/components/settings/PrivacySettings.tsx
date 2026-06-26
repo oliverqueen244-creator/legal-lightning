@@ -27,7 +27,7 @@ export function PrivacySettings() {
   async function handleExport() {
     setExporting(true);
     try {
-      const { data, error } = await supabase.rpc('request_data_export');
+      const { data, error } = await (supabase.rpc as any)('request_data_export');
       if (error) throw new Error(error.message);
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
