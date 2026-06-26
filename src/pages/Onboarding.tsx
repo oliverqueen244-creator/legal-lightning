@@ -45,7 +45,7 @@ export default function Onboarding() {
       { user_id: user.id, consent_type: 'THIRD_PARTY_AI', consent_version: CONSENT_VERSION, granted: consent.thirdPartyAi },
       { user_id: user.id, consent_type: 'TELEGRAM_ALERTS', consent_version: CONSENT_VERSION, granted: consent.telegramAlerts },
     ];
-    const { error } = await supabase.from('user_consents').insert(rows);
+    const { error } = await (supabase as any).from('user_consents').insert(rows);
     if (error) {
       toast.error('Could not record consent');
       return false;
